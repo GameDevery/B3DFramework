@@ -288,7 +288,9 @@ namespace b3d
 		/**	Converts a specific handle to generic Resource handle. */
 		operator TResourceHandle<Resource, IsWeakHandle>()
 		{
-			return TResourceHandle<Resource, IsWeakHandle>(*this);
+			// Constructed from raw handle data rather than the handle itself, as Clang otherwise resolves the
+			// construction back to this conversion operator, recursing infinitely
+			return TResourceHandle<Resource, IsWeakHandle>(this->mData);
 		}
 
 		/**	Converts a specific handle to Resource handle of the resource's base class. */
@@ -297,7 +299,8 @@ namespace b3d
 		{
 			// Above enable_if purposefully ignores is_base_of<> check if base is Resource. This is because is_base_of<> requires a fully defined type, requiring excessive #includes.
 
-			return TResourceHandle<BaseResourceType, IsWeakHandle>(*this);
+			// Constructed from raw handle data for the same reason as the Resource conversion operator above
+			return TResourceHandle<BaseResourceType, IsWeakHandle>(this->mData);
 		}
 
 		/** Swaps the contents of this handle with another. */
