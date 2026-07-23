@@ -43,11 +43,14 @@ MacOSVideoOutputInfo::MacOSVideoOutputInfo(CGDirectDisplayID displayID, u32 outp
 	CVDisplayLinkRef linkRef = nullptr;
 	CVDisplayLinkCreateWithCGDisplay(displayID, &linkRef);
 
+	// CGDisplayIOServicePort is non-functional on Apple Silicon, in which case no product name entry is available
 	io_service_t service = CGDisplayIOServicePort(displayID);
 	CFDictionaryRef deviceInfo = IODisplayCreateInfoDictionary(service, kIODisplayOnlyPreferredName);
-	auto locNames = (CFDictionaryRef)CFDictionaryGetValue(deviceInfo, CFSTR(kDisplayProductName));
+	CFDictionaryRef locNames = deviceInfo ? (CFDictionaryRef)CFDictionaryGetValue(deviceInfo, CFSTR(kDisplayProductName)) : nullptr;
 
-	CFIndex numNames = CFDictionaryGetCount(locNames);
+	mName = "Unknown";
+
+	CFIndex numNames = locNames ? CFDictionaryGetCount(locNames) : 0;
 	if(numNames > 0)
 	{
 		auto keys = (CFStringRef*)B3DStackAllocate(numNames * sizeof(CFTypeRef));
@@ -76,7 +79,8 @@ MacOSVideoOutputInfo::MacOSVideoOutputInfo(CGDirectDisplayID displayID, u32 outp
 		B3DStackFree(keys);
 	}
 
-	CFRelease(deviceInfo);
+	if(deviceInfo)
+		CFRelease(deviceInfo);
 
 	mDesktopVideoMode = new(B3DAllocate<MacOSVideoMode>()) MacOSVideoMode(desktopModeRef, linkRef, outputIdx);
 
