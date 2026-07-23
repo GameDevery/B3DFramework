@@ -25,18 +25,8 @@ using namespace b3d;
 
 DynamicLibrary* DynamicLibraryManager::Load(String filename)
 {
-	// Add the extension (.dll, .so, ...) if necessary.
-
-	// Note: The string comparison here could be slightly more efficent by using a templatized string_concat function
-	// for the lower_bound call and/or a custom comparitor that does comparison by parts.
-	const String::size_type length = filename.length();
-	const String extension = String(".") + DynamicLibrary::kExtension;
-	const String::size_type extLength = extension.length();
-	if(length <= extLength || filename.substr(length - extLength) != extension)
-		filename.append(extension);
-
-	if(DynamicLibrary::kPrefix != nullptr)
-		filename.insert(0, DynamicLibrary::kPrefix);
+	// Normalize the caller-supplied name to the platform's prefixed/extension form so lookups key consistently.
+	filename = DynamicLibrary::EnsureFileName(filename);
 
 	const auto& iterFind = mLoadedLibraries.lower_bound(filename);
 	if(iterFind != mLoadedLibraries.end() && (*iterFind)->GetName() == filename)

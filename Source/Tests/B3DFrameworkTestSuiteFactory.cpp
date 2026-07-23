@@ -68,7 +68,8 @@ namespace b3d
 
 	void FrameworkTestSuiteFactory::DiscoverPluginModules()
 	{
-		const Path executableDir = CommandLine::GetExecutablePath().GetParent();
+		// Resolved through the file system rather than the command line, as argv[0] may be a bare relative name
+		const Path executableDir = FileSystem::GetExecutableFolderPath();
 
 		Vector<Path> files;
 		Vector<Path> directories;
@@ -92,22 +93,14 @@ namespace b3d
 			if (filename.compare(filename.size() - 5, 5, "Tests") != 0)
 				continue;
 
+			// Pass the full file path so the library loader doesn't have to apply lib-prefix or extension
+			// fix-up itself.
 			PluginTestModule module;
-			try
-			{
-				// Pass the full file path so DynamicLibrary::Load doesn't have to apply lib-prefix or
-				// extension fix-up itself.
-				module.Library = B3DNew<DynamicLibrary>(candidate.ToString());
-				module.Library->Load();
-			}
-			catch (...)
+			module.Library = B3DNew<DynamicLibrary>(candidate.ToString());
+			if (!module.Library->IsLoaded())
 			{
 				B3D_LOG(Warning, LogGeneric, "Failed to load plugin test library: {0}", candidate.ToString());
-				if (module.Library != nullptr)
-				{
-					B3DDelete(module.Library);
-					module.Library = nullptr;
-				}
+				B3DDelete(module.Library);
 				continue;
 			}
 

@@ -4,6 +4,7 @@
 #include "Testing/B3DTestSuiteRegistry.h"
 #include "Utility/B3DCommandLine.h"
 #include "Utility/B3DDynamicLibrary.h"
+#include "Allocators/B3DStackAlloc.h"
 #include "String/B3DString.h"
 
 #include <iostream>
@@ -64,6 +65,9 @@ int main(int argc, char* argv[])
 	CrashHandler::StartUp(crashSettings);
 	CommandLine::Initialize(argc, argv);
 
+	// Utility-layer tests run before Application::StartUp, so the main thread's stack allocator must be set up here
+	MemStack::BeginThread();
+
 	String formatStr = CommandLine::GetParameterValue("test-output-format", "console");
 	String outputPathStr = CommandLine::GetParameterValue("test-output-path", "");
 	String layerStr = CommandLine::GetParameterValue("test-layer", "all");
@@ -83,29 +87,22 @@ int main(int argc, char* argv[])
 	// EditorTestSuiteFactory can run all tests (utility, core, editor)
 	if (layers.IsSet(TestLayer::Editor))
 	{
-		try
+		testLibrary = B3DNew<DynamicLibrary>(DynamicLibrary::GetFileName("EditorTests"));
+		if (testLibrary->IsLoaded())
 		{
-			testLibrary = B3DNew<DynamicLibrary>("EditorTests");
-			testLibrary->Load();
-
 			auto fnCreateFactory = reinterpret_cast<FnCreateFactory>(testLibrary->GetSymbol("CreateEditorTestSuiteFactory"));
 			fnDestroyFactory = reinterpret_cast<FnDestroyFactory>(testLibrary->GetSymbol("DestroyTestSuiteFactory"));
 
 			if (fnCreateFactory && fnDestroyFactory)
 				testFactory = fnCreateFactory();
 		}
-		catch (...)
-		{
-			// EditorTests not available
-			if (testLibrary)
-			{
-				B3DDelete(testLibrary);
-				testLibrary = nullptr;
-			}
-		}
 
 		if (!testFactory)
 		{
+			// EditorTests not available
+			B3DDelete(testLibrary);
+			testLibrary = nullptr;
+
 			std::cerr << "Warning: EditorTests not available, skipping editor tests." << std::endl;
 			layers = layers & ~TestLayer::Editor;
 		}
@@ -114,21 +111,18 @@ int main(int argc, char* argv[])
 	// Fall back to FrameworkTests.dll for utility+core tests
 	if (!testFactory && layers)
 	{
-		try
+		testLibrary = B3DNew<DynamicLibrary>(DynamicLibrary::GetFileName("FrameworkTests"));
+		if (testLibrary->IsLoaded())
 		{
-			testLibrary = B3DNew<DynamicLibrary>("FrameworkTests");
-			testLibrary->Load();
-
 			auto fnCreateFactory = reinterpret_cast<FnCreateFactory>(testLibrary->GetSymbol("CreateFrameworkTestSuiteFactory"));
 			fnDestroyFactory = reinterpret_cast<FnDestroyFactory>(testLibrary->GetSymbol("DestroyTestSuiteFactory"));
 
 			if (fnCreateFactory && fnDestroyFactory)
 				testFactory = fnCreateFactory();
 		}
-		catch (...)
-		{
+
+		if (!testFactory)
 			std::cerr << "Error: Failed to load FrameworkTests library." << std::endl;
-		}
 	}
 
 	// Run tests
@@ -146,6 +140,7 @@ int main(int argc, char* argv[])
 	}
 
 	TestSuiteRegistry::ShutDown();
+	MemStack::EndThread();
 	CrashHandler::ShutDown();
 
 	return exitCode;

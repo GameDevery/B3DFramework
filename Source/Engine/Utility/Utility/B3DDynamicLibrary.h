@@ -20,6 +20,15 @@ namespace b3d
 		/** Platform-specific name prefix for a dynamic library (e.g. "lib" on Unix), or null if none. */
 		static constexpr const char* kPrefix = B3D_DYNLIB_PREFIX;
 
+		/** Builds the platform-specific file name of a dynamic library from its base name (e.g. "Foo" -> "libFoo.dylib"). */
+		static String GetFileName(const StringView& baseName);
+
+		/**
+		 * Normalizes a dynamic library file name, prepending the platform prefix and appending the extension only when
+		 * they are not already present. Idempotent: both "Foo" and "libFoo.dylib" yield "libFoo.dylib".
+		 */
+		static String EnsureFileName(const StringView& name);
+
 		/** Constructs the dynamic library object and loads the library with the specified name. */
 		DynamicLibrary(String name);
 		~DynamicLibrary();
@@ -32,6 +41,9 @@ namespace b3d
 
 		/** Get the name of the library. */
 		const String& GetName() const { return mName; }
+
+		/** Checks if the library has been successfully loaded. Load failures are reported through the error log. */
+		bool IsLoaded() const { return mHandle != nullptr; }
 
 		/**
 		 * Returns the address of the given symbol from the loaded library.
