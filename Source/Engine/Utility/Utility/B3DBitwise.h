@@ -184,7 +184,7 @@ namespace b3d
 			}
 #	endif // B3D_ARCHITECTURE
 #elif B3D_COMPILER_GCC || B3D_COMPILER_CLANG
-			return 31 - __builtin_clzll(val);
+			return 63 - __builtin_clzll(val);
 #else // B3D_COMPILER
 			static_assert(false, "Not implemented");
 #endif // B3D_COMPILER
