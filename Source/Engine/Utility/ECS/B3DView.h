@@ -549,7 +549,7 @@ namespace b3d::ecs
 		decltype(auto) Get(Entity entity) const
 		{
 			if constexpr(sizeof...(Index) == 0)
-				return std::tuple_cat(GetAsTuple(GetStorage<IncludedStorageType::ElementType>(), entity)...);
+				return std::tuple_cat(GetAsTuple(GetStorage<typename IncludedStorageType::ElementType>(), entity)...);
 			else if constexpr(sizeof...(Index) == 1)
 				return (GetStorage<Index>()->Get(entity), ...);
 			else

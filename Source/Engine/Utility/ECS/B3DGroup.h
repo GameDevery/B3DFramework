@@ -594,7 +594,7 @@ namespace b3d::ecs
 
 	private:
 		/** Returns a tuple containing all included storages with the provided indices. */
-		template<u32... Indices>
+		template<size_t... Indices>
 		auto GetIncludedStoragesAsTuple(std::index_sequence<Indices...>) const
 		{
 			using ReturnType = std::tuple<IncludedStorageTypes*...>;
@@ -870,7 +870,7 @@ namespace b3d::ecs
 
 	private:
 		/** Returns a tuple containing all owned and included storages with the provided indices. */
-		template<u32... OwnedIndices, u32... IncludedIndices>
+		template<size_t... OwnedIndices, size_t... IncludedIndices>
 		auto GetOwnedAndIncludedStoragesAsTuple(std::index_sequence<OwnedIndices...>, std::index_sequence<IncludedIndices...>) const
 		{
 			using ReturnType = std::tuple<OwnedStorageTypes*..., IncludedStorageTypes*...>;
