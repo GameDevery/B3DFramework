@@ -608,7 +608,8 @@ namespace b3d
 			bool SetUniformBuffer(u32 slot, const GpuBufferSuballocation& suballocation, u32 arrayIndex = 0)
 			{
 				B3D_ASSERT(suballocation.IsValid());
-				return TGpuParameterSet::SetUniformBuffer(slot, suballocation.GetBuffer(), arrayIndex, suballocation.GetSuballocationOffset());
+
+				return SetUniformBuffer(slot, suballocation.GetBuffer(), arrayIndex, suballocation.GetSuballocationOffset());
 			}
 
 			/**
@@ -622,7 +623,8 @@ namespace b3d
 			bool SetUniformBuffer(const StringView& name, const GpuBufferSuballocation& suballocation, u32 arrayIndex = 0)
 			{
 				B3D_ASSERT(suballocation.IsValid());
-				return TGpuParameterSet::SetUniformBuffer(name, suballocation.GetBuffer(), arrayIndex, suballocation.GetSuballocationOffset());
+
+				return SetUniformBuffer(name, suballocation.GetBuffer(), arrayIndex, suballocation.GetSuballocationOffset());
 			}
 
 			/**
@@ -638,7 +640,7 @@ namespace b3d
 				if (!suballocation.IsValid())
 					return false;
 
-				return TGpuParameterSet::TrySetUniformBuffer(name, suballocation.GetBuffer(), arrayIndex, suballocation.GetSuballocationOffset());
+				return TrySetUniformBuffer(name, suballocation.GetBuffer(), arrayIndex, suballocation.GetSuballocationOffset());
 			}
 
 		protected:
