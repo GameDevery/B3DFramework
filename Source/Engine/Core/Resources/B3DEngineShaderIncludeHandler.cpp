@@ -38,12 +38,14 @@ TOptional<String> EngineShaderIncludeHandler::FindIncludeSource(const String& na
 
 Path EngineShaderIncludeHandler::DetermineFullPath(const String& name) const
 {
+	// Include names conventionally use Windows-style backslash separators; parsing them as Windows-style paths
+	// (which accepts either separator) keeps them resolvable on all platforms
 	if(name.size() >= 8 && name.substr(0, 8) == "$ENGINE$")
 	{
 		Path fullPath = BuiltinResources::GetShaderIncludeFolder();
 		if(name.size() > 8)
 		{
-			Path includePath = name.substr(9, name.size() - 9);
+			const Path includePath(name.substr(9, name.size() - 9), Path::PathType::Windows);
 			fullPath.Append(includePath);
 		}
 
@@ -51,11 +53,11 @@ Path EngineShaderIncludeHandler::DetermineFullPath(const String& name) const
 	}
 	else
 	{
-		Path fullPath = name;
+		Path fullPath(name, Path::PathType::Windows);
 		for(auto& folder : mSearchPaths)
 		{
 			Path entry = folder;
-			entry.Append(name);
+			entry.Append(fullPath);
 
 			if(FileSystem::Exists(entry))
 			{
