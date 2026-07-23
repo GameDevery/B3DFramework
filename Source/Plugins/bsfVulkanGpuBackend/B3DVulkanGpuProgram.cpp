@@ -12,10 +12,6 @@
 #include "FileSystem/B3DDataStream.h"
 #include "B3DVulkanGpuBackend.h"
 
-#if B3D_PLATFORM_MACOS
-#	include <MoltenVK/vk_mvk_moltenvk.h>
-#endif
-
 using namespace b3d;
 using namespace b3d::render;
 
@@ -90,18 +86,6 @@ void VulkanGpuProgram::Initialize()
 		u32 codeSize = mBytecode->Instructions.Size;
 		u8* code = mBytecode->Instructions.Data;
 
-#if B3D_PLATFORM_MACOS
-		u32 workgroupSize[3] = { 1, 1, 1 };
-		if(mType == GPT_COMPUTE_PROGRAM)
-		{
-			B3D_ASSERT(codeSize > sizeof(workgroupSize));
-
-			memcpy(workgroupSize, code, sizeof(workgroupSize));
-			code += sizeof(workgroupSize);
-			codeSize -= sizeof(workgroupSize);
-		}
-#endif
-
 		// Create Vulkan module
 		VkShaderModuleCreateInfo moduleCI;
 		moduleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -117,10 +101,6 @@ void VulkanGpuProgram::Initialize()
 		VkResult result = vkCreateShaderModule(vkDevice, &moduleCI, gVulkanAllocator, &shaderModule);
 		B3D_ASSERT(result == VK_SUCCESS);
 
-#if B3D_PLATFORM_MACOS
-		if(mType == GPT_COMPUTE_PROGRAM)
-			vkSetWorkgroupSizeMVK(shaderModule, workgroupSize[0], workgroupSize[1], workgroupSize[2]);
-#endif
 		mModule = rescManager.Create<VulkanShaderModule>(shaderModule);
 		mModule->SetName(mName);
 

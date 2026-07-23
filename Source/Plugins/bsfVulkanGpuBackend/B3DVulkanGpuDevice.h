@@ -59,12 +59,7 @@ namespace b3d
 		class VulkanGpuDevice : public GpuDevice, private IGpuSubmitThreadBackend
 		{
 		public:
-#if B3D_PLATFORM_MACOS
-			static constexpr const char* kGpuProgramLanguageName = kGpuProgramLanguageMvksl;
-#else
 			static constexpr const char* kGpuProgramLanguageName = kGpuProgramLanguageVksl;
-#endif
-
 
 			VulkanGpuDevice(VkPhysicalDevice device);
 			~VulkanGpuDevice();
