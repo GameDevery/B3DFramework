@@ -115,10 +115,11 @@ TAsyncOp<TShared<MemoryDataStream>> MacOSFileDataStream::ReadAsync(u64 offset, s
 
 		if(done)
 		{
-			// ECANCELED arrives here when Close() issued dispatch_io_close(..., DISPATCH_IO_STOP) on an in-flight read;
-			// it's the standard cancellation path and finalizes as a failure (mirrors Win32 ERROR_OPERATION_ABORTED).
+			// ECANCELED arrives here when Close() issued dispatch_io_close(..., DISPATCH_IO_STOP) on an in-flight read
+			// (e.g. an unconsumed speculative read-ahead); it's the standard cancellation path and finalizes as a
+			// silent failure (mirrors Win32 ERROR_OPERATION_ABORTED).
 			const bool succeeded = (error == 0);
-			if(!succeeded)
+			if(!succeeded && error != ECANCELED)
 				B3D_LOG(Warning, LogFileSystem, "Asynchronous read failed (error {0}).", String(strerror(error)));
 
 			FinalizeAsyncRead(request, (size_t)request->BytesRead, succeeded);
