@@ -18,6 +18,16 @@ if(B3D_GPU_BACKEND MATCHES "Vulkan" OR B3D_BUILD_ALL_PLUGINS)
 	# Vulkan headers
 	if(APPLE)
 		target_link_libraries(bsfVulkanGpuBackendTests PRIVATE ${MoltenVK_LIBRARIES})
+
+		# OS libs needed by the statically linked MoltenVK
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests Foundation)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests CoreGraphics)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests CoreVideo)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests IOKit)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests AppKit)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests QuartzCore)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests Metal)
+		B3DTargetLinkFramework(bsfVulkanGpuBackendTests IOSurface)
 	else()
 		target_link_libraries(bsfVulkanGpuBackendTests PRIVATE ${Vulkan_LIBRARIES})
 	endif()
