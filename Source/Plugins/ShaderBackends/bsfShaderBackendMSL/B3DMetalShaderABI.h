@@ -41,6 +41,21 @@ namespace b3d
 		/** Prefix embedded in MSL argument-buffer member names so native reflection can recover engine bindings. */
 		inline constexpr const char* kMetalResourceNamePrefix = "b3d_msl_r_";
 
+		/**
+		 * Entry-point name generated MSL uses for the given stage. MSL reserves "main", so the
+		 * vksl -> msl translator renames the VKSL entry to the stage's HLSL-convention name.
+		 */
+		inline const char* GetMetalStageEntryPointName(GpuProgramType type)
+		{
+			switch(type)
+			{
+			case GPT_VERTEX_PROGRAM: return "vsmain";
+			case GPT_FRAGMENT_PROGRAM: return "fsmain";
+			case GPT_COMPUTE_PROGRAM: return "csmain";
+			default: return "";
+			}
+		}
+
 		/** Builds the identifier emitted for one MSL argument-buffer member. */
 		inline String EncodeMetalResourceName(GpuParameterType type, u32 set, u32 slot, const String& name)
 		{

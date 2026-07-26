@@ -24,6 +24,9 @@ namespace b3d
 				static_cast<MetalGpuDevice&>(mGpuDevice), *this, id, mInformation.Thread, mInformation.Type, createInformation);
 
 			mCommandBuffers[id] = commandBuffer;
+
+			// The completion handlers installed by CommitInternal keep the buffer alive via GetShared()
+			commandBuffer->SetShared(commandBuffer);
 			return commandBuffer;
 		}
 

@@ -327,6 +327,9 @@ namespace b3d
 
 			/** Resets every slot of @c mComputeResidencyCaches to an empty state. */
 			void ResetComputeResidencyCaches();
+
+			/** Converts the stored normalized viewport to this pass's pixel units and applies it to the open render encoder. */
+			void ApplyViewportToRenderEncoder();
 		};
 
 		/** @} */

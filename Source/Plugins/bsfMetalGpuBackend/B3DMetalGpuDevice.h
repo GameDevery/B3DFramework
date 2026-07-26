@@ -58,6 +58,15 @@ namespace b3d
 			id<MTLBuffer> GetNullVertexBuffer() const;
 
 			/**
+			 * Returns the persistent zero-filled MTLBuffer whose GPU address pre-fills unbound buffer
+			 * slots in every parameter set's argument buffer, so shaders that read a slot the engine
+			 * never bound load zeroes instead of faulting (mirrors VulkanBuiltinResources' dummy
+			 * buffers). Created once at Initialize() and released at teardown; never nil once the
+			 * device is initialized on a valid MTLDevice.
+			 */
+			id<MTLBuffer> GetDummyArgumentBuffer() const;
+
+			/**
 			 * Queues an Obj-C Metal object (@c MTLTexture / @c MTLBuffer / ...) for release once
 			 * @p originQueue has committed at least @p eventValue on its shared event. Drained on the
 			 * next @c BeginFrame. Used by resource recreate paths to keep the prior backing alive until

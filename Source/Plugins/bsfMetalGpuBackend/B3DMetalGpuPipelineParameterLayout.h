@@ -16,6 +16,25 @@ namespace b3d
 		 */
 
 		/**
+		 * Number of distinct argument-buffer stage sections a Metal parameter set can carry. Each stage
+		 * compiles its own MSL argument-buffer struct, and per-stage dead-resource stripping means the
+		 * structs can pack differently — so every stage gets its own section within the set's slice.
+		 */
+		constexpr u32 kMetalStageSectionCount = 3;
+
+		/** Maps a program stage bit to its argument-buffer section index, or @c ~0u for unsupported stages. */
+		inline u32 GetMetalStageSectionIndex(GpuProgramStageBit stage)
+		{
+			switch (stage)
+			{
+			case GpuProgramStageBit::Vertex:	return 0;
+			case GpuProgramStageBit::Fragment:	return 1;
+			case GpuProgramStageBit::Compute:	return 2;
+			default:							return ~0u;
+			}
+		}
+
+		/**
 		 * Describes a single binding within a Metal argument buffer in C++-visible form. Used by
 		 * @c MetalGpuParameters to look up which argument-buffer slot, resource usage, and stage-mask
 		 * should be applied when making resources resident on a command encoder.
@@ -26,14 +45,20 @@ namespace b3d
 			u32 Slot = 0;
 			/** Dense logical index used for CPU-side dirty tracking. */
 			u32 ArgIndex = 0;
-			/** Byte offset of the first resource handle in the common Tier-2 argument-buffer layout. */
-			u32 ByteOffset = 0;
-			/** Byte distance between array elements in the common argument-buffer layout. */
-			u32 ByteStride = 0;
+			/**
+			 * Byte offset of the first resource handle within each stage's argument-buffer section, or
+			 * @c ~0u when the stage does not declare the binding. Indexed by @c GetMetalStageSectionIndex.
+			 * Offsets are relative to the stage's section base, not the slice start.
+			 */
+			u32 StageByteOffsets[kMetalStageSectionCount] = { ~0u, ~0u, ~0u };
+			/** Byte distance between array elements, per stage section. */
+			u32 StageByteStrides[kMetalStageSectionCount] = { 0, 0, 0 };
 			/** Engine parameter type: distinguishes uniform/storage buffer vs texture vs sampler. */
 			GpuParameterType Type = GpuParameterType::Unknown;
 			/** Metal object type (GPOT_*) for the binding; drives read/write usage flags. */
 			GpuParameterObjectType ObjectType = GPOT_UNKNOWN;
+			/** Element format for typed buffers; the fallback view format when the bound view specifies none. */
+			GpuBufferFormat ElementType = BF_UNKNOWN;
 			/** Array length of this slot; 1 for scalar bindings. */
 			u32 ArraySize = 1;
 			/** First element in the parameter set's dense resolved-resource cache. */
@@ -48,9 +73,31 @@ namespace b3d
 		class MetalGpuPipelineParameterSetLayout : public GpuPipelineParameterSetLayout
 		{
 		public:
+			/** Reflected descriptor table backing this set for one shader stage. */
+			struct StageReflectedTable
+			{
+				TShared<GpuResourceTableLayout> Layout;
+				u32 TableIndex = ~0u;
+			};
+
 			MetalGpuPipelineParameterSetLayout(const GpuProgramParameterDescription& parameterDescription,
 				const TShared<GpuResourceTableLayout>& resourceTableLayout, u32 tableIndex);
+
+			/**
+			 * Builds the layout from per-stage reflected tables so each stage's argument-buffer struct
+			 * packing is honored independently — per-stage dead-resource stripping means the structs can
+			 * genuinely differ. Indexed by @c GetMetalStageSectionIndex.
+			 */
+			MetalGpuPipelineParameterSetLayout(const GpuProgramParameterDescription& parameterDescription,
+				const Array<StageReflectedTable, kMetalStageSectionCount>& stageTables);
 			~MetalGpuPipelineParameterSetLayout() override = default;
+
+			/**
+			 * Re-derives the stage sections from genuine per-stage reflected tables. Called by
+			 * @c MetalGpuPipelineParameterLayout right after the generic constructor built the set from a
+			 * single stage's table. Must run before the layout is published to any parameter set.
+			 */
+			void RebuildWithStageTables(const Array<StageReflectedTable, kMetalStageSectionCount>& stageTables) { Build(stageTables); }
 
 			/** Total size (in bytes) of the common argument buffer for this set. */
 			u64 GetArgumentBufferSize() const { return mArgumentBufferSize; }
@@ -114,8 +161,14 @@ namespace b3d
 			 */
 			u32 GetArgumentBufferIndex(GpuParameterType type, u32 slot, u32 arrayIndex = 0) const;
 
-			/** Resolves a binding element to its byte offset within the common argument-buffer block. */
-			u64 GetArgumentBufferByteOffset(GpuParameterType type, u32 slot, u32 arrayIndex = 0) const;
+			/** Finds the binding record for an engine @c (type, slot) pair, or null when absent. */
+			const MetalArgumentBufferBinding* FindBinding(GpuParameterType type, u32 slot) const;
+
+			/** Byte offset of a stage's argument-buffer section within the set's slice. */
+			u64 GetStageSectionBase(u32 stageSectionIndex) const { return mStageSectionBases[stageSectionIndex]; }
+
+			/** Size in bytes of a stage's argument-buffer section; zero when the stage has no section. */
+			u64 GetStageSectionSize(u32 stageSectionIndex) const { return mStageSectionSizes[stageSectionIndex]; }
 
 			/** Resolves a binding element to its dense resource-cache index, or @c ~0u if invalid. */
 			u32 GetResourceIndex(GpuParameterType type, u32 slot, u32 arrayIndex = 0) const;
@@ -124,9 +177,17 @@ namespace b3d
 			bool GetDynamicOffsetBinding(u32 dynamicOffsetIndex, GpuParameterType& type, u32& slot, u32& arrayIndex) const;
 
 		private:
+			/** Shared build path for both constructors. */
+			void Build(const Array<StageReflectedTable, kMetalStageSectionCount>& stageTables);
+
 			TArray<MetalArgumentBufferBinding> mBindings;
 			u64 mArgumentBufferSize = 0;
 			u32 mArgumentBufferAlignment = 16;
+
+			// Per-stage section placement within the set's argument-buffer slice. Stages without a
+			// section have size zero and share base zero (the canonical fallback packing).
+			u64 mStageSectionBases[kMetalStageSectionCount] = { 0, 0, 0 };
+			u64 mStageSectionSizes[kMetalStageSectionCount] = { 0, 0, 0 };
 
 			// Union of stage masks across every binding in mBindings. Computed once after mBindings is
 			// finalized so command-buffer bind paths can read the stage subset the set touches without

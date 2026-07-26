@@ -6,6 +6,7 @@
 #include "B3DMetalResourceManager.h"
 #include "B3DMetalUtility.h"
 #include "Debug/B3DLog.h"
+#include "Math/B3DMath.h"
 
 namespace b3d
 {
@@ -66,8 +67,11 @@ namespace b3d
 #if !__has_feature(objc_arc)
 				for (auto& viewEntry : mShaderReadViews)
 					[viewEntry.second release];
+				for (auto& viewEntry : mSubresourceViews)
+					[viewEntry.second release];
 #endif
 				mShaderReadViews.clear();
+				mSubresourceViews.clear();
 			}
 
 #if !__has_feature(objc_arc)
@@ -166,6 +170,94 @@ namespace b3d
 			return view;
 		}
 
+		id<MTLTexture> MetalImage::GetSubresourceView(const TextureSurface& surface)
+		{
+			if (mTexture == nil)
+				return nil;
+
+			const u32 mipLevelCount = (u32)[mTexture mipmapLevelCount];
+			const MTLTextureType parentType = [mTexture textureType];
+			const bool isCube = parentType == MTLTextureTypeCube || parentType == MTLTextureTypeCubeArray;
+
+			// Metal stores cube textures as 6 * arrayLength slices, and cube faces map directly onto
+			// slice indices — the engine's Face coordinate needs no remap.
+			const u32 sliceCount = (u32)[mTexture arrayLength] * (isCube ? 6 : 1);
+
+			// Zero counts select all remaining mips/faces; explicit counts clamp to the resource
+			// (mirrors VulkanImage::CalculateExplicitSurface + GetRange).
+			const u32 firstMip = Math::Min(surface.MipLevel, mipLevelCount - 1);
+			const u32 mipCount = surface.MipLevelCount == 0
+				? mipLevelCount - firstMip
+				: Math::Min(surface.MipLevelCount, mipLevelCount - firstMip);
+			const u32 firstSlice = Math::Min(surface.Face, sliceCount - 1);
+			const u32 viewSliceCount = surface.FaceCount == 0
+				? sliceCount - firstSlice
+				: Math::Min(surface.FaceCount, sliceCount - firstSlice);
+
+			const bool coversWholeResource = firstMip == 0 && mipCount == mipLevelCount
+				&& firstSlice == 0 && viewSliceCount == sliceCount;
+			if (coversWholeResource && !(isCube && surface.IsBoundAs2DArray))
+				return mTexture;
+
+			// One fiber may be fetching a view while another adds to the same cache — serialize
+			// both the find and the insert so the pair is atomic (see mViewCacheMutex docs).
+			Lock lock(mViewCacheMutex);
+
+			const u64 key = ((u64)(surface.IsBoundAs2DArray ? 1 : 0) << 60)
+				| ((u64)firstMip << 52) | ((u64)mipCount << 44)
+				| ((u64)firstSlice << 22) | (u64)viewSliceCount;
+			auto existing = mSubresourceViews.find(key);
+			if (existing != mSubresourceViews.end())
+				return existing->second;
+
+			// Re-type the view to match how the sliced range is addressed from a shader (mirrors the
+			// view-type switch in VulkanImage::CreateView). 3D and multisample types cannot re-slice
+			// in Metal; their range passes through with the parent type unchanged.
+			MTLTextureType viewType = parentType;
+			switch (parentType)
+			{
+			case MTLTextureTypeCube:
+			case MTLTextureTypeCubeArray:
+				if (viewSliceCount == 1)
+					viewType = MTLTextureType2D;
+				else if ((viewSliceCount % 6) == 0)
+				{
+					if (surface.IsBoundAs2DArray)
+						viewType = MTLTextureType2DArray;
+					else
+						viewType = viewSliceCount > 6 ? MTLTextureTypeCubeArray : MTLTextureTypeCube;
+				}
+				else
+					viewType = MTLTextureType2DArray;
+				break;
+			case MTLTextureType1D:
+				if (viewSliceCount > 1)
+					viewType = MTLTextureType1DArray;
+				break;
+			case MTLTextureType2D:
+				if (viewSliceCount > 1)
+					viewType = MTLTextureType2DArray;
+				break;
+			default:
+				break;
+			}
+
+			id<MTLTexture> view = [mTexture newTextureViewWithPixelFormat:[mTexture pixelFormat]
+															  textureType:viewType
+																   levels:NSMakeRange(firstMip, mipCount)
+																   slices:NSMakeRange(firstSlice, viewSliceCount)];
+			if (view == nil)
+			{
+				B3D_LOG(Warning, LogRenderBackend,
+					"Failed to create MTLTexture subresource view. Mips: [{0}, {1}), slices: [{2}, {3}).",
+					firstMip, firstMip + mipCount, firstSlice, firstSlice + viewSliceCount);
+				return nil;
+			}
+
+			mSubresourceViews[key] = view;
+			return view;
+		}
+
 		MetalTexture::MetalTexture(MetalGpuDevice& gpuDevice, const TextureCreateInformation& createInformation)
 			: Texture(createInformation), mGpuDevice(gpuDevice)
 		{ }
@@ -186,6 +278,11 @@ namespace b3d
 		id<MTLTexture> MetalTexture::GetShaderReadView(MTLPixelFormat viewFormat)
 		{
 			return mImage != nullptr ? mImage->GetShaderReadView(viewFormat) : nil;
+		}
+
+		id<MTLTexture> MetalTexture::GetSubresourceView(const TextureSurface& surface)
+		{
+			return mImage != nullptr ? mImage->GetSubresourceView(surface) : nil;
 		}
 
 		void MetalTexture::SetName(const StringView& name)

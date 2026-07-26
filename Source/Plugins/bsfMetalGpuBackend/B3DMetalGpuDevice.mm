@@ -15,6 +15,7 @@
 #include "B3DMetalGpuParameterSetPool.h"
 #include "B3DMetalShaderABI.h"
 #include "B3DMetalGpuPipelineParameterLayout.h"
+#include "Material/B3DShaderCompiler.h"
 #include "B3DMetalSamplerState.h"
 #include "GpuBackend/B3DGpuPipelineParameterLayout.h"
 #include "GpuBackend/B3DGpuParameterSet.h"
@@ -65,6 +66,10 @@ namespace b3d
 			// Created once in Initialize (kMetalNullVertexStreamStride bytes, Shared storage, memset 0)
 			// and released in the destructor.
 			id<MTLBuffer> NullVertexBuffer = nil;
+
+			// Persistent zero-filled buffer whose GPU address pre-fills unbound buffer slots in
+			// argument buffers (see GetDummyArgumentBuffer). Same lifetime as NullVertexBuffer.
+			id<MTLBuffer> DummyArgumentBuffer = nil;
 
 			// Deferred-release list drained on every @c BeginFrame. Guarded by @c DeferredReleaseMutex
 			// because recreate can fire from worker fibers while the render thread is ticking frames.
@@ -211,11 +216,13 @@ namespace b3d
 			if (MetalVertexInputManager::IsStarted())
 				MetalVertexInputManager::ShutDown();
 
-			// Release the shared null vertex buffer created in Initialize.
+			// Release the shared null vertex and dummy argument buffers created in Initialize.
 #if !__has_feature(objc_arc)
 			[mImpl->NullVertexBuffer release];
+			[mImpl->DummyArgumentBuffer release];
 #endif
 			mImpl->NullVertexBuffer = nil;
+			mImpl->DummyArgumentBuffer = nil;
 
 			// Explicitly release Metal handles. Under ARC assigning nil decrements the refcount.
 			for (u32 i = 0; i < GQT_COUNT; i++)
@@ -250,6 +257,11 @@ namespace b3d
 		id<MTLBuffer> MetalGpuDevice::GetNullVertexBuffer() const
 		{
 			return mImpl->NullVertexBuffer;
+		}
+
+		id<MTLBuffer> MetalGpuDevice::GetDummyArgumentBuffer() const
+		{
+			return mImpl->DummyArgumentBuffer;
 		}
 
 		void MetalGpuDevice::QueueMetalResourceForDeferredRelease(id resource, MetalGpuQueue* originQueue, u64 eventValue)
@@ -423,8 +435,10 @@ namespace b3d
 					MetalVertexInputManager::ShutDown();
 #if !__has_feature(objc_arc)
 				[mImpl->NullVertexBuffer release];
+				[mImpl->DummyArgumentBuffer release];
 #endif
 				mImpl->NullVertexBuffer = nil;
+				mImpl->DummyArgumentBuffer = nil;
 
 				// Unwind in reverse of construction. The resource manager goes before the heap
 				// allocator so any wrappers it still owns free their allocator spans before the heaps
@@ -560,6 +574,19 @@ namespace b3d
 				return false;
 			}
 			std::memset([mImpl->NullVertexBuffer contents], 0, kMetalNullVertexStreamStride);
+
+			// Shared zero-filled dummy buffer whose GPU address pre-fills unbound buffer slots in
+			// argument buffers so shader loads through them read zeroes instead of faulting (mirrors
+			// VulkanBuiltinResources' dummy buffers). Sized at 64 KB — the classic maximum uniform
+			// block size — so any in-bounds uniform-struct read stays inside the allocation.
+			constexpr u32 kDummyArgumentBufferSize = 65536;
+			mImpl->DummyArgumentBuffer = [mImpl->Device newBufferWithLength:kDummyArgumentBufferSize options:MTLResourceStorageModeShared];
+			if (mImpl->DummyArgumentBuffer == nil)
+			{
+				B3D_LOG(Error, LogRenderBackend, "Failed to create the shared dummy argument buffer.");
+				return false;
+			}
+			std::memset([mImpl->DummyArgumentBuffer contents], 0, kDummyArgumentBufferSize);
 
 			// Start the vertex-input manager that resolves vertex-buffer layouts against vertex shader
 			// inputs and caches the resulting MetalVertexInput (MTLVertexDescriptor) objects. Mirrors

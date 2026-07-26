@@ -94,6 +94,12 @@ namespace b3d
 			static MTLVertexFormat GetVertexFormat(VertexElementType type);
 
 			/**
+			 * Converts an engine typed-buffer element format to the pixel format of the texture-buffer
+			 * view a typed buffer binds through. Returns MTLPixelFormatInvalid for unmappable formats.
+			 */
+			static MTLPixelFormat GetBufferFormat(GpuBufferFormat format);
+
+			/**
 			 * Returns the number of bytes per row for a single slice of a texture subresource with the
 			 * given format and width. Accounts for block-compressed formats.
 			 */

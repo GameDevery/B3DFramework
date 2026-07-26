@@ -6,6 +6,7 @@
 #include "B3DMetalResource.h"
 #include "GpuBackend/B3DGpuBuffer.h"
 #include "Allocators/B3DPoolAlloc.h"
+#include "Threading/B3DThreading.h"
 
 namespace b3d
 {
@@ -20,8 +21,11 @@ namespace b3d
 #ifdef __OBJC__
 		/** Native Metal buffer handle. Aliased to void* in plain C++ TUs so class layouts stay identical (id is a pointer). */
 		using MetalBufferNativeHandle = id<MTLBuffer>;
+		/** Native handle of a texture-buffer view over a Metal buffer. Same aliasing rules as above. */
+		using MetalBufferViewNativeHandle = id<MTLTexture>;
 #else
 		using MetalBufferNativeHandle = void*;
+		using MetalBufferViewNativeHandle = void*;
 #endif
 
 		/** Descriptor used to create a MetalBuffer. */
@@ -56,14 +60,36 @@ namespace b3d
 #ifdef __OBJC__
 			/** Returns the internal handle to the Metal object. */
 			id<MTLBuffer> GetMetalHandle() const { return mBuffer; }
+
+			/**
+			 * Returns a lazily-created texture-buffer view interpreting the buffer's contents (or a
+			 * sub-range of them, when @p range is non-zero) as elements of the provided format. Typed
+			 * buffers (Buffer<T>/RWBuffer<T>) bind through such views since MSL models them as
+			 * texture_buffer arguments. Views are cached for the wrapper's lifetime and retire with it.
+			 */
+			id<MTLTexture> GetTextureBufferView(GpuBufferFormat format, u32 offset, u32 range, bool writable);
 #endif
 
 		private:
+			/** One cached texture-buffer view. Cardinality per buffer is tiny, so lookup is a linear scan. */
+			struct TextureBufferView
+			{
+				GpuBufferFormat Format = BF_UNKNOWN;
+				u32 Offset = 0;
+				u32 Range = 0;
+				bool Writable = false;
+				MetalBufferViewNativeHandle View = nullptr; /**< +1 retained reference (MRC), released in the destructor. */
+			};
+
 			GpuBufferType mType;
 			GpuBufferFlags mFlags;
 			MetalBufferNativeHandle mBuffer = nullptr;
 			GpuResourceLocation mAllocation;
 			void* mMappedMemory = nullptr;
+			Vector<TextureBufferView> mTextureBufferViews;
+
+			/** Guards concurrent GetTextureBufferView calls racing to populate the view cache. */
+			mutable Mutex mViewCacheMutex;
 		};
 
 		/**
@@ -102,6 +128,9 @@ namespace b3d
 #ifdef __OBJC__
 			/** Returns the underlying MTLBuffer. May be nil before Initialize() has been called, or if creation failed. */
 			id<MTLBuffer> GetMetalBuffer() const;
+
+			/** @copydoc MetalBuffer::GetTextureBufferView */
+			id<MTLTexture> GetTextureBufferView(GpuBufferFormat format, u32 offset, u32 range, bool writable);
 #endif
 
 		protected:

@@ -66,6 +66,10 @@ namespace b3d
 				u32 ArrayIndex = 0;
 				TShared<GpuBuffer> Buffer;
 				GpuBufferViewInformation View;
+				/** Reflected slot type: structured buffers bind by GPU address, typed ones through a texture-buffer view. */
+				GpuParameterObjectType ObjectType = GPOT_UNKNOWN;
+				/** Reflected element format, used as the view format when the bound view specifies none. */
+				GpuBufferFormat ElementType = BF_UNKNOWN;
 			};
 
 			/** Record of a single texture binding (sampled or storage). */
@@ -110,6 +114,15 @@ namespace b3d
 			 * and identical re-binds across frames become no-ops. Short-circuits when no slot is dirty.
 			 */
 			u64 CommitPendingBindings();
+
+			/**
+			 * Marks the current argument-buffer slice as consumed by an encoded draw / dispatch. The GPU
+			 * reads argument buffers at execution time, so once a draw references the slice any further
+			 * binding change must not overwrite it in place — the next dirty @c CommitPendingBindings
+			 * moves to a fresh slice (copy-on-write) and bumps the generation so the command buffer
+			 * re-attaches at the new offset. Called by @c MetalGpuCommandBuffer after each draw / dispatch.
+			 */
+			void MarkArgumentBufferConsumed();
 
 #ifdef __OBJC__
 			/** Returns the argument buffer backing this set. May be nil if Initialize() has not been called. */
@@ -220,8 +233,14 @@ namespace b3d
 			// @c SetDynamicOffset — dynamic offsets change the encoded pointer but not the resident
 			// resource set. Starts at 1 so a freshly-default-constructed cache slot (value 0) never
 			// matches. CommitPendingBindings returns the value while holding mSetMutex, allowing the
-			// command-buffer residency cache to update without another lock acquisition.
+			// command-buffer residency cache to update without another lock acquisition. Also bumped when
+			// CommitPendingBindings moves to a fresh slice (copy-on-write) so the command buffer
+			// re-attaches the argument buffer at the new offset.
 			u64 mGeneration = 1;
+
+			// Set once a draw / dispatch encoded against the current slice; forces the next dirty commit
+			// to copy-on-write into a fresh slice instead of corrupting what the encoded draw will read.
+			bool mSliceConsumed = false;
 		};
 
 		/** @} */

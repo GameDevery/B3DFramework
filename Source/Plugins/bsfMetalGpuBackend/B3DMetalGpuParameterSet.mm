@@ -56,7 +56,8 @@ namespace b3d
 				if (buffer == nullptr)
 					return offset == 0 && range == 0;
 
-				const u32 bufferSize = buffer->GetSuballocationSize();
+				// Dynamic offsets address individual suballocations, so the valid range spans the whole buffer
+				const u32 bufferSize = buffer->GetTotalSize();
 				if ((offset & 15u) != 0 || offset >= bufferSize
 					|| (range != 0 && ((u64)offset + range > bufferSize)))
 				{
@@ -138,6 +139,74 @@ namespace b3d
 				// Keep one dense cache entry per resource-array element. Entries stay null until
 				// CommitPendingBindings drains the corresponding dirty argument ID.
 				mResolvedResources.assign((size_t)mMetalLayout->GetResourceCount(), nullptr);
+
+				// Pre-fill every buffer-address slot with the device's zero-filled dummy buffer so a
+				// shader reading a slot the engine never binds loads zeroes instead of faulting on a
+				// null address (mirrors VulkanBuiltinResources' unbound-slot dummies). Bound slots
+				// overwrite both the address and the resolved-resource entry (which keeps the dummy
+				// resident via the useResources: path) in CommitPendingBindings.
+				id<MTLBuffer> dummyBuffer = mGpuDevice.GetDummyArgumentBuffer();
+				if (mImpl->ArgumentBuffer != nil && dummyBuffer != nil)
+				{
+					u8* argumentBytes = (u8*)[mImpl->ArgumentBuffer contents] + mImpl->ArgumentBufferOffset;
+					const u64 dummyAddress = (u64)dummyBuffer.gpuAddress;
+					for (const MetalArgumentBufferBinding& binding : mMetalLayout->GetBindings())
+					{
+						const bool bindsByAddress = binding.Type == GpuParameterType::UniformBuffer
+							|| (binding.Type == GpuParameterType::StorageBuffer
+								&& (binding.ObjectType == GPOT_STRUCTURED_BUFFER || binding.ObjectType == GPOT_RWSTRUCTURED_BUFFER));
+						if (!bindsByAddress)
+							continue;
+
+						for (u32 arrayIndex = 0; arrayIndex < binding.ArraySize; arrayIndex++)
+						{
+							for (u32 sectionIndex = 0; sectionIndex < kMetalStageSectionCount; sectionIndex++)
+							{
+								if (binding.StageByteOffsets[sectionIndex] == ~0u)
+									continue;
+
+								std::memcpy(argumentBytes + mMetalLayout->GetStageSectionBase(sectionIndex)
+									+ binding.StageByteOffsets[sectionIndex] + arrayIndex * binding.StageByteStrides[sectionIndex],
+									&dummyAddress, sizeof(dummyAddress));
+							}
+
+							const u32 resourceIndex = binding.FirstResourceIndex + arrayIndex;
+							if (resourceIndex < (u32)mResolvedResources.size())
+								mResolvedResources[resourceIndex] = (__bridge void*)dummyBuffer;
+						}
+					}
+				}
+
+				// Plain BSL SamplerState declarations have no explicit engine-side binding. Match the
+				// Vulkan backend by initializing every such argument-buffer slot with the device's
+				// default sampler instead of leaving a null Metal resource ID (which samples as point
+				// filtering on affected hardware).
+				TShared<MetalSamplerState> defaultSampler = std::static_pointer_cast<MetalSamplerState>(
+					mGpuDevice.FindOrCreateSamplerState(SamplerStateCreateInformation()));
+				id<MTLSamplerState> defaultMetalSampler = defaultSampler ? defaultSampler->GetMetalSampler() : nil;
+				if (mImpl->ArgumentBuffer != nil && defaultMetalSampler != nil)
+				{
+					u8* argumentBytes = (u8*)[mImpl->ArgumentBuffer contents] + mImpl->ArgumentBufferOffset;
+					const MTLResourceID resourceId = defaultMetalSampler.gpuResourceID;
+					for (const MetalArgumentBufferBinding& binding : mMetalLayout->GetBindings())
+					{
+						if (binding.Type != GpuParameterType::Sampler)
+							continue;
+
+						for (u32 arrayIndex = 0; arrayIndex < binding.ArraySize; arrayIndex++)
+						{
+							for (u32 sectionIndex = 0; sectionIndex < kMetalStageSectionCount; sectionIndex++)
+							{
+								if (binding.StageByteOffsets[sectionIndex] == ~0u)
+									continue;
+
+								std::memcpy(argumentBytes + mMetalLayout->GetStageSectionBase(sectionIndex)
+									+ binding.StageByteOffsets[sectionIndex] + arrayIndex * binding.StageByteStrides[sectionIndex],
+									&resourceId, sizeof(resourceId));
+							}
+						}
+					}
+				}
 			}
 
 			// The base Initialize() registers this parameter set as a CoreObject and triggers render-proxy
@@ -244,13 +313,6 @@ namespace b3d
 			@autoreleasepool
 			{
 			Lock lock(mSetMutex);
-			if (surface.MipLevel != 0 || surface.MipLevelCount != 0 || surface.Face != 0 || surface.FaceCount != 0)
-			{
-				B3D_LOG(Error, LogRenderBackend,
-					"Metal texture subresource bindings require a native texture view and are not supported yet. Slot: {0}.",
-					slot);
-				return false;
-			}
 
 			// Base writes mSampledTextureData[slot] and flags the render-proxy sync dirty bit; without
 			// this call SetParameter<Texture>(name, value) looks successful but never reaches the GPU.
@@ -313,13 +375,6 @@ namespace b3d
 			@autoreleasepool
 			{
 			Lock lock(mSetMutex);
-			if (surface.MipLevel != 0 || surface.MipLevelCount != 0 || surface.Face != 0 || surface.FaceCount != 0)
-			{
-				B3D_LOG(Error, LogRenderBackend,
-					"Metal texture subresource bindings require a native texture view and are not supported yet. Slot: {0}.",
-					slot);
-				return false;
-			}
 
 			// Base writes mStorageTextureData[slot]; without this, GetStorageTexture / render-proxy sync
 			// silently drop the binding.
@@ -384,19 +439,21 @@ namespace b3d
 			Lock lock(mSetMutex);
 
 			GpuParameterObjectType objectType = GPOT_UNKNOWN;
+			GpuBufferFormat reflectedElementType = BF_UNKNOWN;
 			for (const MetalArgumentBufferBinding& binding : mMetalLayout->GetBindings())
 			{
 				if (binding.Type == GpuParameterType::StorageBuffer && binding.Slot == slot)
 				{
 					objectType = binding.ObjectType;
+					reflectedElementType = binding.ElementType;
 					break;
 				}
 			}
-			if (objectType != GPOT_STRUCTURED_BUFFER && objectType != GPOT_RWSTRUCTURED_BUFFER)
+			if (objectType != GPOT_STRUCTURED_BUFFER && objectType != GPOT_RWSTRUCTURED_BUFFER
+				&& objectType != GPOT_BYTE_BUFFER && objectType != GPOT_RWBYTE_BUFFER)
 			{
 				B3D_LOG(Error, LogRenderBackend,
-					"Metal typed/raw storage-buffer bindings require a texture-buffer view and are not supported yet. Slot: {0}.",
-					slot);
+					"Metal storage buffers with counters are not supported. Slot: {0}.", slot);
 				return false;
 			}
 			if (!ValidateBufferRange(buffer, view.Offset, view.Range, "storage-buffer"))
@@ -411,6 +468,8 @@ namespace b3d
 			{
 				existing->Buffer = buffer;
 				existing->View = view;
+				existing->ObjectType = objectType;
+				existing->ElementType = reflectedElementType;
 			}
 			else
 			{
@@ -419,6 +478,8 @@ namespace b3d
 				binding.ArrayIndex = arrayIndex;
 				binding.Buffer = buffer;
 				binding.View = view;
+				binding.ObjectType = objectType;
+				binding.ElementType = reflectedElementType;
 				mStorageBuffers.push_back(std::move(binding));
 			}
 
@@ -665,6 +726,59 @@ namespace b3d
 		{
 			Lock lock(mSetMutex);
 
+			// Buffers and textures can swap their backing Metal resource under a stable engine-side
+			// wrapper (RecreateInternalBuffer / RecreateInternalTexture on discard writes) without any
+			// Set* call firing, leaving a dangling GPU address in the argument buffer. Re-verify the
+			// cached handles at every bind and dirty stale slots — the Metal equivalent of the Vulkan
+			// backend re-checking resource handles in PrepareForBind.
+			if (mMetalLayout != nullptr)
+			{
+				@autoreleasepool
+				{
+				const auto fnRevalidate = [&](GpuParameterType type, u32 slot, u32 arrayIndex, void* currentHandle)
+				{
+					const u32 argIndex = mMetalLayout->GetArgumentBufferIndex(type, slot, arrayIndex);
+					if (argIndex == (u32)~0u)
+						return;
+
+					ArgumentSlotSnapshot& snapshot = mSlotSnapshots[argIndex];
+					if (snapshot.Type != type || snapshot.MetalHandle == currentHandle)
+						return;
+
+					snapshot.MetalHandle = currentHandle;
+					mDirtyArgumentSlots.insert(argIndex);
+					// The resident resource set changed — force the command buffer to re-emit
+					// useResources: for the replacement handle.
+					++mGeneration;
+				};
+
+				for (const auto& binding : mUniformBuffers)
+				{
+					auto mtlBuffer = std::static_pointer_cast<MetalGpuBuffer>(binding.Buffer);
+					id<MTLBuffer> handle = mtlBuffer ? mtlBuffer->GetMetalBuffer() : nil;
+					fnRevalidate(GpuParameterType::UniformBuffer, binding.Slot, binding.ArrayIndex, (__bridge void*)handle);
+				}
+				for (const auto& binding : mStorageBuffers)
+				{
+					auto mtlBuffer = std::static_pointer_cast<MetalGpuBuffer>(binding.Buffer);
+					id<MTLBuffer> handle = mtlBuffer ? mtlBuffer->GetMetalBuffer() : nil;
+					fnRevalidate(GpuParameterType::StorageBuffer, binding.Slot, binding.ArrayIndex, (__bridge void*)handle);
+				}
+				for (const auto& binding : mSampledTextures)
+				{
+					auto mtlTexture = std::static_pointer_cast<MetalTexture>(binding.Texture);
+					id<MTLTexture> handle = mtlTexture ? mtlTexture->GetMetalTexture() : nil;
+					fnRevalidate(GpuParameterType::SampledTexture, binding.Slot, binding.ArrayIndex, (__bridge void*)handle);
+				}
+				for (const auto& binding : mStorageTextures)
+				{
+					auto mtlTexture = std::static_pointer_cast<MetalTexture>(binding.Texture);
+					id<MTLTexture> handle = mtlTexture ? mtlTexture->GetMetalTexture() : nil;
+					fnRevalidate(GpuParameterType::StorageTexture, binding.Slot, binding.ArrayIndex, (__bridge void*)handle);
+				}
+				} // @autoreleasepool
+			}
+
 			if (mDirtyArgumentSlots.empty())
 				return mGeneration;
 
@@ -679,19 +793,88 @@ namespace b3d
 			{
 			static_assert(sizeof(MTLResourceID) == sizeof(u64),
 				"Tier-2 argument-buffer resource IDs must be 64-bit values.");
+
+			// Copy-on-write: the GPU reads argument buffers at execution time, so once a draw / dispatch
+			// encoded against the current slice any in-place write would corrupt what that draw reads.
+			// Move to a fresh slice, carry the old contents over, then apply the dirty writes below. The
+			// generation bump makes the command buffer re-attach the argument buffer at the new offset.
+			if (mSliceConsumed)
+			{
+				const u64 bufferSize = mMetalLayout->GetArgumentBufferSize();
+				const u8* oldBytes = (const u8*)[mImpl->ArgumentBuffer contents] + mImpl->ArgumentBufferOffset;
+
+				id<MTLBuffer> newBuffer = nil;
+				u64 newOffset = 0;
+				if (mPool != nullptr)
+				{
+					const u32 alignment = std::max<u32>(1u, mMetalLayout->GetArgumentBufferAlignment());
+					newBuffer = mPool->AcquireArgumentBufferSlice(bufferSize, alignment, newOffset);
+				}
+				else
+				{
+					newBuffer = [mGpuDevice.GetMetalDevice() newBufferWithLength:(NSUInteger)bufferSize
+						options:MTLResourceStorageModeShared];
+				}
+
+				if (newBuffer != nil)
+				{
+					std::memcpy((u8*)[newBuffer contents] + newOffset, oldBytes, (size_t)bufferSize);
+#if !__has_feature(objc_arc)
+					if (mImpl->OwnsArgumentBuffer && mImpl->ArgumentBuffer != nil)
+						[mImpl->ArgumentBuffer release];
+#endif
+					mImpl->ArgumentBuffer = newBuffer;
+					mImpl->ArgumentBufferOffset = newOffset;
+					mImpl->OwnsArgumentBuffer = mPool == nullptr;
+					++mGeneration;
+				}
+				else
+				{
+					B3D_LOG(Error, LogRenderBackend,
+						"Failed to copy-on-write a {0}-byte Metal argument buffer for parameter set {1}. "
+						"Draws encoded earlier in the command buffer may read corrupted bindings.",
+						mMetalLayout->GetArgumentBufferSize(), GetSet());
+				}
+
+				mSliceConsumed = false;
+			}
+
 			u8* argumentBytes = (u8*)[mImpl->ArgumentBuffer contents] + GetArgumentBufferOffset();
+
+			// Null bindings substitute the device's zero-filled dummy buffer instead of encoding a null
+			// GPU address — a shader reading the slot then loads zeroes rather than faulting (mirrors
+			// VulkanBuiltinResources' DummyUniformBuffer substitution for unbound descriptors).
+			id<MTLBuffer> dummyBuffer = mGpuDevice.GetDummyArgumentBuffer();
+
 			const auto fnWriteArgument = [&](GpuParameterType type, u32 slot, u32 arrayIndex,
 				const void* value, size_t valueSize)
 			{
-				const u64 byteOffset = mMetalLayout->GetArgumentBufferByteOffset(type, slot, arrayIndex);
-				if(byteOffset == ~0ull || byteOffset + valueSize > mMetalLayout->GetArgumentBufferSize())
+				const MetalArgumentBufferBinding* record = mMetalLayout->FindBinding(type, slot);
+				if(record == nullptr || arrayIndex >= record->ArraySize)
 				{
 					B3D_LOG(Error, LogRenderBackend, "Metal argument-buffer write is outside the reflected layout. "
 						"Set: {0}, slot: {1}, type: {2}.", GetSet(), slot, (u32)type);
 					return;
 				}
 
-				std::memcpy(argumentBytes + byteOffset, value, valueSize);
+				// Each stage that declares the binding has its own section (per-stage MSL structs pack
+				// independently) — write the handle into every declaring section.
+				for (u32 sectionIndex = 0; sectionIndex < kMetalStageSectionCount; sectionIndex++)
+				{
+					if (record->StageByteOffsets[sectionIndex] == ~0u)
+						continue;
+
+					const u64 byteOffset = mMetalLayout->GetStageSectionBase(sectionIndex)
+						+ record->StageByteOffsets[sectionIndex] + (u64)arrayIndex * record->StageByteStrides[sectionIndex];
+					if(byteOffset + valueSize > mMetalLayout->GetArgumentBufferSize())
+					{
+						B3D_LOG(Error, LogRenderBackend, "Metal argument-buffer write is outside the reflected layout. "
+							"Set: {0}, slot: {1}, type: {2}.", GetSet(), slot, (u32)type);
+						continue;
+					}
+
+					std::memcpy(argumentBytes + byteOffset, value, valueSize);
+				}
 			};
 
 			// Size-guard the resolved-resource cache in case a parameter set bound bindings before
@@ -711,6 +894,8 @@ namespace b3d
 
 				auto mtlBuffer = std::static_pointer_cast<MetalGpuBuffer>(binding.Buffer);
 				id<MTLBuffer> buffer = mtlBuffer ? mtlBuffer->GetMetalBuffer() : nil;
+				if (buffer == nil)
+					buffer = dummyBuffer;
 				u64 gpuAddress = buffer != nil ? (u64)buffer.gpuAddress + binding.Offset : 0;
 				fnWriteArgument(GpuParameterType::UniformBuffer, binding.Slot, binding.ArrayIndex,
 					&gpuAddress, sizeof(gpuAddress));
@@ -732,7 +917,32 @@ namespace b3d
 					continue;
 
 				auto mtlBuffer = std::static_pointer_cast<MetalGpuBuffer>(binding.Buffer);
+				if (binding.ObjectType == GPOT_BYTE_BUFFER || binding.ObjectType == GPOT_RWBYTE_BUFFER)
+				{
+					// Typed buffers (texture_buffer in MSL) encode a texture resource ID, not a GPU
+					// address. The view interprets the buffer with the caller's format, falling back to
+					// the format the shader was reflected with.
+					const GpuBufferFormat format = binding.View.Format != BF_UNKNOWN
+						? binding.View.Format : binding.ElementType;
+					const bool writable = binding.ObjectType == GPOT_RWBYTE_BUFFER;
+					id<MTLTexture> view = mtlBuffer
+						? mtlBuffer->GetTextureBufferView(format, binding.View.Offset, binding.View.Range, writable)
+						: nil;
+					MTLResourceID resourceId = {};
+					if (view != nil)
+						resourceId = view.gpuResourceID;
+					fnWriteArgument(GpuParameterType::StorageBuffer, binding.Slot, binding.ArrayIndex,
+						&resourceId, sizeof(resourceId));
+
+					// Residency: making the buffer-backed view resident is what useResources: needs.
+					if (resourceIndex < (u32)mResolvedResources.size())
+						mResolvedResources[resourceIndex] = (__bridge void*)view;
+					continue;
+				}
+
 				id<MTLBuffer> metalBuffer = mtlBuffer ? mtlBuffer->GetMetalBuffer() : nil;
+				if (metalBuffer == nil)
+					metalBuffer = dummyBuffer;
 				// Apply the view's byte offset so structured-buffer suballocations and dynamic offsets
 				// (routed through SetDynamicOffset below) read from the correct slice. Vulkan encodes
 				// the same offset into its VkDescriptorBufferInfo; encoding 0 here silently pointed
@@ -755,7 +965,8 @@ namespace b3d
 					continue;
 
 				auto mtlTexture = std::static_pointer_cast<MetalTexture>(binding.Texture);
-				id<MTLTexture> tex = mtlTexture ? mtlTexture->GetMetalTexture() : nil;
+				// The subresource view resolves back to the native texture for full-resource surfaces
+				id<MTLTexture> tex = mtlTexture ? mtlTexture->GetSubresourceView(binding.Surface) : nil;
 				MTLResourceID resourceId = {};
 				if(tex != nil)
 					resourceId = tex.gpuResourceID;
@@ -776,7 +987,8 @@ namespace b3d
 					continue;
 
 				auto mtlTexture = std::static_pointer_cast<MetalTexture>(binding.Texture);
-				id<MTLTexture> tex = mtlTexture ? mtlTexture->GetMetalTexture() : nil;
+				// The subresource view resolves back to the native texture for full-resource surfaces
+				id<MTLTexture> tex = mtlTexture ? mtlTexture->GetSubresourceView(binding.Surface) : nil;
 				MTLResourceID resourceId = {};
 				if(tex != nil)
 					resourceId = tex.gpuResourceID;
@@ -797,6 +1009,14 @@ namespace b3d
 
 				auto mtlSampler = std::static_pointer_cast<MetalSamplerState>(binding.Sampler);
 				id<MTLSamplerState> state = mtlSampler ? mtlSampler->GetMetalSampler() : nil;
+				TShared<MetalSamplerState> defaultSampler;
+				if (state == nil)
+				{
+					defaultSampler = std::static_pointer_cast<MetalSamplerState>(
+						mGpuDevice.FindOrCreateSamplerState(SamplerStateCreateInformation()));
+					state = defaultSampler ? defaultSampler->GetMetalSampler() : nil;
+				}
+
 				MTLResourceID resourceId = {};
 				if(state != nil)
 					resourceId = state.gpuResourceID;
@@ -810,6 +1030,12 @@ namespace b3d
 			mDirtyArgumentSlots.clear();
 			} // @autoreleasepool
 			return mGeneration;
+		}
+
+		void MetalGpuParameters::MarkArgumentBufferConsumed()
+		{
+			Lock lock(mSetMutex);
+			mSliceConsumed = true;
 		}
 
 		id<MTLResource> MetalGpuParameters::GetCachedResource(u32 resourceIndex) const

@@ -76,7 +76,7 @@ namespace b3d
 				createInformation.Name = mName;
 				createInformation.Type = mType;
 				createInformation.EntryPoint = mEntryPoint;
-				createInformation.Language = language;
+				createInformation.Language = mLanguage;
 				createInformation.Source = mSource;
 				Array<u32, 3> threadGroupSize = { mWorkgroupSize[0], mWorkgroupSize[1], mWorkgroupSize[2] };
 				if(mBytecode != nullptr)
@@ -92,6 +92,9 @@ namespace b3d
 				&& mBytecode->ResourceTableLayout != nullptr;
 			if(!mIsCompiled && mCompileMessages.empty())
 				mCompileMessages = "Metal GPU program bytecode is empty or missing native reflection metadata.";
+
+			if(!mIsCompiled)
+				B3D_LOG(Error, LogRenderBackend, "Compilation of GPU program '{0}' failed: {1}", mName, mCompileMessages);
 
 			if (mIsCompiled)
 			{
@@ -144,13 +147,14 @@ namespace b3d
 					[mImpl->Library setLabel:nsName];
 				}
 
-				NSString* entryPointName = [NSString stringWithUTF8String:mEntryPoint.c_str()];
+				const String& entryPoint = mEntryPoint;
+				NSString* entryPointName = [NSString stringWithUTF8String:entryPoint.c_str()];
 				mImpl->Function = [mImpl->Library newFunctionWithName:entryPointName];
 
 				if (mImpl->Function == nil)
 				{
 					mIsCompiled = false;
-					mCompileMessages = String("Metal library does not contain entry point '") + mEntryPoint + "'.";
+					mCompileMessages = String("Metal library does not contain entry point '") + entryPoint + "'.";
 					B3D_LOG(Error, LogRenderBackend, "{0}", mCompileMessages);
 					GpuProgram::Initialize();
 					return;

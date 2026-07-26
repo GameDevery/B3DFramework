@@ -97,6 +97,14 @@ namespace b3d
 			 * and retire with it.
 			 */
 			id<MTLTexture> GetShaderReadView(MTLPixelFormat viewFormat);
+
+			/**
+			 * Returns a lazily-created @c MTLTexture view restricted to the requested subresource
+			 * range (zero counts select all remaining mips/faces, mirroring Vulkan's VK_REMAINING_*
+			 * semantics). Returns the native texture itself when the surface covers the entire
+			 * resource. Views are cached for the lifetime of the image and retire with it.
+			 */
+			id<MTLTexture> GetSubresourceView(const TextureSurface& surface);
 #endif
 
 		private:
@@ -109,6 +117,12 @@ namespace b3d
 			 * views. Values are +1 retained references (MRC), released in the destructor.
 			 */
 			UnorderedMap<u32, MetalTextureNativeHandle> mShaderReadViews;
+
+			/**
+			 * Lazily-created subresource-range view cache, keyed by the packed explicit surface.
+			 * Values are +1 retained references (MRC), released in the destructor.
+			 */
+			UnorderedMap<u64, MetalTextureNativeHandle> mSubresourceViews;
 
 			/**
 			 * Guards concurrent GetShaderReadView calls from multiple worker fibers populating the
@@ -151,6 +165,9 @@ namespace b3d
 
 			/** @copydoc MetalImage::GetShaderReadView */
 			id<MTLTexture> GetShaderReadView(MTLPixelFormat viewFormat);
+
+			/** @copydoc MetalImage::GetSubresourceView */
+			id<MTLTexture> GetSubresourceView(const TextureSurface& surface);
 #endif
 
 		protected:

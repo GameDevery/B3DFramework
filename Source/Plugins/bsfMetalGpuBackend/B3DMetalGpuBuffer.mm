@@ -4,7 +4,9 @@
 #include "B3DMetalGpuDevice.h"
 #include "B3DMetalHeapAllocator.h"
 #include "B3DMetalResourceManager.h"
+#include "B3DMetalUtility.h"
 #include "Debug/B3DLog.h"
+#include "Math/B3DMath.h"
 
 namespace b3d
 {
@@ -25,6 +27,15 @@ namespace b3d
 			// resource is no longer bound to any command buffer nor in flight on the GPU (the
 			// resource tracker drives NotifyBound/Used/Done), so the native handle and its memory
 			// span can be released synchronously — mirroring VulkanBuffer's destructor.
+			{
+				Lock lock(mViewCacheMutex);
+#if !__has_feature(objc_arc)
+				for (auto& viewEntry : mTextureBufferViews)
+					[viewEntry.View release];
+#endif
+				mTextureBufferViews.clear();
+			}
+
 #if !__has_feature(objc_arc)
 			[mBuffer release];
 #endif
@@ -185,6 +196,85 @@ namespace b3d
 		id<MTLBuffer> MetalGpuBuffer::GetMetalBuffer() const
 		{
 			return mBuffer != nullptr ? mBuffer->GetMetalHandle() : nil;
+		}
+
+		id<MTLTexture> MetalBuffer::GetTextureBufferView(GpuBufferFormat format, u32 offset, u32 range, bool writable)
+		{
+			if (mBuffer == nil)
+				return nil;
+
+			// One fiber may be fetching a view while another adds to the same cache — serialize
+			// both the find and the insert so the pair is atomic (see mViewCacheMutex docs).
+			Lock lock(mViewCacheMutex);
+			for (const TextureBufferView& entry : mTextureBufferViews)
+			{
+				if (entry.Format == format && entry.Offset == offset && entry.Range == range && entry.Writable == writable)
+					return entry.View;
+			}
+
+			const MTLPixelFormat pixelFormat = MetalUtility::GetBufferFormat(format);
+			if (pixelFormat == MTLPixelFormatInvalid)
+			{
+				B3D_LOG(Error, LogRenderBackend,
+					"Typed-buffer element format {0} has no Metal pixel-format mapping.", (u32)format);
+				return nil;
+			}
+
+			const u32 elementSize = b3d::GpuBuffer::GetFormatSize(format);
+			const u64 bufferLength = (u64)[mBuffer length];
+			if (elementSize == 0 || offset >= bufferLength)
+			{
+				B3D_LOG(Error, LogRenderBackend,
+					"Typed-buffer view range is outside the buffer. Offset: {0}, buffer length: {1}.", offset, bufferLength);
+				return nil;
+			}
+
+			const u64 availableBytes = bufferLength - offset;
+			const u64 rangeBytes = range == 0 ? availableBytes : Math::Min((u64)range, availableBytes);
+			const u64 elementCount = rangeBytes / elementSize;
+			if (elementCount == 0)
+				return nil;
+
+			id<MTLDevice> device = [mBuffer device];
+			const NSUInteger alignment = [device minimumLinearTextureAlignmentForPixelFormat:pixelFormat];
+			if (alignment != 0 && (offset % alignment) != 0)
+			{
+				B3D_LOG(Error, LogRenderBackend,
+					"Typed-buffer view offset {0} violates the device's linear-texture alignment of {1}.",
+					offset, (u64)alignment);
+				return nil;
+			}
+
+			MTLTextureDescriptor* descriptor = [MTLTextureDescriptor
+				textureBufferDescriptorWithPixelFormat:pixelFormat
+												 width:(NSUInteger)elementCount
+									   resourceOptions:MetalUtility::GetResourceOptions([mBuffer storageMode])
+												 usage:writable ? (MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite)
+															    : MTLTextureUsageShaderRead];
+			id<MTLTexture> view = [mBuffer newTextureWithDescriptor:descriptor
+															 offset:offset
+														bytesPerRow:(NSUInteger)(elementCount * elementSize)];
+			if (view == nil)
+			{
+				B3D_LOG(Error, LogRenderBackend,
+					"Failed to create a Metal texture-buffer view. Format: {0}, elements: {1}.", (u32)format, elementCount);
+				return nil;
+			}
+
+			TextureBufferView entry;
+			entry.Format = format;
+			entry.Offset = offset;
+			entry.Range = range;
+			entry.Writable = writable;
+			entry.View = view;
+			mTextureBufferViews.push_back(entry);
+
+			return view;
+		}
+
+		id<MTLTexture> MetalGpuBuffer::GetTextureBufferView(GpuBufferFormat format, u32 offset, u32 range, bool writable)
+		{
+			return mBuffer != nullptr ? mBuffer->GetTextureBufferView(format, offset, range, writable) : nil;
 		}
 	} // namespace render
 } // namespace b3d

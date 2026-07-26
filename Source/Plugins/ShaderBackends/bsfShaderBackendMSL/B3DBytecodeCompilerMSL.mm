@@ -6,6 +6,7 @@
 
 #include "B3DMetalShaderABI.h"
 #include "FileSystem/B3DFileSystem.h"
+#include "GpuBackend/B3DGpuBackend.h"
 #include "GpuBackend/B3DGpuProgram.h"
 #include "GpuBackend/B3DGpuParameterSet.h"
 #include "GpuBackend/B3DGpuProgramParameterDescription.h"
@@ -418,6 +419,16 @@ namespace
 
 		if(parameterType == GpuParameterType::StorageBuffer)
 		{
+			// Typed buffers (Buffer<T>/RWBuffer<T>) compile to texture_buffer<T>, so they reflect with texture metadata instead of a pointer.
+			if(pointerType == nil && textureType != nil && textureType.textureType == MTLTextureTypeTextureBuffer)
+			{
+				information.Type = textureType.access == MTLBindingAccessReadOnly ? GPOT_BYTE_BUFFER : GPOT_RWBYTE_BUFFER;
+				information.ElementType = MapElementFormat(textureType.textureDataType);
+				outDescription.Buffers[name] = information;
+
+				return true;
+			}
+
 			if(pointerType == nil)
 			{
 				outMessages += StringUtility::Format("Metal reflection did not report pointer metadata for storage buffer '{0}'.\n", name);
@@ -631,6 +642,9 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 		return bytecode;
 	}
 
+	const String& source = createInformation.Source;
+	const String& entryPoint = createInformation.EntryPoint;
+
 	const Path uniqueTemporaryPath = FileSystem::GetUniqueTemporaryFilePath();
 	Path directory = uniqueTemporaryPath.GetParent();
 	directory.PushDirectory(uniqueTemporaryPath.GetFilename());
@@ -642,9 +656,6 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 
 	Path sourcePath = directory;
 	sourcePath.SetFilename("shader.metal");
-
-	Path airPath = directory;
-	airPath.SetFilename("shader.air");
 
 	Path libraryPath = directory;
 	libraryPath.SetFilename("shader.metallib");
@@ -665,8 +676,8 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 			return bytecode;
 		}
 
-		const size_t sourceSize = createInformation.Source.size();
-		const bool sourceWritten = sourceStream->Write(createInformation.Source.data(), sourceSize) == sourceSize;
+		const size_t sourceSize = source.size();
+		const bool sourceWritten = sourceStream->Write(source.data(), sourceSize) == sourceSize;
 		if(!sourceStream->Close() || !sourceWritten)
 		{
 			bytecode->Messages = "Could not finish writing the temporary MSL source file.";
@@ -675,15 +686,17 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 	}
 
 	String diagnostics;
-	// TODO: Batch shader permutations into fewer metal/metallib process invocations during offline cooking.
+	// TODO: Batch shader permutations into fewer metal process invocations during offline cooking.
 	// TODO: Source the MSL version and deployment target from the configured macOS toolchain.
 	const String sourcePathString = sourcePath.ToString();
-	const String airPathString = airPath.ToString();
 	const String libraryPathString = libraryPath.ToString();
 	const Vector<String> metalArguments =
 	{
-		"xcrun", "-sdk", "macosx", "metal", "-std=macos-metal3.0", "-mmacosx-version-min=13.0",
-		"-ffast-math", "-c", sourcePathString, "-o", airPathString
+		// Metal 3.0+ standards have no platform prefix (macos-metal* names end at 2.4). Source-to-metallib
+		// in a single invocation: the separate metallib link step strips the function reflection metadata
+		// that reflectionForFunctionWithName: needs.
+		"xcrun", "-sdk", "macosx", "metal", "-std=metal3.0", "-mmacosx-version-min=13.0",
+		"-ffast-math", sourcePathString, "-o", libraryPathString
 	};
 
 	if(!RunXcrun(metalArguments, logPath, diagnostics))
@@ -694,20 +707,6 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 
 	if(!diagnostics.empty())
 		bytecode->Messages += StringUtility::Format("Metal source compilation diagnostics:\n{0}", diagnostics);
-
-	const Vector<String> libraryArguments =
-	{
-		"xcrun", "-sdk", "macosx", "metallib", airPathString, "-o", libraryPathString
-	};
-
-	if(!RunXcrun(libraryArguments, logPath, diagnostics))
-	{
-		bytecode->Messages += StringUtility::Format("Metal library linking failed.\n{0}", diagnostics);
-		return bytecode;
-	}
-
-	if(!diagnostics.empty())
-		bytecode->Messages += StringUtility::Format("Metal library linking diagnostics:\n{0}", diagnostics);
 
 	Vector<u8> libraryData;
 	{
@@ -743,8 +742,8 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 		}
 
 		NSError* error = nil;
-		NSString* path = [NSString stringWithUTF8String:libraryPathString.c_str()];
-		id<MTLLibrary> library = [device newLibraryWithFile:path error:&error];
+		NSURL* url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:libraryPathString.c_str()]];
+		id<MTLLibrary> library = [device newLibraryWithURL:url error:&error];
 		if(library == nil)
 		{
 			bytecode->Messages += StringUtility::Format("Could not load the compiled Metal library for reflection: {0}.",
@@ -755,9 +754,9 @@ TShared<GpuProgramBytecode> BytecodeCompilerMSL::CompileBytecode(const GpuProgra
 			return bytecode;
 		}
 
-		NSString* entryPoint = [NSString stringWithUTF8String:createInformation.EntryPoint.c_str()];
+		NSString* entryPointName = [NSString stringWithUTF8String:entryPoint.c_str()];
 		id<MTLFunction> function = nil;
-		const bool reflectionSucceeded = ReflectLibrary(library, entryPoint, createInformation.Type, *bytecode, function);
+		const bool reflectionSucceeded = ReflectLibrary(library, entryPointName, createInformation.Type, *bytecode, function);
 #if !__has_feature(objc_arc)
 		[function release];
 		[library release];

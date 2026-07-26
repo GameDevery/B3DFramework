@@ -54,6 +54,7 @@ namespace b3d
 			MTLRenderPassDescriptor* RestartRenderPassDescriptor = nil;
 			Vector<VertexBufferBinding> VertexBufferBindings;
 			MTLViewport Viewport = {};
+			Area2 NormalizedViewport = Area2(0.0f, 0.0f, 1.0f, 1.0f); /**< Engine-side viewport in normalized [0,1] units; converted to pixels per render pass. */
 			MTLScissorRect Scissor = {};
 			MTLVisibilityResultMode VisibilityMode = MTLVisibilityResultModeDisabled;
 			NSUInteger VisibilityOffset = 0;
@@ -165,13 +166,17 @@ namespace b3d
 					if (!layout || argumentBuffer == nil || params.GetSet() >= kMetalVertexBufferSlotBase)
 						return;
 
+					// Each stage reads its own argument-buffer section — per-stage MSL structs pack
+					// independently, so the attach offset selects the stage's section within the slice.
 					const u32 stageMask = layout->GetCombinedStageMask();
 					if (stageMask & ((u32)GpuProgramStageBit::Vertex | (u32)GpuProgramStageBit::Hull
 						| (u32)GpuProgramStageBit::Domain))
-						[encoder setVertexBuffer:argumentBuffer offset:(NSUInteger)params.GetArgumentBufferOffset()
+						[encoder setVertexBuffer:argumentBuffer
+							offset:(NSUInteger)(params.GetArgumentBufferOffset() + layout->GetStageSectionBase(GetMetalStageSectionIndex(GpuProgramStageBit::Vertex)))
 							atIndex:params.GetSet()];
 					if (stageMask & (u32)GpuProgramStageBit::Fragment)
-						[encoder setFragmentBuffer:argumentBuffer offset:(NSUInteger)params.GetArgumentBufferOffset()
+						[encoder setFragmentBuffer:argumentBuffer
+							offset:(NSUInteger)(params.GetArgumentBufferOffset() + layout->GetStageSectionBase(GetMetalStageSectionIndex(GpuProgramStageBit::Fragment)))
 							atIndex:params.GetSet()];
 				}
 
@@ -184,7 +189,8 @@ namespace b3d
 						|| (layout->GetCombinedStageMask() & (u32)GpuProgramStageBit::Compute) == 0)
 						return;
 
-					[encoder setBuffer:argumentBuffer offset:(NSUInteger)params.GetArgumentBufferOffset()
+					[encoder setBuffer:argumentBuffer
+						offset:(NSUInteger)(params.GetArgumentBufferOffset() + layout->GetStageSectionBase(GetMetalStageSectionIndex(GpuProgramStageBit::Compute)))
 						atIndex:params.GetSet()];
 				}
 
@@ -859,10 +865,12 @@ namespace b3d
 				return;
 
 			// Argument buffers for parameter sets occupy low buffer slots; offset the vertex-stream slot
-			// so it matches the corresponding slot the pipeline's vertex descriptor expects. If no
-			// graphics pipeline has been bound yet (the engine should not be calling SetVertexBuffers in
-			// that state) fall back to zero-offset.
-			const u32 baseIndex = mBoundGraphicsPipeline ? mBoundGraphicsPipeline->GetVertexBufferBaseIndex() : 0;
+			// so it matches the slot the pipeline's vertex descriptor expects. The base is the same
+			// device-wide constant for every pipeline, so it must not depend on a pipeline being bound —
+			// the engine legitimately calls SetVertexBuffers before SetGpuGraphicsPipelineState (e.g.
+			// NVGVectorPathRenderable::Render), and a zero fallback used to bind the stream at slot 0
+			// where it collided with parameter-set argument buffers and left slot 16 unbound.
+			const u32 baseIndex = kMetalVertexBufferSlotBase;
 
 			for (u32 bufferIndex = 0; bufferIndex < bufferCount; bufferIndex++)
 			{
@@ -1032,13 +1040,14 @@ namespace b3d
 				// sets on the same encoder don't thrash a single cache entry.
 				ParameterSetResidencyCache& cacheEntry = mRenderResidencyCaches[slotIndex];
 				const bool setChanged = cacheEntry.LastBoundSet != metalParams.get();
-				if (setChanged)
-					AttachArgumentBufferToRenderEncoder(mImpl->RenderEncoder, *metalParams);
+				// Commit before attaching: a copy-on-write commit can move the slice, changing the
+				// attach offset. The generation bump it performs forces the re-attach below.
 				const u64 generation = metalParams->CommitPendingBindings();
 				const bool cacheHit = !setChanged
 					&& cacheEntry.LastBoundGeneration == generation;
 				if (!cacheHit)
 				{
+					AttachArgumentBufferToRenderEncoder(mImpl->RenderEncoder, *metalParams);
 					EmitResidencyForRenderEncoder(mImpl->RenderEncoder, *metalParams);
 					cacheEntry.LastBoundSet = metalParams.get();
 					cacheEntry.LastBoundGeneration = generation;
@@ -1062,6 +1071,14 @@ namespace b3d
 				vertexCount:vertexCount
 				instanceCount:std::max<u32>(1, instanceCount)
 				baseInstance:firstInstance];
+
+			// The encoded draw reads the argument buffers at GPU execution time — later binding
+			// changes must copy-on-write instead of mutating the consumed slices.
+			for (const TShared<GpuParameterSet>& slotSet : mBoundParameterSets)
+			{
+				if (slotSet)
+					std::static_pointer_cast<MetalGpuParameters>(slotSet)->MarkArgumentBufferConsumed();
+			}
 			} // @autoreleasepool
 		}
 
@@ -1100,16 +1117,16 @@ namespace b3d
 
 				auto metalParams = std::static_pointer_cast<MetalGpuParameters>(slotSet);
 
-				// B3 / A'3: residency-elision cache — see @c Draw. Per-slot keying.
+				// B3 / A'3: residency-elision cache — see @c Draw. Per-slot keying. Commit before
+				// attach — a copy-on-write commit can move the slice (see @c Draw).
 				ParameterSetResidencyCache& cacheEntry = mRenderResidencyCaches[slotIndex];
 				const bool setChanged = cacheEntry.LastBoundSet != metalParams.get();
-				if (setChanged)
-					AttachArgumentBufferToRenderEncoder(mImpl->RenderEncoder, *metalParams);
 				const u64 generation = metalParams->CommitPendingBindings();
 				const bool cacheHit = !setChanged
 					&& cacheEntry.LastBoundGeneration == generation;
 				if (!cacheHit)
 				{
+					AttachArgumentBufferToRenderEncoder(mImpl->RenderEncoder, *metalParams);
 					EmitResidencyForRenderEncoder(mImpl->RenderEncoder, *metalParams);
 					cacheEntry.LastBoundSet = metalParams.get();
 					cacheEntry.LastBoundGeneration = generation;
@@ -1136,6 +1153,7 @@ namespace b3d
 			const u32 indexSize = (engineIndexType == IT_32BIT) ? 4u : 2u;
 
 			MTLPrimitiveType primitive = MetalUtility::GetPrimitiveType(mDrawOperation);
+
 			[mImpl->RenderEncoder drawIndexedPrimitives:primitive
 				indexCount:indexCount
 				indexType:indexType
@@ -1144,6 +1162,13 @@ namespace b3d
 				instanceCount:std::max<u32>(1, instanceCount)
 				baseVertex:vertexOffset
 				baseInstance:firstInstance];
+
+			// See Draw() — consumed slices must copy-on-write on the next binding change.
+			for (const TShared<GpuParameterSet>& slotSet : mBoundParameterSets)
+			{
+				if (slotSet)
+					std::static_pointer_cast<MetalGpuParameters>(slotSet)->MarkArgumentBufferConsumed();
+			}
 			} // @autoreleasepool
 		}
 
@@ -1224,15 +1249,15 @@ namespace b3d
 				// B3 / A'3: residency-elision cache — see @c Draw. Keyed per slot against the
 				// compute encoder's lifetime, so a render-then-compute sequence on the same set
 				// correctly re-emits once on the compute side.
+				// Commit before attach — a copy-on-write commit can move the slice (see @c Draw).
 				ParameterSetResidencyCache& cacheEntry = mComputeResidencyCaches[slotIndex];
 				const bool setChanged = cacheEntry.LastBoundSet != metalParams.get();
-				if (setChanged)
-					AttachArgumentBufferToComputeEncoder(mImpl->ComputeEncoder, *metalParams);
 				const u64 generation = metalParams->CommitPendingBindings();
 				const bool cacheHit = !setChanged
 					&& cacheEntry.LastBoundGeneration == generation;
 				if (!cacheHit)
 				{
+					AttachArgumentBufferToComputeEncoder(mImpl->ComputeEncoder, *metalParams);
 					EmitResidencyForComputeEncoder(mImpl->ComputeEncoder, *metalParams);
 					cacheEntry.LastBoundSet = metalParams.get();
 					cacheEntry.LastBoundGeneration = generation;
@@ -1242,6 +1267,14 @@ namespace b3d
 			MTLSize threadsPerGroup = MTLSizeMake(workgroup[0], workgroup[1], workgroup[2]);
 			MTLSize groups = MTLSizeMake(groupCountX, groupCountY, groupCountZ);
 			[mImpl->ComputeEncoder dispatchThreadgroups:groups threadsPerThreadgroup:threadsPerGroup];
+
+			// See Draw() — consumed slices must copy-on-write on the next binding change.
+			for (const TShared<GpuParameterSet>& slotSet : mBoundParameterSets)
+			{
+				if (slotSet)
+					std::static_pointer_cast<MetalGpuParameters>(slotSet)->MarkArgumentBufferConsumed();
+			}
+
 			mResourceTracker.ClearShaderFlagsForAllRenderPassImageSubresources();
 			} // @autoreleasepool
 		}
@@ -1354,7 +1387,8 @@ namespace b3d
 #endif
 			mImpl->RestartRenderPassDescriptor = nil;
 			mImpl->VertexBufferBindings.clear();
-			mImpl->HasViewport = false;
+			// The normalized viewport intentionally survives pass boundaries; it is re-applied in
+			// pixel units for the new pass once the encoder is open.
 			mImpl->HasScissor = false;
 			mImpl->VisibilityMode = MTLVisibilityResultModeDisabled;
 			mImpl->VisibilityOffset = 0;
@@ -1615,6 +1649,9 @@ namespace b3d
 			if (mAcquiredWindowSurface != nullptr)
 				mAcquiredWindowSurface->MarkDrawableAsRendered();
 
+			// Re-apply the persisted normalized viewport in this pass's pixel dimensions.
+			ApplyViewportToRenderEncoder();
+
 			// A'2: honor @c RenderPassCreateInformation::Parameters — the engine's declared contract
 			// at the base header is that the command buffer pre-registers every set listed here so
 			// the first draw finds the argument buffer already attached. Combined with A'1's
@@ -1673,7 +1710,7 @@ namespace b3d
 #endif
 			mImpl->RestartRenderPassDescriptor = nil;
 			mImpl->VertexBufferBindings.clear();
-			mImpl->HasViewport = false;
+			// The normalized viewport intentionally survives pass boundaries (see SetViewport).
 			mImpl->HasScissor = false;
 			mImpl->VisibilityMode = MTLVisibilityResultModeDisabled;
 			mImpl->VisibilityOffset = 0;
@@ -1695,18 +1732,30 @@ namespace b3d
 		void MetalGpuCommandBuffer::SetViewport(const Area2& area)
 		{
 			EnsureValidThread();
-			if (mImpl->RenderEncoder == nil)
+
+			// The engine passes a normalized [0,1] area while Metal viewports are in pixels, so store
+			// the normalized area and convert against the active render pass dimensions. The area
+			// persists across passes and is re-applied when a new pass opens, matching the Vulkan
+			// backend's deferred viewport bind.
+			mImpl->NormalizedViewport = area;
+			mImpl->HasViewport = true;
+
+			ApplyViewportToRenderEncoder();
+		}
+
+		void MetalGpuCommandBuffer::ApplyViewportToRenderEncoder()
+		{
+			if (mImpl->RenderEncoder == nil || !mImpl->HasViewport || mRenderPassWidth == 0 || mRenderPassHeight == 0)
 				return;
 
 			MTLViewport vp;
-			vp.originX = area.X;
-			vp.originY = area.Y;
-			vp.width = (double)area.Width;
-			vp.height = (double)area.Height;
+			vp.originX = (double)mImpl->NormalizedViewport.X * mRenderPassWidth;
+			vp.originY = (double)mImpl->NormalizedViewport.Y * mRenderPassHeight;
+			vp.width = (double)mImpl->NormalizedViewport.Width * mRenderPassWidth;
+			vp.height = (double)mImpl->NormalizedViewport.Height * mRenderPassHeight;
 			vp.znear = 0.0;
 			vp.zfar = 1.0;
 			mImpl->Viewport = vp;
-			mImpl->HasViewport = true;
 			[mImpl->RenderEncoder setViewport:vp];
 		}
 
@@ -3059,6 +3108,7 @@ namespace b3d
 			mImpl->RestartRenderPassDescriptor = nil;
 			mImpl->VertexBufferBindings.clear();
 			mImpl->HasViewport = false;
+			mImpl->NormalizedViewport = Area2(0.0f, 0.0f, 1.0f, 1.0f);
 			mImpl->HasScissor = false;
 			mImpl->DebugGroupDepth = 0;
 			mImpl->VisibilityMode = MTLVisibilityResultModeDisabled;

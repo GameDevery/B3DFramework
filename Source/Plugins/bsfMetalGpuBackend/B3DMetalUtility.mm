@@ -232,15 +232,11 @@ namespace b3d
 			return MTLCullModeNone;
 		}
 
-		MTLWinding MetalUtility::GetFrontFaceWinding(CullingMode mode)
+		MTLWinding MetalUtility::GetFrontFaceWinding(CullingMode)
 		{
-			// Engine convention: CULL_CLOCKWISE means "front-facing polygons are wound CW" (so CW triangles
-			// get culled when used as the cull mode). Metal's MTLFrontFacingWinding describes the winding of
-			// the *front* face, so CULL_CLOCKWISE => front=CW, which in Metal's left-handed-viewport terms
-			// becomes MTLWindingCounterClockwise due to the y-axis direction of clip space. For all other
-			// modes (including CULL_COUNTERCLOCKWISE and CULL_NONE) the front face is CCW in engine space,
-			// which maps to MTLWindingClockwise on the Metal side.
-			return mode == CULL_CLOCKWISE ? MTLWindingCounterClockwise : MTLWindingClockwise;
+			// Front-face winding is a fixed rasterizer convention; the culling mode only chooses whether
+			// front or back faces are discarded. Metal and the engine both use clockwise front faces.
+			return MTLWindingClockwise;
 		}
 
 		MTLTriangleFillMode MetalUtility::GetFillMode(PolygonMode mode)
@@ -356,6 +352,46 @@ namespace b3d
 			case VET_HALF3:			return MTLVertexFormatHalf3;
 			case VET_HALF4:			return MTLVertexFormatHalf4;
 			default:				return MTLVertexFormatInvalid;
+			}
+		}
+
+		MTLPixelFormat MetalUtility::GetBufferFormat(GpuBufferFormat format)
+		{
+			// Mirrors VulkanUtility::GetBufferFormat; three-component and 64-bit formats have no Metal
+			// pixel-format equivalent and fall through to invalid.
+			switch (format)
+			{
+			case BF_16X1F:	return MTLPixelFormatR16Float;
+			case BF_16X2F:	return MTLPixelFormatRG16Float;
+			case BF_16X4F:	return MTLPixelFormatRGBA16Float;
+			case BF_32X1F:	return MTLPixelFormatR32Float;
+			case BF_32X2F:	return MTLPixelFormatRG32Float;
+			case BF_32X4F:	return MTLPixelFormatRGBA32Float;
+			case BF_8X1:	return MTLPixelFormatR8Unorm;
+			case BF_8X2:	return MTLPixelFormatRG8Unorm;
+			case BF_8X4:	return MTLPixelFormatRGBA8Unorm;
+			case BF_16X1:	return MTLPixelFormatR16Unorm;
+			case BF_16X2:	return MTLPixelFormatRG16Unorm;
+			case BF_16X4:	return MTLPixelFormatRGBA16Unorm;
+			case BF_8X1S:	return MTLPixelFormatR8Sint;
+			case BF_8X2S:	return MTLPixelFormatRG8Sint;
+			case BF_8X4S:	return MTLPixelFormatRGBA8Sint;
+			case BF_16X1S:	return MTLPixelFormatR16Sint;
+			case BF_16X2S:	return MTLPixelFormatRG16Sint;
+			case BF_16X4S:	return MTLPixelFormatRGBA16Sint;
+			case BF_32X1S:	return MTLPixelFormatR32Sint;
+			case BF_32X2S:	return MTLPixelFormatRG32Sint;
+			case BF_32X4S:	return MTLPixelFormatRGBA32Sint;
+			case BF_8X1U:	return MTLPixelFormatR8Uint;
+			case BF_8X2U:	return MTLPixelFormatRG8Uint;
+			case BF_8X4U:	return MTLPixelFormatRGBA8Uint;
+			case BF_16X1U:	return MTLPixelFormatR16Uint;
+			case BF_16X2U:	return MTLPixelFormatRG16Uint;
+			case BF_16X4U:	return MTLPixelFormatRGBA16Uint;
+			case BF_32X1U:	return MTLPixelFormatR32Uint;
+			case BF_32X2U:	return MTLPixelFormatRG32Uint;
+			case BF_32X4U:	return MTLPixelFormatRGBA32Uint;
+			default:		return MTLPixelFormatInvalid;
 			}
 		}
 

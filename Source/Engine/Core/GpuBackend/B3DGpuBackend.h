@@ -38,9 +38,10 @@ namespace b3d
 	inline constexpr const char* kGpuProgramLanguageVksl = "vksl";
 
 	/**
-	 * Identifier for the Metal-flavored VKSL dialect authored by BSL when targeting the native Metal
-	 * backend. Same surface syntax as kGpuProgramLanguageVksl but with the @c METAL preprocessor
-	 * define, so you can further customize for Metal specific code.
+	 * Identifier for native Metal Shading Language source consumed by the Metal backend. BSL authors
+	 * this target in a Metal-flavored VKSL dialect (same surface syntax as kGpuProgramLanguageVksl but
+	 * with the @c METAL preprocessor define) which is translated to MSL during cross-compilation;
+	 * low-level rendering code provides MSL source directly.
 	 */
 	inline constexpr const char* kGpuProgramLanguageMsl = "msl";
 

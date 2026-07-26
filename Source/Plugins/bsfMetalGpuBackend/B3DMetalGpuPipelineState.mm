@@ -218,6 +218,11 @@ namespace b3d
 
 			MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc] init];
 
+			// Label the pipeline with the vertex program's name so GPU captures and validation
+			// reports identify the offending pipeline instead of printing "(null)".
+			if (mData.VertexProgram && !mData.VertexProgram->GetName().empty())
+				desc.label = [NSString stringWithUTF8String:mData.VertexProgram->GetName().c_str()];
+
 			// Shader functions.
 			if (mData.VertexProgram)
 			{
@@ -468,7 +473,8 @@ namespace b3d
 			id<MTLFunction> function = program->GetMetalFunction();
 			if (function == nil)
 			{
-				B3D_LOG(Error, LogRenderBackend, "Cannot initialize Metal compute pipeline: program has no Metal function.");
+				B3D_LOG(Error, LogRenderBackend, "Cannot initialize Metal compute pipeline: program '{0}' has no Metal function. Compiler output: {1}",
+					program->GetName(), program->GetCompileErrorMessage());
 				{
 					Lock lock(mImpl->PipelineMutex);
 					mImpl->Ready = true;
