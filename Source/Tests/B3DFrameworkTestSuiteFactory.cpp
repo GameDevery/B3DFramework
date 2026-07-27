@@ -4,10 +4,10 @@
 #include "Testing/B3DTestResultCollector.h"
 #include "Testing/B3DTestResultWriter.h"
 #include "Testing/B3DTestSuiteRegistry.h"
-#include "Utility/B3DCommandLine.h"
 #include "FileSystem/B3DFileSystem.h"
 #include "FileSystem/B3DPath.h"
 #include "B3DApplication.h"
+#include "GpuBackend/B3DGpuBackend.h"
 
 #include "TestSuites/B3DUtilityTestSuite.h"
 #include "TestSuites/B3DFileSystemTestSuite.h"
@@ -77,6 +77,12 @@ namespace b3d
 
 		const String expectedExtension = String(".") + DynamicLibrary::kExtension;
 
+		// Every GPU backend plugin built for this platform drops its test DLL next to the runner, but only one
+		// backend is ever started up per run. A foreign backend's suites would exercise a backend that was never
+		// initialized, so they are skipped rather than loaded. The running backend is asked for its own name (which
+		// is why discovery happens after start-up); non-GPU-backend plugin tests are backend-agnostic and always load.
+		const String activeGpuBackend = GpuBackend::Instance().GetBackendName();
+
 		for (const Path& candidate : files)
 		{
 			const String filename = candidate.GetFilename(false);
@@ -92,6 +98,15 @@ namespace b3d
 				continue;
 			if (filename.compare(filename.size() - 5, 5, "Tests") != 0)
 				continue;
+
+			// A plugin test DLL is named <pluginTarget>Tests, so stripping the suffix yields the plugin it
+			// belongs to, which for GPU backends is the same name the backend is selected by.
+			const String pluginName = filename.substr(0, filename.size() - 5);
+			if (StringUtility::EndsWith(pluginName, "GpuBackend", false) && pluginName != activeGpuBackend)
+			{
+				B3D_LOG(Log, LogGeneric, "Skipping test library '{0}': its GPU backend is not the active one ('{1}').", filename, activeGpuBackend);
+				continue;
+			}
 
 			// Pass the full file path so the library loader doesn't have to apply lib-prefix or extension
 			// fix-up itself.
@@ -146,12 +161,6 @@ namespace b3d
 	{
 		TestResultCollector collector;
 
-		// Discover plugin test DLLs up front so they are visible before any layer dispatches. The
-		// later RegisterTestSuites(Plugins) call uses mPluginModules, so this must happen before
-		// the application phase below.
-		if (layers.IsSet(TestLayer::Plugins))
-			DiscoverPluginModules();
-
 		// Phase 1: Utility tests (no Application needed)
 		if (layers.IsSet(TestLayer::Utility))
 		{
@@ -166,6 +175,11 @@ namespace b3d
 		if (appLayers)
 		{
 			StartApplication();
+
+			// Discovery selects test DLLs by asking the running GPU backend which one it is, so it has to follow
+			// start-up. Its only consumer is the RegisterTestSuites(Plugins) call below, which is still later.
+			if (appLayers.IsSet(TestLayer::Plugins))
+				DiscoverPluginModules();
 
 			if (appLayers.IsSet(TestLayer::Core))
 				RegisterTestSuites(TestLayer::Core);

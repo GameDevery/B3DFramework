@@ -2,11 +2,17 @@
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 #include "B3DNullGpuBackend.h"
 #include "B3DNullGpuDevice.h"
+#include "B3DNullGpuBackendFactory.h"
 #include "B3DNullTextureManager.h"
 #include "B3DNullRenderWindowManager.h"
 
 namespace b3d
 {
+	const char* NullGpuBackend::GetBackendName() const
+	{
+		return NullGpuBackendFactory::SystemName;
+	}
+
 	void NullGpuBackend::OnStartUp()
 	{
 		// Create and initialize a single null device

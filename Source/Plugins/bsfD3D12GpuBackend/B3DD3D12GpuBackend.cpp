@@ -172,6 +172,11 @@ void D3D12GpuBackend::OnStartUp()
 	Super::OnStartUp();
 }
 
+const char* D3D12GpuBackend::GetBackendName() const
+{
+	return D3D12GpuBackendFactory::SystemName;
+}
+
 void D3D12GpuBackend::OnShutDown()
 {
 	// Wait for all devices to finish

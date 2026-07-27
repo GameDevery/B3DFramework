@@ -150,7 +150,7 @@ namespace b3d
 				const u32 destinationHeight = std::max(1u, sourceHeight / 2);
 
 				// Output for this level: written as a compute UAV, read back by the CPU, and bound as the next level's input (read as a storage buffer).
-				const TShared<render::GpuBuffer> output = gpuContext.CreateTransientGpuBuffer(GpuBufferCreateInformation::CreateSimpleStorage(BF_32X4F, destinationWidth * destinationHeight, GpuBufferFlag::StoreOnCPUWithGPUAccess | GpuBufferFlag::AllowUnorderedAccessOnTheGPU));
+				const TShared<render::GpuBuffer> output = gpuContext.CreateTransientGpuBuffer(GpuBufferCreateInformation::CreateSimpleStorage(BF_32X4F, destinationWidth * destinationHeight, GpuBufferFlag::StoreOnGPU | GpuBufferFlag::AllowUnorderedAccessOnTheGPU));
 				if(output == nullptr)
 				{
 					op.CompleteOperation(Vector<TShared<PixelData>>());

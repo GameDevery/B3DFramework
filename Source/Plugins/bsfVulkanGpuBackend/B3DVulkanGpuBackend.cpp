@@ -2,6 +2,7 @@
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 #include "B3DVulkanGpuBackend.h"
 #include "B3DVulkanGpuDevice.h"
+#include "Managers/B3DVulkanGpuBackendFactory.h"
 #include "Managers/B3DVulkanTextureManager.h"
 #include "Managers/B3DVulkanRenderWindowManager.h"
 #include "Managers/B3DVulkanVertexInputManager.h"
@@ -440,6 +441,11 @@ void VulkanGpuBackend::OnStartUp()
 #endif
 
 	Super::OnStartUp();
+}
+
+const char* VulkanGpuBackend::GetBackendName() const
+{
+	return render::VulkanGpuBackendFactory::SystemName;
 }
 
 void VulkanGpuBackend::OnShutDown()

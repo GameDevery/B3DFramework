@@ -2,12 +2,18 @@
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 #include "B3DMetalGpuBackend.h"
 #include "B3DMetalGpuDevice.h"
+#include "B3DMetalGpuBackendFactory.h"
 #include "B3DMetalTextureManager.h"
 #include "B3DMetalRenderWindowManager.h"
 #include "B3DMetalGpuFrameCapture.h"
 
 namespace b3d
 {
+	const char* MetalGpuBackend::GetBackendName() const
+	{
+		return render::MetalGpuBackendFactory::SystemName;
+	}
+
 	void MetalGpuBackend::OnStartUp()
 	{
 		auto device = B3DMakeShared<render::MetalGpuDevice>();

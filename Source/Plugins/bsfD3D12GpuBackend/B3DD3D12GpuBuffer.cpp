@@ -130,6 +130,11 @@ void D3D12GpuBuffer::RecreateInternalBuffer()
 	// Resolve heap type and initial state from the buffer's type and flags.
 	const D3D12_HEAP_TYPE heapType = D3D12Utility::GetHeapType(info.Type, info.Flags);
 
+	// D3D12 cannot place a UAV on an upload heap, so this combination is rejected with E_INVALIDARG below and leaves
+	// the buffer without a resource. 
+	B3D_ENSURE_LOG(!(heapType == D3D12_HEAP_TYPE_UPLOAD && info.Flags.IsSet(GpuBufferFlag::AllowUnorderedAccessOnTheGPU)),
+		"D3D12: Buffer '{0}' requests AllowUnorderedAccessOnTheGPU with CPU-visible storage (StoreOnCPUWithGPUAccess); unordered access requires StoreOnGPU.", mName);
+
 	D3D12_RESOURCE_STATES initialState;
 	switch(heapType)
 	{

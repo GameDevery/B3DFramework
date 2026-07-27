@@ -61,6 +61,9 @@ namespace b3d
 	public:
 		~GpuBackend() override = default;
 
+		/** Returns the name of the running backend, which is the name of the plugin providing it (e.g. "bsfVulkanGpuBackend"). */
+		virtual const char* GetBackendName() const = 0;
+
 		virtual u32 GetDeviceCount() const = 0;
 		virtual TShared<GpuDevice> GetDevice(u32 index) const = 0;
 

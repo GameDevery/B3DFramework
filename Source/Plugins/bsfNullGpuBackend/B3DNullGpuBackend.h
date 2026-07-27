@@ -25,6 +25,8 @@ namespace b3d
 		void OnStartUp() override;
 		void OnShutDown() override;
 
+		const char* GetBackendName() const override;
+
 		u32 GetDeviceCount() const override { return (u32)mDevices.size(); }
 		TShared<GpuDevice> GetDevice(u32 index) const override { return mDevices[index]; }
 
