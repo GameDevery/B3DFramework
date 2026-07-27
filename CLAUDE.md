@@ -84,7 +84,6 @@ Framework/
 ### Line wrapping
 
 - Prefer keeping statements, function calls, declarations, and conditions on a single line, even when long.
-- Only wrap a line when the unwrapped form is exceptionally difficult to read.
 - Do not enforce a fixed maximum line length.
 
 ### Naming Conventions
@@ -104,6 +103,7 @@ Framework/
 ### API Patterns
 
 - **Logging**: `B3D_LOG(Level, LogCategory, "message {0}", param)` - never use `GetDebug().LogDebug()`
+- **Construction**: All types must provide constructors; do not use aggregate brace initialization anywhere.
 
 ### Comments
 
