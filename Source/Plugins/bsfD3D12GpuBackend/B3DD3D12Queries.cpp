@@ -60,7 +60,7 @@ D3D12GpuQueryPool::D3D12GpuQueryPool(D3D12GpuDevice& device, const GpuQueryPoolC
 
 	CreateQueryHeap();
 
-	B3D_LOG(Info, LogRenderBackend, "Created D3D12 query pool: type={0}, size={1}", (u32)createInformation.Type, mPoolSize);
+	B3D_LOG(Verbose, LogRenderBackend, "Created D3D12 query pool: type={0}, size={1}", (u32)createInformation.Type, mPoolSize);
 }
 
 D3D12GpuQueryPool::~D3D12GpuQueryPool()

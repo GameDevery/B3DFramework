@@ -1221,7 +1221,6 @@ void VulkanGpuCommandBuffer::BeginRenderPass()
 		B3D_LOG(Warning, LogRenderBackend, "Attempting to begin a render pass but no render target is bound to the command buffer.");
 		return;
 	}
-
 }
 
 void VulkanGpuCommandBuffer::EndRenderPass()

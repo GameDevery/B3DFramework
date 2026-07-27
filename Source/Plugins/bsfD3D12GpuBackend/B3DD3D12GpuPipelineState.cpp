@@ -304,6 +304,6 @@ void D3D12GpuComputePipelineState::CreatePipelineState()
 	}
 	else
 	{
-		B3D_LOG(Info, LogRenderBackend, "Created compute pipeline state");
+		B3D_LOG(Verbose, LogRenderBackend, "Created compute pipeline state");
 	}
 }

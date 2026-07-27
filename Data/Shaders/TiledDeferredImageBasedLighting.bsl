@@ -134,10 +134,10 @@ shader TiledDeferredImageBasedLighting
 			float3 viewMax = float3(corner[0].xy, viewZMin);
 			
 			[unroll]
-			for(uint i = 1; i < 8; ++i)
+			for(uint j = 1; j < 8; ++j)
 			{
-				viewMin.xy = min(viewMin.xy, corner[i].xy);
-				viewMax.xy = max(viewMax.xy, corner[i].xy);
+				viewMin.xy = min(viewMin.xy, corner[j].xy);
+				viewMax.xy = max(viewMax.xy, corner[j].xy);
 			}
 			
 			extent = (viewMax - viewMin) * 0.5f;
@@ -223,7 +223,7 @@ shader TiledDeferredImageBasedLighting
 				float4 probePosition = mul(gMatView, float4(gReflectionProbes[i].position, 1.0f));
 				float probeRadius = gReflectionProbes[i].radius;
 			
-				if(intersectSphereBox(probePosition, probeRadius, center, extent))
+				if(intersectSphereBox(probePosition.xyz, probeRadius, center, extent))
 				{
 					uint idx;
 					InterlockedAdd(sNumProbes, 1U, idx);
@@ -235,19 +235,19 @@ shader TiledDeferredImageBasedLighting
 
 			// Sort based on original indices. Using parallel enumeration sort (n^2) - could be faster
 			const uint numThreads = TILE_SIZE * TILE_SIZE;
-			for (uint i = threadIndex; i < sNumProbes; i += numThreads)
+			for (uint probeSlot = threadIndex; probeSlot < sNumProbes; probeSlot += numThreads)
 			{
-				int idx = gUnsortedProbeIndices[i];
+				int idx = gUnsortedProbeIndices[probeSlot];
 				uint smallerCount = 0;
 
-				for (uint j = 0; j < sNumProbes; j++) 
+				for (uint j = 0; j < sNumProbes; j++)
 				{
 					int otherIdx = gUnsortedProbeIndices[j];
 					if (otherIdx < idx)
 						smallerCount++;
 				}
 
-				gReflectionProbeIndices[smallerCount] = gUnsortedProbeIndices[i];
+				gReflectionProbeIndices[smallerCount] = gUnsortedProbeIndices[probeSlot];
 			}
 			
 			GroupMemoryBarrierWithGroupSync();

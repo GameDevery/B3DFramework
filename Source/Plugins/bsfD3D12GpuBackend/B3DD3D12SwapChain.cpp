@@ -100,7 +100,7 @@ D3D12SwapChain::~D3D12SwapChain()
 	mBackBufferCount = 0;
 	mIsInitialized = false;
 
-	B3D_LOG(Info, LogRenderBackend, "Destroyed D3D12 swap chain");
+	B3D_LOG(Verbose, LogRenderBackend, "Destroyed D3D12 swap chain");
 }
 
 void D3D12SwapChain::Initialize()
@@ -335,7 +335,7 @@ void D3D12SwapChain::CreateRenderTargetViews()
 
 		d3d12Device->CreateRenderTargetView(mBackBuffers[i].Get(), &rtvDesc, mBackBufferRTVs[i]);
 
-		B3D_LOG(Info, LogRenderBackend, "Created RTV for back buffer {0}", i);
+		B3D_LOG(Verbose, LogRenderBackend, "Created RTV for back buffer {0}", i);
 	}
 }
 
@@ -431,7 +431,7 @@ void D3D12SwapChain::CreateDepthStencilBuffer()
 
 	d3d12Device->CreateDepthStencilView(mDepthStencilBuffer.Get(), &dsvDesc, mDepthStencilView);
 
-	B3D_LOG(Info, LogRenderBackend, "Created depth stencil buffer: {0}x{1}, format={2}", mWidth, mHeight, (u32)mCreateInfo.DepthStencilFormat);
+	B3D_LOG(Verbose, LogRenderBackend, "Created depth stencil buffer: {0}x{1}, format={2}", mWidth, mHeight, (u32)mCreateInfo.DepthStencilFormat);
 }
 
 u32 D3D12SwapChain::GetCurrentBackBufferIndex() const
@@ -483,6 +483,11 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12SwapChain::GetBackBufferRTV(u32 index) const
 
 void D3D12SwapChain::SetRenderTarget(const RenderTarget* renderTarget)
 {
+	// Called on every render pass begin, so bail out early if nothing changed. Otherwise the framebuffers would get
+	// destroyed and rebuilt every frame.
+	if (mRenderTarget == renderTarget)
+		return;
+
 	mRenderTarget = renderTarget;
 
 	// Create framebuffers now that we have the render target
@@ -644,6 +649,6 @@ void D3D12SwapChain::CreateFramebuffers()
 			B3DDelete(mFramebuffers[i]);
 
 		mFramebuffers[i] = B3DNew<D3D12Framebuffer>(mRenderTarget, i);
-		B3D_LOG(Info, LogRenderBackend, "Created framebuffer for back buffer {0}", i);
+		B3D_LOG(Verbose, LogRenderBackend, "Created framebuffer for back buffer {0}", i);
 	}
 }

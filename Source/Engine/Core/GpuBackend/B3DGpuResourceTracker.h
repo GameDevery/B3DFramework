@@ -223,8 +223,14 @@ namespace b3d
 			/** Returns the internal map of all tracked buffers and their tracking states. */
 			TDenseMap<IGpuBufferResource*, GpuBufferTrackingState>& GetBuffers() { return mBuffers; }
 
+			/** Returns the internal map of all tracked buffers and their tracking states. */
+			const TDenseMap<IGpuBufferResource*, GpuBufferTrackingState>& GetBuffers() const { return mBuffers; }
+
 			/** Returns the internal map of all tracked images to their tracking state indices. */
 			TDenseMap<IGpuImageResource*, u32>& GetImages() { return mImages; }
+
+			/** Returns the internal map of all tracked images to their tracking state indices. */
+			const TDenseMap<IGpuImageResource*, u32>& GetImages() const { return mImages; }
 
 		private:
 			/** Creates a new tracking state for the buffer (if this is the first time the buffer has been used on the command buffer), or returns existing tracking state. */

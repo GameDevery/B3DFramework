@@ -1380,6 +1380,110 @@ void D3D12GpuCommandBuffer::CopyBufferToTexture(const TShared<GpuBuffer>& source
 	CopyBufferToTextureRaw(d3d12Source->GetD3D12Resource(), textureResource, footprint, subresourceIndex);
 }
 
+bool D3D12GpuCommandBuffer::CopyTexture(const TShared<Texture>& source, const TShared<Texture>& destination, const TextureCopyInformation& copyInformation)
+{
+	EnsureValidThread();
+
+	if(!GpuCommandBuffer::CopyTexture(source, destination, copyInformation))
+		return false;
+
+	auto* d3d12Source = static_cast<D3D12Texture*>(source.get());
+	auto* d3d12Destination = static_cast<D3D12Texture*>(destination.get());
+
+	const TextureProperties& sourceProperties = d3d12Source->GetProperties();
+	const TextureProperties& destinationProperties = d3d12Destination->GetProperties();
+
+	D3D12Image* sourceImage = d3d12Source->GetD3D12Image();
+	D3D12Image* destinationImage = d3d12Destination->GetD3D12Image();
+
+	if(sourceImage == nullptr || destinationImage == nullptr)
+		return false;
+
+	// An empty source volume is the convention for "the entire subresource".
+	const bool copyEntireSurface = copyInformation.SourceVolume.GetWidth() == 0 ||
+		copyInformation.SourceVolume.GetHeight() == 0 ||
+		copyInformation.SourceVolume.GetDepth() == 0;
+
+	u32 copyWidth, copyHeight, copyDepth;
+	if(copyEntireSurface)
+	{
+		PixelUtility::GetSizeForMipLevel(sourceProperties.Width, sourceProperties.Height, sourceProperties.Depth,
+			copyInformation.SourceMip, copyWidth, copyHeight, copyDepth);
+	}
+	else
+	{
+		copyWidth = copyInformation.SourceVolume.GetWidth();
+		copyHeight = copyInformation.SourceVolume.GetHeight();
+		copyDepth = copyInformation.SourceVolume.GetDepth();
+	}
+
+	if(copyWidth == 0 || copyHeight == 0 || copyDepth == 0)
+		return false;
+
+	// Track the transfer and execute the copy-state transitions it requires. A multisampled source resolving into a
+	// single-sampled destination needs RESOLVE_SOURCE/RESOLVE_DEST rather than the copy states, but the tracker models
+	// both as a transfer, and the barrier helper maps the layouts onto the states the operation below issues.
+	const GpuTextureSubresourceRange sourceRange(copyInformation.SourceMip, 1, copyInformation.SourceFace,
+		copyInformation.FaceCount, sourceImage->GetRange().AspectMask);
+	const GpuTextureSubresourceRange destinationRange(copyInformation.DestinationMip, 1, copyInformation.DestinationFace,
+		copyInformation.FaceCount, destinationImage->GetRange().AspectMask);
+	mResourceTracker.TrackImageUsage(sourceImage, sourceRange, GpuImageLayout::TransferSource,
+		GpuImageLayout::TransferSource, GpuResourceUseFlag::Transfer, GpuAccessFlag::Read, mBarrierHelper);
+	mResourceTracker.TrackImageUsage(destinationImage, destinationRange, GpuImageLayout::TransferDestination,
+		GpuImageLayout::TransferDestination, GpuResourceUseFlag::Transfer, GpuAccessFlag::Write, mBarrierHelper);
+	mBarrierHelper.Execute(*this);
+
+	ID3D12Resource* sourceResource = sourceImage->GetD3D12Resource();
+	ID3D12Resource* destinationResource = destinationImage->GetD3D12Resource();
+
+	const u32 sourceMipCount = sourceResource->GetDesc().MipLevels;
+	const u32 destinationMipCount = destinationResource->GetDesc().MipLevels;
+
+	// The base class already rejected a sample-count mismatch that isn't a resolve.
+	const bool needsResolve = sourceProperties.SampleCount > 1 && destinationProperties.SampleCount <= 1;
+
+	for(u32 face = 0; face < copyInformation.FaceCount; ++face)
+	{
+		const u32 sourceSubresource = copyInformation.SourceMip + (copyInformation.SourceFace + face) * sourceMipCount;
+		const u32 destinationSubresource = copyInformation.DestinationMip + (copyInformation.DestinationFace + face) * destinationMipCount;
+
+		if(needsResolve)
+		{
+			// ResolveSubresource always covers the entire subresource, so a sub-region resolve isn't expressible.
+			mCommandList->ResolveSubresource(destinationResource, destinationSubresource, sourceResource, sourceSubresource,
+				d3d12Destination->GetDXGIFormat());
+
+			continue;
+		}
+
+		D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+		srcLocation.pResource = sourceResource;
+		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		srcLocation.SubresourceIndex = sourceSubresource;
+
+		D3D12_TEXTURE_COPY_LOCATION dstLocation = {};
+		dstLocation.pResource = destinationResource;
+		dstLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		dstLocation.SubresourceIndex = destinationSubresource;
+
+		D3D12_BOX sourceBox;
+		sourceBox.left = copyInformation.SourceVolume.Left;
+		sourceBox.top = copyInformation.SourceVolume.Top;
+		sourceBox.front = copyInformation.SourceVolume.Front;
+		sourceBox.right = copyInformation.SourceVolume.Left + copyWidth;
+		sourceBox.bottom = copyInformation.SourceVolume.Top + copyHeight;
+		sourceBox.back = copyInformation.SourceVolume.Front + copyDepth;
+
+		mCommandList->CopyTextureRegion(&dstLocation,
+			(u32)copyInformation.DestinationPosition.X,
+			(u32)copyInformation.DestinationPosition.Y,
+			(u32)copyInformation.DestinationPosition.Z,
+			&srcLocation, &sourceBox);
+	}
+
+	return true;
+}
+
 bool D3D12GpuCommandBuffer::BlitTexture(const TShared<Texture>& source, const TShared<Texture>& destination, const TextureBlitInformation& blitInformation)
 {
 	EnsureValidThread();

@@ -308,7 +308,7 @@ void D3D12DescriptorManager::AllocateGPUDescriptorRange(D3D12DescriptorHeapType 
 	// TODO(d3d12-port): fence-guard the wrap so it provably cannot reach a range the GPU may still consume.
 	if (heap.NextFreeIndex + count > heap.NumDescriptors)
 	{
-		B3D_LOG(Info, LogRenderBackend, "GPU descriptor heap for type {0} wrapped after {1} descriptors.", (u32)type,
+		B3D_LOG(Verbose, LogRenderBackend, "GPU descriptor heap for type {0} wrapped after {1} descriptors.", (u32)type,
 			heap.NextFreeIndex);
 		heap.NextFreeIndex = 0;
 	}

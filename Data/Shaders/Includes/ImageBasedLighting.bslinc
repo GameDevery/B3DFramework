@@ -162,7 +162,7 @@ mixin ImageBasedLighting
 						
 			if(distToProbe <= probeData.radius)
 			{
-				float3 correctedDir;
+				float3 correctedDir = dir;
 				float contribution = 0;
 				if(probeData.type == 0) // Sphere
 				{

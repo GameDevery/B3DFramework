@@ -168,7 +168,7 @@ void D3D12SamplerState::Initialize()
 	ID3D12Device* d3d12Device = mDevice.GetD3D12Device();
 	d3d12Device->CreateSampler(&mSamplerDesc, mDescriptorHandle);
 
-	B3D_LOG(Info, LogRenderBackend, "Created D3D12 sampler state: filter={0}, addressU={1}, addressV={2}, addressW={3}, maxAniso={4}",
+	B3D_LOG(Verbose, LogRenderBackend, "Created D3D12 sampler state: filter={0}, addressU={1}, addressV={2}, addressW={3}, maxAniso={4}",
 		(u32)mSamplerDesc.Filter,
 		(u32)mSamplerDesc.AddressU,
 		(u32)mSamplerDesc.AddressV,

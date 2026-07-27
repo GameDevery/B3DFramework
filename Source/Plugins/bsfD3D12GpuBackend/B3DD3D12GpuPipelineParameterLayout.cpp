@@ -333,6 +333,6 @@ void D3D12GpuPipelineParameterLayout::CreateRootSignature()
 	}
 	else
 	{
-		B3D_LOG(Info, LogRenderBackend, "Created root signature with {0} parameters", rootParameters.size());
+		B3D_LOG(Verbose, LogRenderBackend, "Created root signature with {0} parameters", rootParameters.size());
 	}
 }

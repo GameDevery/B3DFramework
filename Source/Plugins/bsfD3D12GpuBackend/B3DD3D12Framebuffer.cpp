@@ -265,6 +265,6 @@ void D3D12Framebuffer::CreateViews()
 			mDepthStencilAttachment.Surface = TextureSurface(0, 1, 0, 1);
 		}
 
-		B3D_LOG(Info, LogRenderBackend, "Created framebuffer from RenderWindow swap chain: {0}x{1}", mWidth, mHeight);
+		B3D_LOG(Verbose, LogRenderBackend, "Created framebuffer from RenderWindow swap chain: {0}x{1}", mWidth, mHeight);
 	}
 }

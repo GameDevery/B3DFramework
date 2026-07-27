@@ -271,7 +271,7 @@ namespace b3d
 
 			mImage = device.GetResourceManager().Create<D3D12Image>(imageCreateInformation);
 
-			B3D_LOG(Info, LogRenderBackend, "D3D12: Created texture '{0}': {1}x{2}, format={3}, mips={4}",
+			B3D_LOG(Verbose, LogRenderBackend, "D3D12: Created texture '{0}': {1}x{2}, format={3}, mips={4}",
 				props.Name, props.Width, props.Height, (u32)mDXGIFormat, props.MipMapCount + 1);
 		}
 

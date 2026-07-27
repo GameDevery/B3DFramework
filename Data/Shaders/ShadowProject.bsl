@@ -185,7 +185,7 @@ shader ShadowProject
 			rowOcclusion.w += botRightOcclusion.w * fraction.x;
 			
 			//// Accumulate occlusion per columns
-			float4 occlusionAccumulator = dot(rowOcclusion, float4(1.0f - fraction.y, 1.0f, 1.0f, fraction.y));
+			float occlusionAccumulator = dot(rowOcclusion, float4(1.0f - fraction.y, 1.0f, 1.0f, fraction.y));
 			
 			// Calc average occlusion using a 3x3 area and return
 			return occlusionAccumulator * (1.0f / 9.0f);				

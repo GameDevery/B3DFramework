@@ -6,6 +6,7 @@
 #include "GpuBackend/B3DGpuProgramParameterDescription.h"
 #include "GpuBackend/B3DVertexDescription.h"
 #include "Debug/B3DLog.h"
+#include "Utility/B3DConfigVariable.h"
 
 #include <d3dcompiler.h>
 #include <d3d12shader.h>
@@ -15,6 +16,15 @@
 
 using namespace b3d;
 using namespace b3d::render;
+
+namespace b3d
+{
+	TConfigVariable<bool> gSkipShaderOptimization("d3d12.SkipShaderOptimization",
+		"Compile HLSL shaders with optimizations disabled and debug info attached, so they can be stepped through in a "
+		"shader debugger. Slows down shader execution significantly and makes FXC report spurious 'potentially "
+		"uninitialized variable' warnings for functions with more than one return statement.", false,
+		ConfigVariableFlag::ReadOnly);
+}
 
 namespace
 {
@@ -585,14 +595,21 @@ TShared<GpuProgramBytecode> HLSLToDXBC::CompileBytecode(const GpuProgramCreateIn
 		return bytecode;
 	}
 
-	// Set up compilation flags
+	// Set up compilation flags. Unoptimized shaders are opt-in even in development builds: they cost a lot of GPU time,
+	// and FXC's flow analysis reports a false 'potentially uninitialized variable (<function>)' for every function with
+	// an early return once optimizations are off, which buries the real warnings.
 	UINT compileFlags = 0;
 #if B3D_BUILD_TYPE_DEVELOPMENT
-	compileFlags |= D3DCOMPILE_DEBUG;
-	compileFlags |= D3DCOMPILE_SKIP_OPTIMIZATION; // TODO - Likely want to enable this only under specific circumstances, not drive the development build perf. down always
-#else
-	compileFlags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+	if(gSkipShaderOptimization.Get())
+	{
+		compileFlags |= D3DCOMPILE_DEBUG;
+		compileFlags |= D3DCOMPILE_SKIP_OPTIMIZATION;
+	}
+	else
 #endif
+	{
+		compileFlags |= D3DCOMPILE_OPTIMIZATION_LEVEL3;
+	}
 
 	// Enable strict mode for better error checking
 	compileFlags |= D3DCOMPILE_ENABLE_STRICTNESS;
