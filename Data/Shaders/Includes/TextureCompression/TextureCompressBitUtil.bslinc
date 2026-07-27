@@ -4,29 +4,42 @@ mixin TextureCompressBitUtil
 {
 	code
 	{
-		// Appends the low @p numBits of @p value to @p block at bit cursor @p pos, advancing the cursor. Little-endian
-		// within the 128-bit block (bit 0 = LSB of block.x, bit 127 = MSB of block.w).
-		void PutBits(inout uint4 block, inout uint pos, uint value, uint numBits)
-		{
-			for (uint i = 0; i < numBits; ++i)
-			{
-				uint bit = (value >> i) & 1u;
-				uint p = pos + i;
-				block[p >> 5] |= bit << (p & 31u);
-			}
-			pos += numBits;
-		}
-
 		// Writes the low @p numBits of @p value at the absolute bit position @p startPos (no running cursor). BC6H packs
 		// endpoint components into scattered, non-contiguous bit ranges, so its per-mode packers address bits directly.
+		// Little-endian within the 128-bit block (bit 0 = LSB of block.x, bit 127 = MSB of block.w).
+		//
+		// The field is placed with two whole-word ORs rather than one OR per bit. Writing bit-by-bit needs a dynamic
+		// component index (block[p >> 5]), and a dynamically indexed vector component is not natively addressable, so
+		// FXC is forced to unroll the enclosing loop - which then fails outright because the bit count is a runtime
+		// value (error X3511). The GLSL path has no such restriction.
 		void SetBits(inout uint4 block, uint startPos, uint value, uint numBits)
 		{
-			for (uint i = 0; i < numBits; ++i)
-			{
-				uint bit = (value >> i) & 1u;
-				uint p = startPos + i;
-				block[p >> 5] |= bit << (p & 31u);
-			}
+			if (numBits == 0u)
+				return;
+
+			// Guarded because a shift by the full word width is undefined.
+			const uint masked = (numBits >= 32u) ? value : (value & ((1u << numBits) - 1u));
+
+			const uint word = startPos >> 5;
+			const uint offset = startPos & 31u;
+
+			// The field starts in `word`, spilling into `word + 1` when it straddles a 32-bit boundary. A field that
+			// would spill past bit 127 is malformed, so the top word intentionally drops its carry instead of writing
+			// out of bounds.
+			const uint low = masked << offset;
+			const uint high = (offset == 0u) ? 0u : (masked >> (32u - offset));
+
+			if (word == 0u)      { block.x |= low; block.y |= high; }
+			else if (word == 1u) { block.y |= low; block.z |= high; }
+			else if (word == 2u) { block.z |= low; block.w |= high; }
+			else                 { block.w |= low; }
+		}
+
+		// Appends the low @p numBits of @p value to @p block at bit cursor @p pos, advancing the cursor.
+		void PutBits(inout uint4 block, inout uint pos, uint value, uint numBits)
+		{
+			SetBits(block, pos, value, numBits);
+			pos += numBits;
 		}
 	};
 };
