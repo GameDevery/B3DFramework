@@ -96,7 +96,7 @@ namespace b3d
 			TInlineArray<VulkanSourceQueueTransition, 4> SourceQueueTransitions; /**< Resource handoffs that must execute on their exact source queues. */
 			TShared<VulkanGpuCommandBuffer> DestinationQueueTransitionCommandBuffer; /**< Contains image layout transitions and transitions from source to the destination queue, if there are any. Should be submitted after the query reset command buffer. This submit should contain the provided semaphores if not empty. */
 			TShared<VulkanGpuCommandBuffer> PrimaryCommandBuffer; /**< Primary command buffer we're submitting. This should be submitted after the destination queue transition command buffer. This submit should contain the semaphores if destination queue transition command buffer is not present. */
-			GpuQueueMask RequiredWaitMask; /**< Resource-derived queue dependencies to combine with the caller-provided synchronization mask. */
+			GpuQueueMask RequiredWaitMask = GpuQueueMask::kNone; /**< Resource-derived queue dependencies to combine with the caller-provided synchronization mask. */
 			TInlineArray<VulkanSemaphore*, 8> Semaphores; /**< Semaphores that need to be waited on before executing the command buffers. */
 		};
 
@@ -158,6 +158,9 @@ namespace b3d
 			 * @note Submit thread only.
 			 */
 			VulkanGpuCommandBufferSubmitInformation PrepareForSubmitOnSubmitThread(GpuQueueType queueType, u32 queueIndex);
+
+			/** Notifies the command buffer that it has been submitted successfully. Submit thread only. */
+			void NotifyWasSubmitted(GpuQueueId queueId);
 
 			/** Called when the command buffer is about to be sent to the submit queue for submit. */
 			void NotifyWillQueueForSubmit();

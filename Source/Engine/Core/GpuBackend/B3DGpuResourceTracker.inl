@@ -1,14 +1,140 @@
 //************************************* B3D Framework - Copyright 2026 Marko Pintera *************************************//
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 
-// Template method definitions for TGpuResourceTracker. This file is not a translation unit of its own; it is included by
-// the single backend source file that explicitly instantiates TGpuResourceTracker for its barrier-helper type, 
-// after the concrete barrier helper, frame allocator and GpuBackendUtility headers.
+// Template method definitions for TGpuResourceTracker. This file is not a translation unit of its own; include it after
+// the concrete barrier helper, frame allocator and GpuBackendUtility headers before instantiating a tracker type.
 
 namespace b3d
 {
 	namespace render
 	{
+
+template<class TBarrierHelper>
+void TGpuResourceTracker<TBarrierHelper>::ResolveSubmissionTransitions(GpuQueueId destinationQueueId, GpuSubmissionTransitionVisitor& visitor) const
+{
+	auto fnBuildTransition = [destinationQueueId](IGpuResource& stateResource, const GpuHazardStateWithHistory& destinationCommandBufferHazards)
+	{
+		const GpuResourceSubmissionState& sourceState = stateResource.GetSubmissionState();
+		const GpuAccessScope destinationAllAccessScope = destinationCommandBufferHazards.GetAccumulatedAccessScope();
+		const bool destinationReads = destinationAllAccessScope.ReadStages != GpuStageFlag::None;
+		const bool destinationWrites = destinationAllAccessScope.WriteStages != GpuStageFlag::None;
+		const GpuQueueMask destinationQueueMask(destinationQueueId);
+
+		// TODO: Our submission hazard tracking depends on the fact that semaphores are issued for all cross-queue resource access. But if
+		// some queue already finished executing before the next submission, no semaphore will be issued. For this reason,
+		// we either need to ensure we wait on a timeline semaphore value from the last submission on that queue instead,
+		// or manually do a full resource barrier. Alternatively, we can still wait on the first queue's semaphore even if it has finished, 
+		// it would have been signalled. That is probably the best option.
+		const GpuQueueMask activeReaderQueues = sourceState.ReaderQueues & stateResource.GetUseInfo(GpuAccessFlag::Read);
+
+		GpuSubmissionTransition transition(stateResource, destinationCommandBufferHazards.GetFirstAccessScope(), destinationAllAccessScope);
+		transition.PostTransitionSubmissionState = sourceState;
+		transition.SourceAccessScope = sourceState.GetUnsafeAccessScope();
+
+		GpuHazardState sameQueueHazards;
+
+		// If accessing from the same queue as the previous writer, use hazard state to determine hazards
+		if(sourceState.HasWriter && sourceState.WriterQueueId.Id == destinationQueueId.Id)
+			sameQueueHazards = sourceState.WriterHazards;
+
+		// If the destination queue writes, but the same queue is also a writer, we need to issue a same-queue execution dependency. But we only keep
+		// track of full hazard state on the writer queue, which the source isn't. Instead we keep track of all the reader stages, and just patch
+		// the hazard state by clearing the read access for those reader stages.
+		if(destinationWrites && activeReaderQueues.IsSet(destinationQueueId))
+			sameQueueHazards.ClearSafeAccess(sourceState.ReaderStages, GpuAccessFlag::Read);
+
+		transition.SameQueueTransitionRecipe = sameQueueHazards.BuildTransitionRecipe(destinationQueueId, destinationCommandBufferHazards);
+
+		// In some cases the backend needs exclusive access to the resource (e.g. layout transition, ownership transfer). For that case we
+		// build a mask that includes all prior writes AND reads (meaning no parallel access allowed). The backend gets to choose which mask to use.
+		transition.ExclusiveAccessWaitMask = activeReaderQueues;
+		transition.ExclusiveAccessWaitMask &= ~destinationQueueMask;
+
+		// If a reader we are waiting on has already waited on the writer (i.e. is in the acquired queue list), no need to wait on the writer explicitly
+		const bool writerCoveredByReader = !(transition.ExclusiveAccessWaitMask & sourceState.AcquiredQueues).IsEmpty();
+
+		// Wait on the writer if: it exists, is not the same queue as the destination, is not already acquired by the destination, and is not already covered by a reader we are waiting on
+		if(sourceState.HasWriter && sourceState.WriterQueueId.Id != destinationQueueId.Id && !sourceState.AcquiredQueues.IsSet(destinationQueueId) && !writerCoveredByReader)
+			transition.ExclusiveAccessWaitMask |= sourceState.WriterQueueId;
+
+		// Ordinary access: If destination is writer we need to wait on all readers, if destination is reader we need to wait on the writer
+		if(destinationWrites)
+			transition.ParallelAccessWaitMask = transition.ExclusiveAccessWaitMask;
+		else if(destinationReads && sourceState.HasWriter && sourceState.WriterQueueId.Id != destinationQueueId.Id && !sourceState.AcquiredQueues.IsSet(destinationQueueId))
+			transition.ParallelAccessWaitMask |= sourceState.WriterQueueId;
+
+		if(destinationWrites)
+		{
+			transition.PostTransitionSubmissionState = GpuResourceSubmissionState();
+			transition.PostTransitionSubmissionState.WriterHazards = destinationCommandBufferHazards.State;
+			transition.PostTransitionSubmissionState.WriterQueueId = destinationQueueId;
+			transition.PostTransitionSubmissionState.AcquiredQueues = destinationQueueId;
+			transition.PostTransitionSubmissionState.HasWriter = true;
+		}
+		else
+		{
+			if(sourceState.HasWriter && sourceState.WriterQueueId.Id == destinationQueueId.Id)
+			{
+				transition.PostTransitionSubmissionState.WriterHazards = transition.SameQueueTransitionRecipe.RemainingHazardState;
+				transition.PostTransitionSubmissionState.WriterHazards.Merge(destinationCommandBufferHazards.State);
+			}
+
+			if(sourceState.HasWriter)
+				transition.PostTransitionSubmissionState.AcquiredQueues |= destinationQueueId;
+
+			if(destinationReads)
+			{
+				transition.PostTransitionSubmissionState.ReaderQueues |= destinationQueueId;
+				transition.PostTransitionSubmissionState.ReaderStages |= destinationAllAccessScope.ReadStages;
+			}
+		}
+
+		return transition;
+	};
+
+	for(const auto& entry : mBuffers)
+	{
+		IGpuBufferResource* const buffer = entry.first;
+		const GpuBufferTrackingState& trackingState = entry.second;
+		if(trackingState.WriteHazardTracking == nullptr || !trackingState.WriteHazardTracking->GetFirstAccessScope().IsValid())
+			continue;
+
+		GpuSubmissionBufferTransition transition(*buffer, fnBuildTransition(*buffer, *trackingState.WriteHazardTracking));
+		visitor.VisitBuffer(transition);
+
+		transition.StateResource->SetSubmissionState(std::move(transition.PostTransitionSubmissionState));
+	}
+
+	for(const auto& entry : mImages)
+	{
+		IGpuImageResource* const image = entry.first;
+		const TArrayView<const GpuImageSubresourceTrackingState> trackingStates = GetSubresourceTrackingStatesForImage(image);
+
+		for(const GpuImageSubresourceTrackingState& trackingState : trackingStates)
+		{
+			if(trackingState.WriteHazardTracking == nullptr || !trackingState.WriteHazardTracking->GetFirstAccessScope().IsValid())
+				continue;
+
+			const GpuTextureSubresourceRange& trackedRange = trackingState.Range;
+			const u32 mipEnd = trackedRange.BaseMipLevel + trackedRange.MipLevelCount;
+			const u32 faceEnd = trackedRange.BaseArrayLayer + trackedRange.ArrayLayerCount;
+			for(u32 mipLevel = trackedRange.BaseMipLevel; mipLevel < mipEnd; ++mipLevel)
+			{
+				for(u32 face = trackedRange.BaseArrayLayer; face < faceEnd; ++face)
+				{
+					IGpuResource* const subresource = image->GetSubresource(face, mipLevel);
+					B3D_ASSERT(subresource != nullptr);
+
+					const GpuTextureSubresourceRange range(mipLevel, 1, face, 1, trackedRange.AspectMask);
+					GpuSubmissionImageTransition transition(*image, range, trackingState.InitialLayout, trackingState.CurrentLayout, fnBuildTransition(*subresource, *trackingState.WriteHazardTracking));
+					visitor.VisitImage(transition);
+
+					transition.StateResource->SetSubmissionState(std::move(transition.PostTransitionSubmissionState));
+				}
+			}
+		}
+	}
+}
 
 template<class TBarrierHelper>
 GpuBufferTrackingState& TGpuResourceTracker<TBarrierHelper>::GetOrCreateBufferTrackingState(IGpuBufferResource* buffer)

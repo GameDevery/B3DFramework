@@ -22,6 +22,7 @@ namespace b3d
 		class D3D12GpuQueue;
 		class D3D12GpuCommandBuffer;
 		class D3D12GpuCommandBufferPool;
+		struct D3D12GpuCommandBufferSubmitInformation;
 		class D3D12GpuBuffer;
 		class D3D12Texture;
 		class D3D12GpuProgram;

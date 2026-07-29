@@ -17,6 +17,23 @@ namespace b3d
 		 *  @{
 		 */
 
+		/** Resource-state release recorded for the queue that previously owned an image. */
+		struct D3D12SourceQueueTransition
+		{
+			GpuQueueId QueueId;
+			GpuQueueMask WaitMask = GpuQueueMask::kNone;
+			TShared<D3D12GpuCommandBuffer> CommandBuffer;
+		};
+
+		/** Command lists and resource-derived waits required for one D3D12 command-buffer submission. */
+		struct D3D12GpuCommandBufferSubmitInformation
+		{
+			TInlineArray<D3D12SourceQueueTransition, 4> SourceQueueTransitions;
+			TShared<D3D12GpuCommandBuffer> TransitionCommandBuffer;
+			TShared<D3D12GpuCommandBuffer> PrimaryCommandBuffer;
+			GpuQueueMask RequiredWaitMask = GpuQueueMask::kNone;
+		};
+
 		/** DirectX 12 implementation of GpuCommandBufferPool. */
 		class D3D12GpuCommandBufferPool : public GpuCommandBufferPool
 		{
@@ -109,6 +126,9 @@ namespace b3d
 
 			/** Returns true if the command buffer is done executing on the device. */
 			bool IsDone() const { return mState == GpuCommandBufferState::Done; }
+
+			/** Resolves resource transitions against submit-thread state and prepares the command lists for submission. */
+			D3D12GpuCommandBufferSubmitInformation PrepareForSubmitOnSubmitThread(GpuQueueType queueType, u32 queueIndex);
 
 			/**
 			 * Called on the owning thread just before the command buffer is queued for submission on the submit

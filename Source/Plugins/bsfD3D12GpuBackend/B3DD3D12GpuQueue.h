@@ -37,7 +37,7 @@ namespace b3d
 			 *
 			 * @note	Submit thread only.
 			 */
-			void ExecuteSubmitOnSubmitThread(const TShared<D3D12GpuCommandBuffer>& commandBuffer, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences);
+			void ExecuteSubmitOnSubmitThread(const D3D12GpuCommandBufferSubmitInformation& submitInformation, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences);
 
 			/**
 			 * Checks if any of the active command buffers finished executing on the queue and updates their states
@@ -135,8 +135,8 @@ namespace b3d
 			/** Information about a single submission on the queue - either a command buffer or a swap chain present. */
 			struct QueueSubmissionInformation
 			{
-				QueueSubmissionInformation(const TShared<D3D12GpuCommandBuffer>& commandBuffer, u32 submitIndex)
-					: CommandBuffer(commandBuffer), SubmitIndex(submitIndex)
+				QueueSubmissionInformation(const TShared<D3D12GpuCommandBuffer>& commandBuffer, const TShared<D3D12GpuCommandBuffer>& transitionCommandBuffer, u32 submitIndex)
+					: CommandBuffer(commandBuffer), TransitionCommandBuffer(transitionCommandBuffer), SubmitIndex(submitIndex)
 				{}
 
 				QueueSubmissionInformation(D3D12SwapChain* swapChain, u32 submitIndex)
@@ -144,6 +144,7 @@ namespace b3d
 				{}
 
 				TShared<D3D12GpuCommandBuffer> CommandBuffer; /**< Submitted command buffer, or null if this is a present entry. */
+				TShared<D3D12GpuCommandBuffer> TransitionCommandBuffer; /**< Internal prologue retained until CommandBuffer completes. */
 				D3D12SwapChain* PresentSwapChain = nullptr; /**< Swap chain in case this submission is a present operation. */
 				u32 SubmitIndex;
 			};

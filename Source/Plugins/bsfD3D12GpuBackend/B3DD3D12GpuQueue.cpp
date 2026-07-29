@@ -100,14 +100,32 @@ bool D3D12GpuQueue::IsExecuting() const
 	return mLastSubmittedCommandBuffer->IsSubmitted() || mLastSubmittedCommandBuffer->IsDone();
 }
 
-void D3D12GpuQueue::ExecuteSubmitOnSubmitThread(const TShared<D3D12GpuCommandBuffer>& commandBuffer, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences)
+void D3D12GpuQueue::ExecuteSubmitOnSubmitThread(const D3D12GpuCommandBufferSubmitInformation& submitInformation, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences)
 {
 	AssertIfNotSubmitThread();
 
+	const TShared<D3D12GpuCommandBuffer>& commandBuffer = submitInformation.PrimaryCommandBuffer;
 	if (!B3D_ENSURE(commandBuffer))
 		return;
 
 	D3D12GpuDevice& device = GetDevice();
+
+	syncMask |= submitInformation.RequiredWaitMask;
+
+	for(const D3D12SourceQueueTransition& sourceTransition : submitInformation.SourceQueueTransitions)
+	{
+		if(sourceTransition.CommandBuffer == nullptr)
+			continue;
+
+		TShared<D3D12GpuQueue> transitionQueue = std::static_pointer_cast<D3D12GpuQueue>(device.GetQueue(sourceTransition.QueueId.GetType(), sourceTransition.QueueId.GetIndex()));
+		if(!B3D_ENSURE(transitionQueue != nullptr))
+			continue;
+
+		D3D12GpuCommandBufferSubmitInformation transitionSubmitInformation;
+		transitionSubmitInformation.PrimaryCommandBuffer = sourceTransition.CommandBuffer;
+		transitionQueue->ExecuteSubmitOnSubmitThread(transitionSubmitInformation, sourceTransition.WaitMask, {});
+		syncMask |= sourceTransition.QueueId;
+	}
 
 	// No need to explicitly sync with any entries on the same queue - same-queue submissions execute in order
 	syncMask &= ~GpuQueueMask(GetId());
@@ -134,8 +152,18 @@ void D3D12GpuQueue::ExecuteSubmitOnSubmitThread(const TShared<D3D12GpuCommandBuf
 		}
 	}
 
-	ID3D12CommandList* commandLists[] = { commandBuffer->GetD3D12Handle() };
-	ExecuteCommandLists(commandLists, 1);
+	TInlineArray<ID3D12CommandList*, 2> commandLists;
+	if(submitInformation.TransitionCommandBuffer != nullptr)
+	{
+		submitInformation.TransitionCommandBuffer->SetIsSubmitted();
+		commandLists.Add(submitInformation.TransitionCommandBuffer->GetD3D12Handle());
+	}
+
+	if(!commandBuffer->IsSubmitted())
+		commandBuffer->SetIsSubmitted();
+
+	commandLists.Add(commandBuffer->GetD3D12Handle());
+	ExecuteCommandLists(commandLists.Data(), (u32)commandLists.Size());
 
 	// Mark every tracked resource as in-flight on this queue (matched by NotifyDone when the completion callback
 	// runs the command buffer's Reset).
@@ -165,7 +193,7 @@ void D3D12GpuQueue::ExecuteSubmitOnSubmitThread(const TShared<D3D12GpuCommandBuf
 
 	{
 		Lock lock(mMutex);
-		mActiveSubmissions.push_back(QueueSubmissionInformation(commandBuffer, mNextSubmitIndex++));
+		mActiveSubmissions.push_back(QueueSubmissionInformation(commandBuffer, submitInformation.TransitionCommandBuffer, mNextSubmitIndex++));
 	}
 
 	mLastSubmittedCommandBuffer = commandBuffer;
@@ -231,6 +259,22 @@ void D3D12GpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 
 
 				if (mLastSubmittedCommandBuffer == commandBuffer)
 					mLastSubmittedCommandBuffer = nullptr;
+
+				const TShared<D3D12GpuCommandBuffer> transitionCommandBuffer = it->TransitionCommandBuffer;
+				if(transitionCommandBuffer != nullptr)
+				{
+					SingleConsumerQueue& transitionMessageQueue = transitionCommandBuffer->GetPool().GetMessageQueue();
+					waitGroup.Increment();
+					transitionMessageQueue.PostCommand([transitionCommandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
+					{
+						transitionCommandBuffer->mState = GpuCommandBufferState::Done;
+						transitionCommandBuffer->OnDidComplete();
+						transitionCommandBuffer->Reset();
+
+						if(waitGroup != nullptr)
+							waitGroup->NotifyDone();
+					}, "TransitionCommandBufferCompleteCallback");
+				}
 			}
 			else if (it->PresentSwapChain != nullptr)
 			{

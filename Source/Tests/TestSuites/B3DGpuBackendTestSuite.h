@@ -19,7 +19,7 @@ namespace b3d
 		/** Verifies cross-command-buffer dependencies and propagation of unresolved hazards. */
 		void TestTransitionRecipe();
 
-		/** Verifies remaining hazards produce per-queue transition recipes without losing unresolved destination stages. */
-		void TestResourceTransitionRecipe();
+		/** Verifies writer epochs allow parallel reads and only wait for active conflicting queues. */
+		void TestSubmissionTransitionPlanning();
 	};
 } // namespace b3d

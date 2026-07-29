@@ -46,7 +46,7 @@ namespace b3d
 			/**
 			 * Returns the layout the subresource is currently in. Metal has no native image
 			 * layouts; this is engine-side bookkeeping used to communicate tracked layout state
-			 * between command buffers, updated only after command buffer submit.
+			 * between command buffers, updated while a command buffer is prepared for submission.
 			 *
 			 * @note	Submit thread only.
 			 */

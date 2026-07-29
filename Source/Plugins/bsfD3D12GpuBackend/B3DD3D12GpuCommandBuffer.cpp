@@ -1104,6 +1104,196 @@ void D3D12GpuCommandBuffer::BindGpuParams(bool isGraphics)
 		mComputeParamsRequireBind = false;
 }
 
+namespace
+{
+	/** Returns whether a command-list type may name @p state in a transition barrier. */
+	bool IsResourceStateSupportedOnQueue(D3D12_RESOURCE_STATES state, GpuQueueType queueType)
+	{
+		if(queueType == GQT_GRAPHICS)
+			return true;
+
+		D3D12_RESOURCE_STATES supportedStates = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER | D3D12_RESOURCE_STATE_UNORDERED_ACCESS | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
+		if(queueType == GQT_TRANSFER)
+			supportedStates = D3D12_RESOURCE_STATE_COPY_DEST | D3D12_RESOURCE_STATE_COPY_SOURCE;
+
+		return (state & ~supportedStates) == 0;
+	}
+
+	/** Streams shared submission transitions into D3D12 resource barriers and queue waits. */
+	class D3D12SubmissionTransitionVisitor : public GpuSubmissionTransitionVisitor
+	{
+	public:
+		D3D12SubmissionTransitionVisitor(D3D12GpuDevice& device, D3D12ResourceTracker& resourceTracker, GpuQueueId destinationQueueId, D3D12GpuCommandBufferSubmitInformation& submitInformation)
+			: mDevice(device), mResourceTracker(resourceTracker), mDestinationQueueId(destinationQueueId), mSubmitInformation(submitInformation)
+		{ }
+
+		void VisitBuffer(const GpuSubmissionBufferTransition& transition) override
+		{
+			D3D12Buffer* const buffer = static_cast<D3D12Buffer*>(transition.Buffer);
+			mSubmitInformation.RequiredWaitMask |= transition.ParallelAccessWaitMask;
+
+			if(buffer->GetHeapType() != D3D12_HEAP_TYPE_DEFAULT)
+				return;
+
+			const D3D12_RESOURCE_STATES initialState = D3D12BarrierUtility::GetBufferStateFromStages(transition.DestinationFirstAccessScope.GetStages(), transition.DestinationFirstAccessScope.GetAccess());
+			if((initialState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == 0)
+				return;
+
+			if(transition.SameQueueTransitionRecipe.HasDependency())
+				AppendUavBarrier(mDestinationBarriers, mDestinationUavBarrierResources, buffer->GetD3D12Resource());
+		}
+
+		void VisitImage(const GpuSubmissionImageTransition& transition) override
+		{
+			D3D12Image* const image = static_cast<D3D12Image*>(transition.Image);
+			D3D12ImageSubresource* const subresource = static_cast<D3D12ImageSubresource*>(transition.StateResource);
+			const u32 face = transition.ImageRange.BaseArrayLayer;
+			const u32 mipLevel = transition.ImageRange.BaseMipLevel;
+			const u32 nativeSubresource = image->GetNativeSubresourceIndex(face, mipLevel);
+			const D3D12_RESOURCE_STATES committedState = subresource->GetState();
+			D3D12_RESOURCE_STATES initialState = transition.InitialLayout != GpuImageLayout::Undefined ? D3D12BarrierUtility::GetResourceStateFromLayout(transition.InitialLayout, transition.DestinationFirstAccessScope.GetAccess()) : committedState;
+			mResourceTracker.TryGetInitialImageSubresourceState(image, face, mipLevel, initialState);
+
+			D3D12_RESOURCE_STATES finalState = initialState;
+			mResourceTracker.TryGetTrackedImageSubresourceState(image, face, mipLevel, finalState);
+
+			if(!B3D_ENSURE_LOG(IsResourceStateSupportedOnQueue(initialState, mDestinationQueueId.GetType()), "D3D12 image state {0} is not supported on destination queue type {1}.", (u32)initialState, (u32)mDestinationQueueId.GetType()))
+			{
+				mSubmitInformation.RequiredWaitMask |= transition.ParallelAccessWaitMask;
+				subresource->SetState(finalState);
+				subresource->SetOwnerQueueId(mDestinationQueueId);
+				return;
+			}
+
+			D3D12_RESOURCE_STATES transitionSourceState = committedState;
+			GpuQueueId ownerQueueId;
+			const bool hasOwnerQueue = subresource->GetOwnerQueueId(ownerQueueId);
+			const bool needsSourceRelease = hasOwnerQueue && ownerQueueId.Id != mDestinationQueueId.Id && committedState != D3D12_RESOURCE_STATE_COMMON && !IsResourceStateSupportedOnQueue(committedState, mDestinationQueueId.GetType()) && IsResourceStateSupportedOnQueue(initialState, mDestinationQueueId.GetType());
+			if(needsSourceRelease)
+			{
+				SourceTransitionBuildInformation& sourceTransition = GetSourceTransition(ownerQueueId, transition.ExclusiveAccessWaitMask);
+				AppendTransition(sourceTransition.Barriers, image->GetD3D12Resource(), nativeSubresource, committedState, D3D12_RESOURCE_STATE_COMMON);
+				mSubmitInformation.RequiredWaitMask |= ownerQueueId;
+				transitionSourceState = D3D12_RESOURCE_STATE_COMMON;
+			}
+			else if(committedState != initialState)
+				mSubmitInformation.RequiredWaitMask |= transition.ExclusiveAccessWaitMask;
+			else
+				mSubmitInformation.RequiredWaitMask |= transition.ParallelAccessWaitMask;
+
+			if(transitionSourceState != initialState)
+				AppendTransition(mDestinationBarriers, image->GetD3D12Resource(), nativeSubresource, transitionSourceState, initialState);
+			else if((initialState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0 && transition.SameQueueTransitionRecipe.HasDependency())
+				AppendUavBarrier(mDestinationBarriers, mDestinationUavBarrierResources, image->GetD3D12Resource());
+
+			subresource->SetState(finalState);
+			subresource->SetOwnerQueueId(mDestinationQueueId);
+		}
+
+		void Finalize()
+		{
+			for(SourceTransitionBuildInformation& transition : mSourceTransitions)
+			{
+				if(transition.Barriers.Empty())
+					continue;
+
+				GpuCommandBufferPool& commandBufferPool = mDevice.GetSubmitThread().GetCommandBufferPool(transition.QueueId.GetType());
+				const TShared<D3D12GpuCommandBuffer> commandBuffer = std::static_pointer_cast<D3D12GpuCommandBuffer>(commandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Source queue resource transitions")));
+				commandBuffer->GetD3D12Handle()->ResourceBarrier((UINT)transition.Barriers.Size(), transition.Barriers.Data());
+				commandBuffer->End();
+
+				D3D12SourceQueueTransition sourceTransition;
+				sourceTransition.QueueId = transition.QueueId;
+				sourceTransition.WaitMask = transition.WaitMask;
+				sourceTransition.CommandBuffer = commandBuffer;
+				mSubmitInformation.SourceQueueTransitions.Add(std::move(sourceTransition));
+			}
+
+			if(!mDestinationBarriers.Empty())
+			{
+				GpuCommandBufferPool& commandBufferPool = mDevice.GetSubmitThread().GetCommandBufferPool(mDestinationQueueId.GetType());
+				TShared<D3D12GpuCommandBuffer> commandBuffer = std::static_pointer_cast<D3D12GpuCommandBuffer>(commandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Submission resource transitions")));
+				commandBuffer->GetD3D12Handle()->ResourceBarrier((UINT)mDestinationBarriers.Size(), mDestinationBarriers.Data());
+				commandBuffer->End();
+				mSubmitInformation.TransitionCommandBuffer = commandBuffer;
+			}
+		}
+
+	private:
+		struct SourceTransitionBuildInformation
+		{
+			GpuQueueId QueueId;
+			GpuQueueMask WaitMask = GpuQueueMask::kNone;
+			TInlineArray<D3D12_RESOURCE_BARRIER, 8> Barriers;
+		};
+
+		static void AppendTransition(TInlineArray<D3D12_RESOURCE_BARRIER, 8>& barriers, ID3D12Resource* resource, u32 nativeSubresource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after)
+		{
+			if(resource == nullptr || before == after)
+				return;
+
+			D3D12_RESOURCE_BARRIER barrier = {};
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barrier.Transition.pResource = resource;
+			barrier.Transition.Subresource = nativeSubresource;
+			barrier.Transition.StateBefore = before;
+			barrier.Transition.StateAfter = after;
+			barriers.Add(barrier);
+		}
+
+		static void AppendUavBarrier(TInlineArray<D3D12_RESOURCE_BARRIER, 8>& barriers, TInlineArray<ID3D12Resource*, 4>& barrierResources, ID3D12Resource* resource)
+		{
+			if(resource == nullptr || std::find(barrierResources.begin(), barrierResources.end(), resource) != barrierResources.end())
+				return;
+
+			D3D12_RESOURCE_BARRIER barrier = {};
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			barrier.UAV.pResource = resource;
+			barriers.Add(barrier);
+			barrierResources.Add(resource);
+		}
+
+		SourceTransitionBuildInformation& GetSourceTransition(GpuQueueId queueId, GpuQueueMask waitMask)
+		{
+			auto found = std::find_if(mSourceTransitions.begin(), mSourceTransitions.end(), [queueId](const SourceTransitionBuildInformation& entry) { return entry.QueueId.Id == queueId.Id; });
+			if(found == mSourceTransitions.end())
+			{
+				SourceTransitionBuildInformation transition;
+				transition.QueueId = queueId;
+				transition.WaitMask = waitMask & ~GpuQueueMask(queueId);
+				mSourceTransitions.Add(std::move(transition));
+				return mSourceTransitions.back();
+			}
+
+			found->WaitMask |= waitMask & ~GpuQueueMask(queueId);
+			return *found;
+		}
+
+		D3D12GpuDevice& mDevice;
+		D3D12ResourceTracker& mResourceTracker;
+		GpuQueueId mDestinationQueueId;
+		D3D12GpuCommandBufferSubmitInformation& mSubmitInformation;
+		TInlineArray<D3D12_RESOURCE_BARRIER, 8> mDestinationBarriers;
+		TInlineArray<ID3D12Resource*, 4> mDestinationUavBarrierResources;
+		TInlineArray<SourceTransitionBuildInformation, 4> mSourceTransitions;
+	};
+}
+
+D3D12GpuCommandBufferSubmitInformation D3D12GpuCommandBuffer::PrepareForSubmitOnSubmitThread(GpuQueueType queueType, u32 queueIndex)
+{
+	AssertIfNotSubmitThread();
+	B3D_ASSERT(IsSubmitted());
+
+	D3D12GpuCommandBufferSubmitInformation submitInformation;
+	D3D12GpuDevice& device = GetD3D12GpuDevice();
+	const GpuQueueId destinationQueueId(queueType, queueIndex);
+	D3D12SubmissionTransitionVisitor visitor(device, mResourceTracker, destinationQueueId, submitInformation);
+	mResourceTracker.ResolveSubmissionTransitions(destinationQueueId, visitor);
+	visitor.Finalize();
+	submitInformation.PrimaryCommandBuffer = std::static_pointer_cast<D3D12GpuCommandBuffer>(GetShared());
+	return submitInformation;
+}
+
 void D3D12GpuCommandBuffer::NotifyWillQueueForSubmit()
 {
 	// Clear everything not allowed on the submit thread. The resources these referenced stay alive through the

@@ -1313,6 +1313,183 @@ VulkanSemaphore* VulkanGpuCommandBuffer::RequestInterQueueSemaphore() const
 	return mInterQueueSemaphores[mNumUsedInterQueueSemaphores++];
 }
 
+namespace
+{
+	class VulkanSubmissionTransitionVisitor : public GpuSubmissionTransitionVisitor
+	{
+	public:
+		VulkanSubmissionTransitionVisitor(VulkanGpuDevice& device, GpuQueueId destinationQueueId, VulkanGpuCommandBufferSubmitInformation& submitInformation)
+			: mDevice(device), mDestinationQueueId(destinationQueueId), mDestinationQueueFamily(device.GetQueueFamily(destinationQueueId.GetType())), mSubmitInformation(submitInformation)
+		{ }
+
+		void VisitBuffer(const GpuSubmissionBufferTransition& transition) override
+		{
+			VulkanBuffer* const buffer = static_cast<VulkanBuffer*>(transition.Buffer);
+			const GpuHazardState::TransitionRecipe& sameQueueTransition = transition.SameQueueTransitionRecipe;
+
+			GpuQueueId ownerQueueId;
+			const bool hasOwnerQueue = buffer->GetOwnerQueueId(ownerQueueId);
+			const u32 sourceQueueFamily = hasOwnerQueue ? mDevice.GetQueueFamily(ownerQueueId.GetType()) : mDestinationQueueFamily;
+			const bool needsOwnershipTransfer = hasOwnerQueue && buffer->IsExclusive() && sourceQueueFamily != mDestinationQueueFamily;
+
+			if(!needsOwnershipTransfer && sameQueueTransition.HasDependency())
+			{
+				if(sameQueueTransition.MemoryDependency.IsValid())
+					mDestinationQueueBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), sameQueueTransition.MemoryDependency);
+
+				if(sameQueueTransition.ExecutionDependency.IsValid())
+					mDestinationQueueBarriers.AddExecutionBarrier(sameQueueTransition.ExecutionDependency);
+			}
+
+			if(needsOwnershipTransfer)
+			{
+				const GpuAccessScope& sourceAccessScope = transition.SourceAccessScope;
+				const GpuAccessScope& destinationAccessScope = transition.DestinationAllAccessScope;
+				VkPipelineStageFlags sourceStages, destinationStages;
+				VkAccessFlags sourceAccess, destinationAccess;
+				VulkanUtility::GetPipelineStageAndAccessMask(sourceAccessScope.GetStages(), sourceAccessScope.GetAccess(), sourceStages, sourceAccess);
+				VulkanUtility::GetPipelineStageAndAccessMask(destinationAccessScope.GetStages(), destinationAccessScope.GetAccess(), destinationStages, destinationAccess);
+
+				if(sourceStages == 0)
+					sourceStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+				if(destinationStages == 0)
+					destinationStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+				SourceQueueTransitionInformation& sourceQueueTransitionInformation = GetSourceQueueTransitionInformation(ownerQueueId, transition.ExclusiveAccessWaitMask);
+				sourceQueueTransitionInformation.Barriers.AddBufferBarrier(buffer->GetVulkanHandle(), sourceStages, sourceAccess, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, sourceQueueFamily, mDestinationQueueFamily);
+				mDestinationQueueBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, destinationStages, destinationAccess, sourceQueueFamily, mDestinationQueueFamily);
+			}
+			else
+			{
+				// Explicit waits remain the preferred API; this covers resource-derived dependencies.
+				mSubmitInformation.RequiredWaitMask |= transition.ParallelAccessWaitMask;
+			}
+
+			buffer->SetOwnerQueueId(mDestinationQueueId);
+		}
+
+		void VisitImage(const GpuSubmissionImageTransition& transition) override
+		{
+			VulkanImage* const image = static_cast<VulkanImage*>(transition.Image);
+			VulkanImageSubresource* const subresource = static_cast<VulkanImageSubresource*>(transition.StateResource);
+			const GpuHazardState::TransitionRecipe& sameQueueTransition = transition.SameQueueTransitionRecipe;
+			const VkImageLayout oldLayout = subresource->GetLayout();
+			const VkImageLayout requestedInitialLayout = VulkanUtility::ToVkImageLayout(transition.InitialLayout);
+			const VkImageLayout newLayout = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED ? requestedInitialLayout : oldLayout;
+			const bool layoutMismatch = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED && oldLayout != newLayout;
+			const VkImageSubresourceRange vkRange = VulkanUtility::ToVkImageSubresourceRange(transition.ImageRange);
+
+			GpuQueueId ownerQueueId;
+			const bool hasOwnerQueue = subresource->GetOwnerQueueId(ownerQueueId);
+			const u32 sourceQueueFamily = hasOwnerQueue ? mDevice.GetQueueFamily(ownerQueueId.GetType()) : mDestinationQueueFamily;
+			const bool needsOwnershipTransfer = hasOwnerQueue && subresource->IsExclusive() && sourceQueueFamily != mDestinationQueueFamily;
+			const bool needsFullSync = needsOwnershipTransfer || layoutMismatch;
+
+			if(!needsFullSync && sameQueueTransition.HasDependency())
+			{
+				if(sameQueueTransition.MemoryDependency.IsValid())
+					mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sameQueueTransition.MemoryDependency, oldLayout, newLayout);
+
+				if(sameQueueTransition.ExecutionDependency.IsValid())
+					mDestinationQueueBarriers.AddExecutionBarrier(sameQueueTransition.ExecutionDependency);
+			}
+
+			if(!needsFullSync)
+				mSubmitInformation.RequiredWaitMask |= transition.ParallelAccessWaitMask;
+
+			const GpuAccessScope& sourceAccessScope = transition.SourceAccessScope;
+			const GpuAccessScope& destinationAccessScope = transition.DestinationAllAccessScope;
+			VkPipelineStageFlags sourceStages, destinationStages;
+			VkAccessFlags sourceAccess, destinationAccess;
+			VulkanUtility::GetPipelineStageAndAccessMask(sourceAccessScope.GetStages(), sourceAccessScope.GetAccess(), sourceStages, sourceAccess);
+			VulkanUtility::GetPipelineStageAndAccessMask(destinationAccessScope.GetStages(), destinationAccessScope.GetAccess(), destinationStages, destinationAccess);
+
+			if(sourceStages == 0)
+				sourceStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+			if(destinationStages == 0)
+				destinationStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+			if(needsOwnershipTransfer)
+			{
+				SourceQueueTransitionInformation& sourceQueueTransitionInformation = GetSourceQueueTransitionInformation(ownerQueueId, transition.ExclusiveAccessWaitMask);
+				sourceQueueTransitionInformation.Barriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, oldLayout, newLayout, sourceQueueFamily, mDestinationQueueFamily);
+				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, destinationStages, destinationAccess, oldLayout, newLayout, sourceQueueFamily, mDestinationQueueFamily);
+			}
+			else if(layoutMismatch)
+			{
+				mSubmitInformation.RequiredWaitMask |= transition.ExclusiveAccessWaitMask;
+				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, destinationStages, destinationAccess, oldLayout, newLayout);
+			}
+
+			subresource->SetLayout(VulkanUtility::ToVkImageLayout(transition.FinalLayout));
+			subresource->SetOwnerQueueId(mDestinationQueueId);
+		}
+
+		void Finalize()
+		{
+			for(SourceQueueTransitionInformation& sourceQueueTransitionInformation : mSourceQueueTransitions)
+			{
+				GpuCommandBufferPool& sourceCommandBufferPool = mDevice.GetSubmitThread().GetCommandBufferPool(sourceQueueTransitionInformation.QueueId.GetType());
+				const TShared<VulkanGpuCommandBuffer> sourceCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(sourceCommandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Source queue transition")));
+				sourceQueueTransitionInformation.Barriers.Execute(sourceCommandBuffer->GetVulkanHandle());
+				sourceCommandBuffer->End();
+
+				VulkanSourceQueueTransition sourceQueueTransition;
+				sourceQueueTransition.QueueId = sourceQueueTransitionInformation.QueueId;
+				sourceQueueTransition.WaitMask = sourceQueueTransitionInformation.WaitMask;
+				sourceQueueTransition.CommandBuffer = sourceCommandBuffer;
+				mSubmitInformation.SourceQueueTransitions.Add(std::move(sourceQueueTransition));
+			}
+
+			if(mDestinationQueueBarriers.HasBarriers())
+			{
+				GpuCommandBufferPool& destinationCommandBufferPool = mDevice.GetSubmitThread().GetCommandBufferPool(mDestinationQueueId.GetType());
+				TShared<VulkanGpuCommandBuffer> transitionCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(destinationCommandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Queue and layout transitions")));
+				mDestinationQueueBarriers.Execute(transitionCommandBuffer->GetVulkanHandle());
+				transitionCommandBuffer->End();
+				mSubmitInformation.DestinationQueueTransitionCommandBuffer = transitionCommandBuffer;
+			}
+		}
+
+	private:
+		struct SourceQueueTransitionInformation
+		{
+			GpuQueueId QueueId;
+			GpuQueueMask WaitMask;
+			VulkanBarrierBatch Barriers;
+		};
+
+		SourceQueueTransitionInformation& GetSourceQueueTransitionInformation(GpuQueueId sourceQueueId, GpuQueueMask waitMask)
+		{
+			auto found = std::find_if(mSourceQueueTransitions.begin(), mSourceQueueTransitions.end(), [sourceQueueId](const SourceQueueTransitionInformation& sourceQueueTransitionInformation)
+			{
+				return sourceQueueTransitionInformation.QueueId.Id == sourceQueueId.Id;
+			});
+
+			if(found == mSourceQueueTransitions.end())
+			{
+				SourceQueueTransitionInformation sourceQueueTransitionInformation;
+				sourceQueueTransitionInformation.QueueId = sourceQueueId;
+				sourceQueueTransitionInformation.WaitMask = waitMask & ~GpuQueueMask(sourceQueueId);
+				mSourceQueueTransitions.Add(std::move(sourceQueueTransitionInformation));
+				return mSourceQueueTransitions.back();
+			}
+
+			found->WaitMask |= waitMask & ~GpuQueueMask(sourceQueueId);
+			return *found;
+		}
+
+		VulkanGpuDevice& mDevice;
+		GpuQueueId mDestinationQueueId;
+		u32 mDestinationQueueFamily;
+		VulkanGpuCommandBufferSubmitInformation& mSubmitInformation;
+		VulkanBarrierBatch mDestinationQueueBarriers;
+		TInlineArray<SourceQueueTransitionInformation, 4> mSourceQueueTransitions;
+	};
+}
+
 VulkanGpuCommandBufferSubmitInformation VulkanGpuCommandBuffer::PrepareForSubmitOnSubmitThread(GpuQueueType queueType, u32 queueIndex)
 {
 	AssertIfNotSubmitThread();
@@ -1321,237 +1498,15 @@ VulkanGpuCommandBufferSubmitInformation VulkanGpuCommandBuffer::PrepareForSubmit
 	VulkanGpuCommandBufferSubmitInformation submitInformation;
 	VulkanGpuDevice& device = GetVulkanGpuDevice();
 	const GpuQueueId destinationQueueId(queueType, queueIndex);
-	const GpuQueueMask destinationQueueMask(destinationQueueId);
-	VulkanBarrierBatch destinationBarriers;
-
-	struct SourceTransitionBuildInformation
-	{
-		GpuQueueId QueueId;
-		GpuQueueMask WaitMask;
-		VulkanBarrierBatch Barriers;
-	};
-
-	TInlineArray<SourceTransitionBuildInformation, 4> sourceTransitions;
-	auto fnGetSourceTransition = [&sourceTransitions](GpuQueueId sourceQueueId, GpuQueueMask waitMask) -> SourceTransitionBuildInformation&
-	{
-		auto found = std::find_if(sourceTransitions.begin(), sourceTransitions.end(), [sourceQueueId](const SourceTransitionBuildInformation& entry)
-		{
-			return entry.QueueId.Id == sourceQueueId.Id;
-		});
-
-		if(found == sourceTransitions.end())
-		{
-			SourceTransitionBuildInformation entry;
-			entry.QueueId = sourceQueueId;
-			entry.WaitMask = waitMask & ~GpuQueueMask(sourceQueueId);
-
-			sourceTransitions.Add(std::move(entry));
-			return sourceTransitions.back();
-		}
-
-		found->WaitMask |= waitMask & ~GpuQueueMask(sourceQueueId);
-		return *found;
-	};
-
-	for(auto& entry : mResourceTracker.GetBuffers())
-	{
-		VulkanBuffer* const buffer = static_cast<VulkanBuffer*>(entry.first);
-		const GpuBufferTrackingState& bufferTrackingState = entry.second;
-		const GpuHazardStateWithHistory& bufferHazardHistory = *bufferTrackingState.WriteHazardTracking;
-		const GpuAccessScope firstAccessScope = bufferHazardHistory.GetFirstAccessScope();
-
-		// Buffer was registered with the tracker but nothing was done with it, shouldn't happen
-		if(!firstAccessScope.IsValid())
-			continue;
-
-		GpuResourceRemainingHazards::TransitionRecipe transitionRecipe = buffer->BuildTransitionRecipe(bufferHazardHistory, destinationQueueId);
-
-		GpuQueueId ownerQueueId;
-		const bool hasOwnerQueue = buffer->GetOwnerQueueId(ownerQueueId);
-		const u32 destinationQueueFamily = device.GetQueueFamily(queueType);
-		const u32 sourceQueueFamily = hasOwnerQueue ? device.GetQueueFamily(ownerQueueId.GetType()) : destinationQueueFamily;
-		const bool needsOwnershipTransfer = hasOwnerQueue && buffer->IsExclusive() && sourceQueueFamily != destinationQueueFamily;
-
-		GpuAccessScope ownershipDestinationAccessScope = firstAccessScope;
-		for(const GpuHazardState::TransitionRecipe& queueTransitionRecipe : transitionRecipe.PerQueueTransitionRecipes)
-		{
-			if(!needsOwnershipTransfer)
-			{
-				const bool sameQueue = queueTransitionRecipe.SourceQueueId.Id == destinationQueueId.Id;
-				if(sameQueue)
-				{
-					if(queueTransitionRecipe.MemoryDependency.IsValid())
-						destinationBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), queueTransitionRecipe.MemoryDependency);
-
-					if(queueTransitionRecipe.ExecutionDependency.IsValid())
-						destinationBarriers.AddExecutionBarrier(queueTransitionRecipe.ExecutionDependency);
-				}
-				// Note: High-level API requires the user to provide the queue wait mask explicitly, but we're using this as fallback
-				else if(queueTransitionRecipe.HasDependency())
-					submitInformation.RequiredWaitMask |= queueTransitionRecipe.SourceQueueId;
-			}
-			else
-			{
-				ownershipDestinationAccessScope.Add(queueTransitionRecipe.GetDestinationAccessScope());
-			}
-		}
-
-		if(needsOwnershipTransfer)
-		{
-			GpuQueueMask sourceWaitMask = buffer->GetUseInfo(GpuAccessFlag::Read | GpuAccessFlag::Write);
-			sourceWaitMask |= transitionRecipe.SourceQueueMask;
-
-			const GpuAccessScope& sourceAccesses = transitionRecipe.SourceUnsafeAccessScope;
-			VkPipelineStageFlags sourceStages, destinationStages;
-			VkAccessFlags sourceAccess, destinationAccess;
-			VulkanUtility::GetPipelineStageAndAccessMask(sourceAccesses.GetStages(), sourceAccesses.GetAccess(), sourceStages, sourceAccess);
-			VulkanUtility::GetPipelineStageAndAccessMask(ownershipDestinationAccessScope.GetStages(), ownershipDestinationAccessScope.GetAccess(), destinationStages, destinationAccess);
-
-			if(sourceStages == 0)
-				sourceStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-			if(destinationStages == 0)
-				destinationStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-			SourceTransitionBuildInformation& sourceTransition = fnGetSourceTransition(ownerQueueId, sourceWaitMask);
-			sourceTransition.Barriers.AddBufferBarrier(buffer->GetVulkanHandle(), sourceStages, sourceAccess, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, sourceQueueFamily, destinationQueueFamily);
-			destinationBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, destinationStages, destinationAccess, sourceQueueFamily, destinationQueueFamily);
-		}
-
-		transitionRecipe.RemainingHazards.Add(destinationQueueId, bufferHazardHistory.State);
-
-		buffer->SetOwnerQueueId(destinationQueueId);
-		buffer->SetRemainingHazards(std::move(transitionRecipe.RemainingHazards));
-	}
-
-	for(auto& entry : mResourceTracker.GetImages())
-	{
-		VulkanImage* const image = static_cast<VulkanImage*>(entry.first);
-		const TArrayView<GpuImageSubresourceTrackingState> subresourceTrackingStates = mResourceTracker.GetSubresourceTrackingStatesForImage(image);
-
-		for(const GpuImageSubresourceTrackingState& subresourceTrackingState : subresourceTrackingStates)
-		{
-			const GpuHazardStateWithHistory& subresourceHazardHistory = *subresourceTrackingState.WriteHazardTracking;
-			const GpuAccessScope firstAccessScope = subresourceHazardHistory.GetFirstAccessScope();
-
-			const GpuTextureSubresourceRange& range = subresourceTrackingState.Range;
-			const u32 mipEnd = range.BaseMipLevel + range.MipLevelCount;
-			const u32 faceEnd = range.BaseArrayLayer + range.ArrayLayerCount;
-			for(u32 mip = range.BaseMipLevel; mip < mipEnd; ++mip)
-			{
-				for(u32 face = range.BaseArrayLayer; face < faceEnd; ++face)
-				{
-					VulkanImageSubresource* const subresource = image->GetSubresource(face, mip);
-					GpuResourceRemainingHazards::TransitionRecipe transitionRecipe = subresource->BuildTransitionRecipe(subresourceHazardHistory, destinationQueueId);
-					const VkImageLayout oldLayout = subresource->GetLayout();
-					const VkImageLayout requestedInitialLayout = VulkanUtility::ToVkImageLayout(subresourceTrackingState.InitialLayout);
-					const VkImageLayout newLayout = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED ? requestedInitialLayout : oldLayout;
-					const bool layoutMismatch = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED && oldLayout != newLayout;
-
-					VkImageSubresourceRange vkRange = VulkanUtility::ToVkImageSubresourceRange(range);
-					vkRange.baseMipLevel = mip;
-					vkRange.levelCount = 1;
-					vkRange.baseArrayLayer = face;
-					vkRange.layerCount = 1;
-
-					GpuQueueId ownerQueueId;
-					const bool hasOwnerQueue = subresource->GetOwnerQueueId(ownerQueueId);
-					const u32 destinationQueueFamily = device.GetQueueFamily(queueType);
-					const u32 sourceQueueFamily = hasOwnerQueue ? device.GetQueueFamily(ownerQueueId.GetType()) : destinationQueueFamily;
-					const bool needsOwnershipTransfer = hasOwnerQueue && subresource->IsExclusive() && sourceQueueFamily != destinationQueueFamily;
-					const bool needsFullSync = needsOwnershipTransfer || layoutMismatch;
-
-					GpuAccessScope transitionDestinationAccessScope = firstAccessScope;
-					for(const GpuHazardState::TransitionRecipe& queueTransitionRecipe : transitionRecipe.PerQueueTransitionRecipes)
-					{
-						transitionDestinationAccessScope.Add(queueTransitionRecipe.GetDestinationAccessScope());
-
-						if(!needsFullSync)
-						{
-							const bool sameQueue = queueTransitionRecipe.SourceQueueId.Id == destinationQueueId.Id;
-							if(sameQueue)
-							{
-								if(queueTransitionRecipe.MemoryDependency.IsValid())
-									destinationBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, queueTransitionRecipe.MemoryDependency, oldLayout, newLayout);
-
-								if(queueTransitionRecipe.ExecutionDependency.IsValid())
-									destinationBarriers.AddExecutionBarrier(queueTransitionRecipe.ExecutionDependency);
-							}
-							else if(queueTransitionRecipe.HasDependency())
-								submitInformation.RequiredWaitMask |= queueTransitionRecipe.SourceQueueId;
-						}
-					}
-
-					const GpuAccessScope& sourceAccesses = transitionRecipe.SourceUnsafeAccessScope;
-					VkPipelineStageFlags sourceStages, destinationStages;
-					VkAccessFlags sourceAccess, destinationAccess;
-					VulkanUtility::GetPipelineStageAndAccessMask(sourceAccesses.GetStages(), sourceAccesses.GetAccess(), sourceStages, sourceAccess);
-					VulkanUtility::GetPipelineStageAndAccessMask(transitionDestinationAccessScope.GetStages(), transitionDestinationAccessScope.GetAccess(), destinationStages, destinationAccess);
-
-					if(sourceStages == 0)
-						sourceStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-					if(destinationStages == 0)
-						destinationStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-					if(needsOwnershipTransfer)
-					{
-						GpuQueueMask sourceWaitMask = subresource->GetUseInfo(GpuAccessFlag::Read | GpuAccessFlag::Write);
-						sourceWaitMask |= transitionRecipe.SourceQueueMask;
-
-						SourceTransitionBuildInformation& sourceTransition = fnGetSourceTransition(ownerQueueId, sourceWaitMask);
-						sourceTransition.Barriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, oldLayout, newLayout, sourceQueueFamily, destinationQueueFamily);
-						destinationBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, destinationStages, destinationAccess, oldLayout, newLayout, sourceQueueFamily, destinationQueueFamily);
-					}
-					else if(layoutMismatch)
-					{
-						GpuQueueMask layoutWaitMask = transitionRecipe.SourceQueueMask;
-						layoutWaitMask &= ~destinationQueueMask;
-						submitInformation.RequiredWaitMask |= layoutWaitMask;
-						destinationBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, destinationStages, destinationAccess, oldLayout, newLayout);
-					}
-
-					transitionRecipe.RemainingHazards.Add(destinationQueueId, subresourceHazardHistory.State);
-
-					subresource->SetLayout(VulkanUtility::ToVkImageLayout(subresourceTrackingState.CurrentLayout));
-					subresource->SetOwnerQueueId(destinationQueueId);
-					subresource->SetRemainingHazards(std::move(transitionRecipe.RemainingHazards));
-				}
-			}
-		}
-	}
-
-	for(SourceTransitionBuildInformation& transition : sourceTransitions)
-	{
-		GpuCommandBufferPool& sourceCommandBufferPool = device.GetSubmitThread().GetCommandBufferPool(transition.QueueId.GetType());
-		const TShared<VulkanGpuCommandBuffer> sourceCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(sourceCommandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Source queue transition")));
-		transition.Barriers.Execute(sourceCommandBuffer->GetVulkanHandle());
-		sourceCommandBuffer->End();
-
-		VulkanSourceQueueTransition sourceTransition;
-		sourceTransition.QueueId = transition.QueueId;
-		sourceTransition.WaitMask = transition.WaitMask;
-		sourceTransition.CommandBuffer = sourceCommandBuffer;
-		submitInformation.SourceQueueTransitions.Add(std::move(sourceTransition));
-	}
+	VulkanSubmissionTransitionVisitor transitionVisitor(device, destinationQueueId, submitInformation);
+	mResourceTracker.ResolveSubmissionTransitions(destinationQueueId, transitionVisitor);
+	transitionVisitor.Finalize();
 
 	// Wait on present (i.e. until the back buffer becomes available) for any surfaces
 	for(IVulkanRenderWindowSurface* surface : mAcquiredSurfaces)
 		surface->AppendWaitSemaphoresIfRequired(submitInformation.Semaphores);
 
-	if(destinationBarriers.HasBarriers())
-	{
-		GpuCommandBufferPool& destinationCommandBufferPool = device.GetSubmitThread().GetCommandBufferPool(queueType);
-		TShared<VulkanGpuCommandBuffer> transitionCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(
-			destinationCommandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Queue and layout transitions")));
-		destinationBarriers.Execute(transitionCommandBuffer->GetVulkanHandle());
-		transitionCommandBuffer->End();
-		submitInformation.DestinationQueueTransitionCommandBuffer = transitionCommandBuffer;
-	}
-
 	submitInformation.PrimaryCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(GetShared());
-	mSubmittedQueueId = destinationQueueId;
-	mResourceTracker.NotifyUsed(mSubmittedQueueId);
 
 	mGraphicsPipeline = nullptr;
 	mComputePipeline = nullptr;
@@ -1566,6 +1521,14 @@ VulkanGpuCommandBufferSubmitInformation VulkanGpuCommandBuffer::PrepareForSubmit
 	mAcquiredSurfaces.clear();
 
 	return submitInformation;
+}
+
+void VulkanGpuCommandBuffer::NotifyWasSubmitted(GpuQueueId queueId)
+{
+	AssertIfNotSubmitThread();
+
+	mSubmittedQueueId = queueId;
+	mResourceTracker.NotifyUsed(queueId);
 }
 
 void VulkanGpuCommandBuffer::NotifyWillQueueForSubmit()

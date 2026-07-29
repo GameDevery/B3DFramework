@@ -232,22 +232,22 @@ void VulkanGpuQueue::ExecuteSubmitOnSubmitThread(const VulkanGpuCommandBufferSub
 	const GpuQueueMask queueMask(GetId());
 	syncMask &= ~queueMask;
 
-	for(const VulkanSourceQueueTransition& sourceTransition : submitInformation.SourceQueueTransitions)
+	for(const VulkanSourceQueueTransition& sourceQueueTransition : submitInformation.SourceQueueTransitions)
 	{
-		if(sourceTransition.CommandBuffer == nullptr)
+		if(sourceQueueTransition.CommandBuffer == nullptr)
 			continue;
 
-		TShared<VulkanGpuQueue> transitionQueue = std::static_pointer_cast<VulkanGpuQueue>(
-			device.GetQueue(sourceTransition.QueueId.GetType(), sourceTransition.QueueId.GetIndex()));
-		if(!B3D_ENSURE(transitionQueue != nullptr))
+		TShared<VulkanGpuQueue> sourceQueue = std::static_pointer_cast<VulkanGpuQueue>(
+			device.GetQueue(sourceQueueTransition.QueueId.GetType(), sourceQueueTransition.QueueId.GetIndex()));
+		if(!B3D_ENSURE(sourceQueue != nullptr))
 			continue;
 
-		syncMask |= sourceTransition.QueueId;
+		syncMask |= sourceQueueTransition.QueueId;
 
-		VulkanGpuCommandBufferSubmitInformation transitionSubmitInformation;
-		transitionSubmitInformation.PrimaryCommandBuffer = sourceTransition.CommandBuffer;
+		VulkanGpuCommandBufferSubmitInformation sourceQueueTransitionSubmitInformation;
+		sourceQueueTransitionSubmitInformation.PrimaryCommandBuffer = sourceQueueTransition.CommandBuffer;
 
-		transitionQueue->ExecuteSubmitOnSubmitThread(transitionSubmitInformation, sourceTransition.WaitMask, {});
+		sourceQueue->ExecuteSubmitOnSubmitThread(sourceQueueTransitionSubmitInformation, sourceQueueTransition.WaitMask, {});
 	}
 
 	B3D_ENSURE(mWaitSemaphoreBuffer.Empty());
@@ -280,7 +280,12 @@ void VulkanGpuQueue::ExecuteSubmitOnSubmitThread(const VulkanGpuCommandBufferSub
 	{
 		B3D_LOG(Fatal, LogRenderBackend, "vkQueueSubmit failed with VkResult {0}{1}. The GPU device is in an unrecoverable state; aborting.",
 			(i32)result, (result == VK_ERROR_DEVICE_LOST) ? " (VK_ERROR_DEVICE_LOST)" : "");
+
+		ReleaseAllSubmitWorkBuffers();
+		return;
 	}
+
+	submitInformation.PrimaryCommandBuffer->NotifyWasSubmitted(GetId());
 
 	ReleaseAllSubmitWorkBuffers();
 }

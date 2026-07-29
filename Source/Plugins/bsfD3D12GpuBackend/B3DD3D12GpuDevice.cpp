@@ -378,7 +378,9 @@ void D3D12GpuDevice::NotifyWillQueueForSubmit(GpuCommandBuffer& commandBuffer)
 
 void D3D12GpuDevice::ExecuteSubmit(GpuQueue& queue, const TShared<GpuCommandBuffer>& commandBuffer, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences)
 {
-	static_cast<D3D12GpuQueue&>(queue).ExecuteSubmitOnSubmitThread(std::static_pointer_cast<D3D12GpuCommandBuffer>(commandBuffer), syncMask, signalFences);
+	const TShared<D3D12GpuCommandBuffer> d3d12CommandBuffer = std::static_pointer_cast<D3D12GpuCommandBuffer>(commandBuffer);
+	const D3D12GpuCommandBufferSubmitInformation submitInformation = d3d12CommandBuffer->PrepareForSubmitOnSubmitThread(queue.GetType(), queue.GetIndex());
+	static_cast<D3D12GpuQueue&>(queue).ExecuteSubmitOnSubmitThread(submitInformation, syncMask, signalFences);
 }
 
 void D3D12GpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty, u32 lastSubmitIndex)

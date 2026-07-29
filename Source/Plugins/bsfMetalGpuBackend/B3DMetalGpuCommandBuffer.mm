@@ -2766,6 +2766,26 @@ namespace b3d
 
 		namespace
 		{
+			class MetalSubmissionTransitionVisitor : public GpuSubmissionTransitionVisitor
+			{
+			public:
+				void VisitBuffer(const GpuSubmissionBufferTransition& transition) override
+				{
+					mRequiredWaitMask |= transition.ParallelAccessWaitMask;
+				}
+
+				void VisitImage(const GpuSubmissionImageTransition& transition) override
+				{
+					mRequiredWaitMask |= transition.ParallelAccessWaitMask;
+					static_cast<MetalImageSubresource*>(transition.StateResource)->SetLayout(transition.FinalLayout);
+				}
+
+				GpuQueueMask GetRequiredWaitMask() const { return mRequiredWaitMask; }
+
+			private:
+				GpuQueueMask mRequiredWaitMask = GpuQueueMask::kNone;
+			};
+
 			/**
 			 * Encodes one encodeSignalEvent:value: per user-supplied timeline fence on @p cmdBuffer.
 			 * Must be called before [cmdBuffer commit]; ordering against the queue's own signal is
@@ -2869,6 +2889,10 @@ namespace b3d
 					return;
 				}
 
+				MetalSubmissionTransitionVisitor transitionVisitor;
+				mResourceTracker.ResolveSubmissionTransitions(mSubmittedQueueId, transitionVisitor);
+				syncMask |= transitionVisitor.GetRequiredWaitMask();
+
 				mResourceTracker.NotifyUsed(mSubmittedQueueId);
 				mResourcesSubmitted = true;
 
@@ -2923,17 +2947,33 @@ namespace b3d
 #if B3D_METAL_USE_EXPLICIT_RESOURCE_SYNCHRONIZATION
 			needsWaitPrologue |= submitQueue.GetLastCommittedEventValue() != 0;
 #endif
-			if (needsWaitPrologue)
+			// Resolving publishes the resulting hazard and layout state, so provision a possible resource-derived wait prologue first.
+			const bool mayNeedResourceWait = !mResourceTracker.GetBuffers().empty() || !mResourceTracker.GetImages().empty();
+			id<MTLCommandBuffer> waitCommandBuffer = nil;
+			if (needsWaitPrologue || mayNeedResourceWait)
 			{
 				id<MTLCommandQueue> mtlQueue = submitQueue.GetMetalQueue();
-				id<MTLCommandBuffer> waitCommandBuffer = mtlQueue ? [mtlQueue commandBuffer] : nil;
+				waitCommandBuffer = mtlQueue ? [mtlQueue commandBuffer] : nil;
 				if (waitCommandBuffer == nil)
 				{
 					B3D_LOG(Fatal, LogRenderBackend, "Failed to allocate Metal cross-queue wait command buffer.");
 					fnPostFailedSubmissionCompletion();
 					return;
 				}
+			}
 
+			MetalSubmissionTransitionVisitor transitionVisitor;
+			mResourceTracker.ResolveSubmissionTransitions(mSubmittedQueueId, transitionVisitor);
+			syncMask |= transitionVisitor.GetRequiredWaitMask();
+
+			needsWaitPrologue = !(syncMask & ~selfMask).IsEmpty();
+#if B3D_METAL_USE_EXPLICIT_RESOURCE_SYNCHRONIZATION
+			needsWaitPrologue |= submitQueue.GetLastCommittedEventValue() != 0;
+#endif
+
+			if (needsWaitPrologue)
+			{
+				B3D_ASSERT(waitCommandBuffer != nil);
 				EncodeQueueWaits(waitCommandBuffer, submitQueue, syncMask);
 				[waitCommandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedBuffer)
 				{

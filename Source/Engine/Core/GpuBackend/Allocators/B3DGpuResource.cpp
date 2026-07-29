@@ -100,11 +100,6 @@ namespace b3d
 		return mask;
 	}
 
-	render::GpuResourceRemainingHazards::TransitionRecipe IGpuResource::BuildTransitionRecipe(const render::GpuHazardStateWithHistory& destinationCommandBufferHazards, GpuQueueId destinationQueueId) const
-	{
-		return mRemainingHazards.BuildTransitionRecipe(destinationCommandBufferHazards, destinationQueueId);
-	}
-
 	void IGpuResource::NotifyUnbound()
 	{
 		bool destroyImmediately;

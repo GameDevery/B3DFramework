@@ -16,8 +16,7 @@ namespace b3d
 
 		/**
 		 * Represents a single subresource (face × mip) of a D3D12Image, so per-subresource usage can be tracked
-		 * individually by the resource tracker. Also stores the subresource's current native resource state, which
-		 * the barrier helper reads and advances when it emits transitions.
+		 * individually by the resource tracker. Also stores the native state committed by the submit thread.
 		 */
 		class D3D12ImageSubresource : public D3D12Resource
 		{
@@ -25,18 +24,35 @@ namespace b3d
 			D3D12ImageSubresource(D3D12ResourceManager* owner, D3D12_RESOURCE_STATES state, const StringView& name = "");
 
 			/**
-			 * Returns the current native state of the subresource.
-			 *
-			 * @note Assumes single-threaded command recording per resource (render thread + internal work context);
-			 *       there is no cross-command-buffer synchronization on this field.
+			 * Returns the native state committed by the most recently submitted command buffer.
+			 * @note Submit thread only.
 			 */
 			D3D12_RESOURCE_STATES GetState() const { return mState; }
 
-			/** Sets the current native state of the subresource. */
+			/** Updates the committed native state. @note Submit thread only. */
 			void SetState(D3D12_RESOURCE_STATES state) { mState = state; }
+
+			/** Returns the queue that most recently committed this state, if one exists. @note Submit thread only. */
+			bool GetOwnerQueueId(GpuQueueId& outQueueId) const
+			{
+				if(!mHasOwnerQueue)
+					return false;
+
+				outQueueId = mOwnerQueueId;
+				return true;
+			}
+
+			/** Sets the queue that most recently committed this state. @note Submit thread only. */
+			void SetOwnerQueueId(GpuQueueId queueId)
+			{
+				mOwnerQueueId = queueId;
+				mHasOwnerQueue = true;
+			}
 
 		private:
 			D3D12_RESOURCE_STATES mState;
+			GpuQueueId mOwnerQueueId;
+			bool mHasOwnerQueue = false;
 		};
 
 		/** Descriptor structure used for initialization of a D3D12Image. */

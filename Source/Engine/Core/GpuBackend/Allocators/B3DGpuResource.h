@@ -153,90 +153,27 @@ namespace b3d
 
 	namespace render
 	{
-		/** Stores hazards that remain on a IGpuResource after it has been submitted on a command buffer. Each queue keeps a copy of its own hazards. */
-		class B3D_EXPORT GpuResourceRemainingHazards
+		/**
+		 * Submission state for a resource. The latest writer keeps the full hazard state, while read-only submissions
+		 * are represented as parallel queue branches within that writer epoch.
+		 */
+		struct B3D_EXPORT GpuResourceSubmissionState
 		{
-		public:
-			/** Unresolved hazards produced by a single queue. */
-			struct PerQueueHazards
-			{
-				GpuQueueId QueueId;
-				GpuHazardState HazardState;
-			};
-
-			/** Adds hazards for a queue, merging them with an existing entry. Resolved states are ignored. */
-			void Add(GpuQueueId queueId, const GpuHazardState& hazards)
-			{
-				if(!hazards.HasUnsafeStages())
-					return;
-
-				for(PerQueueHazards& entry : mEntries)
-				{
-					if(entry.QueueId.Id != queueId.Id)
-						continue;
-
-					entry.HazardState.Merge(hazards);
-					return;
-				}
-
-				PerQueueHazards entry;
-				entry.QueueId = queueId;
-				entry.HazardState = hazards;
-				mEntries.Add(std::move(entry));
-			}
-
-			/** Returns unresolved read/write stages accumulated across all queues. */
+			/** Returns unresolved accesses accumulated by the writer and all parallel readers. */
 			GpuAccessScope GetUnsafeAccessScope() const
 			{
-				GpuAccessScope accesses;
-				for(const PerQueueHazards& entry : mEntries)
-				{
-					accesses.Add(entry.HazardState.GetUnsafeReadStages(), GpuAccessFlag::Read);
-					accesses.Add(entry.HazardState.GetUnsafeWriteStages(), GpuAccessFlag::Write);
-				}
-
-				return accesses;
+				GpuAccessScope scope;
+				scope.Add(WriterHazards.GetUnsafeReadStages() | ReaderStages, GpuAccessFlag::Read);
+				scope.Add(WriterHazards.GetUnsafeWriteStages(), GpuAccessFlag::Write);
+				return scope;
 			}
 
-			/** Returns a mask containing every queue with unresolved hazards. */
-			GpuQueueMask GetQueueMask() const
-			{
-				GpuQueueMask mask = GpuQueueMask::kNone;
-				for(const PerQueueHazards& entry : mEntries)
-					mask |= entry.QueueId;
-
-				return mask;
-			}
-
-			/** Returns all per-queue hazard entries. */
-			const TInlineArray<PerQueueHazards, 2>& GetEntries() const { return mEntries; }
-
-			// Defined after the class, as it embeds the enclosing class by value (which requires it to be complete).
-			struct TransitionRecipe;
-
-			/**
-			 * Replays @p destinationCommandBufferHazards against the stored hazards without mutating either input.
-			 * Hazards produced on another queue remain unresolved for future destination queues: an acquire on
-			 * @p destinationQueueId only makes those accesses safe from that queue's perspective.
-			 */
-			TransitionRecipe BuildTransitionRecipe(const GpuHazardStateWithHistory& destinationCommandBufferHazards, GpuQueueId destinationQueueId) const;
-
-		private:
-			TInlineArray<PerQueueHazards, 2> mEntries;
-		};
-
-		/**
-		 * Everything needed to transition a resource onto a new command buffer: the barriers to issue against each
-		 * queue that previously used the resource, and the hazards that remain unresolved afterwards.
-		 */
-		struct GpuResourceRemainingHazards::TransitionRecipe
-		{
-			/** One recipe per queue that previously used the resource, stamped with that queue's id. */
-			TInlineArray<GpuHazardState::TransitionRecipe, 2> PerQueueTransitionRecipes;
-
-			GpuResourceRemainingHazards RemainingHazards;
-			GpuAccessScope SourceUnsafeAccessScope;
-			GpuQueueMask SourceQueueMask = GpuQueueMask::kNone;
+			GpuHazardState WriterHazards; /**< Full hazards on the queue containing the latest write. */
+			GpuQueueId WriterQueueId; /**< Queue containing the latest write. Valid only when HasWriter is true. */
+			GpuQueueMask AcquiredQueues = GpuQueueMask::kNone; /**< Queues that already acquired the latest write. */
+			GpuQueueMask ReaderQueues = GpuQueueMask::kNone; /**< Queues with read submissions after the latest write. */
+			GpuStageFlags ReaderStages = GpuStageFlag::None; /**< Conservative stage union for ReaderQueues. */
+			bool HasWriter = false; /**< Whether the current epoch was created by a write. */
 		};
 	}
 
@@ -377,11 +314,11 @@ namespace b3d
 		/** Returns queues on which the resource currently has in-flight accesses matching @p useFlags. */
 		GpuQueueMask GetUseInfo(GpuAccessFlags useFlags) const;
 
-		/** Builds a transition recipe by replaying a command buffer's recorded hazard history against the resource's remaining hazards. Submit thread only. */
-		render::GpuResourceRemainingHazards::TransitionRecipe BuildTransitionRecipe(const render::GpuHazardStateWithHistory& destinationCommandBufferHazards, GpuQueueId destinationQueueId) const;
+		/** Returns submission hazards shared by all command buffers using this resource. Submit thread only. */
+		const render::GpuResourceSubmissionState& GetSubmissionState() const { return mSubmissionState; }
 
-		/** Commits a transition recipe's remaining hazards after native boundary synchronization has been constructed. Submit thread only. */
-		void SetRemainingHazards(render::GpuResourceRemainingHazards&& remainingHazards) { mRemainingHazards = std::move(remainingHazards); }
+		/** Commits submission hazards after native boundary synchronization has been constructed. Submit thread only. */
+		void SetSubmissionState(render::GpuResourceSubmissionState&& state) { mSubmissionState = std::move(state); }
 
 		/**
 		 * Queues the resource for destruction. If the resource is currently bound to a command buffer, the actual free
@@ -481,8 +418,8 @@ namespace b3d
 		/** Deletes the resource. Caller must ensure resource is not being used on the GPU or bound to a command buffer. */
 		void DestroyImmediately();
 
-		/** Hazards remaining from the last command buffer submissions, grouped by queue. Submit thread only. */
-		render::GpuResourceRemainingHazards mRemainingHazards;
+		/** Used for issuing transitions between command buffers. Stores information about last submitted state. Submit thread only. */
+		render::GpuResourceSubmissionState mSubmissionState;
 
 		bool mDestroyRequested = false;
 	};

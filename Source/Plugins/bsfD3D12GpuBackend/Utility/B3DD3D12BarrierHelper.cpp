@@ -71,9 +71,12 @@ void D3D12BarrierHelper::RequireSubresourceState(D3D12Image* image, u32 face, u3
 	if(image == nullptr || image->GetD3D12Resource() == nullptr)
 		return;
 
-	D3D12ImageSubresource* const subresource = image->GetD3D12Subresource(face, mipLevel);
-	AppendTransition(image->GetD3D12Resource(), image->GetNativeSubresourceIndex(face, mipLevel), subresource->GetState(), state);
-	subresource->SetState(state);
+	D3D12ResourceTracker* const resourceTracker = static_cast<D3D12ResourceTracker*>(mResourceTracker);
+	D3D12_RESOURCE_STATES before;
+	if(resourceTracker->TryGetTrackedImageSubresourceState(image, face, mipLevel, before))
+		AppendTransition(image->GetD3D12Resource(), image->GetNativeSubresourceIndex(face, mipLevel), before, state);
+
+	resourceTracker->SetTrackedImageSubresourceState(image, face, mipLevel, state);
 }
 
 void D3D12BarrierHelper::RecordBufferBarrier(IGpuBufferResource* buffer, const GpuHazardStageAndAccess& barrier)
@@ -109,6 +112,8 @@ void D3D12BarrierHelper::RecordSubresourceBarrier(IGpuImageResource* image,
 	if(nativeResource == nullptr)
 		return;
 
+	D3D12ResourceTracker* const resourceTracker = static_cast<D3D12ResourceTracker*>(mResourceTracker);
+
 	// Derive the target state from the destination layout when one is provided; otherwise fall back to the
 	// destination stage/access flags (buffer-style derivation covers the shader/transfer cases).
 	const D3D12_RESOURCE_STATES targetState = newLayout != GpuImageLayout::Undefined
@@ -125,8 +130,12 @@ void D3D12BarrierHelper::RecordSubresourceBarrier(IGpuImageResource* image,
 			const u32 face = subresourceRange.BaseArrayLayer + layerIndex;
 			const u32 mipLevel = subresourceRange.BaseMipLevel + levelIndex;
 
-			D3D12ImageSubresource* const subresource = d3d12Image->GetD3D12Subresource(face, mipLevel);
-			const D3D12_RESOURCE_STATES before = subresource->GetState();
+			D3D12_RESOURCE_STATES before;
+			if(!resourceTracker->TryGetTrackedImageSubresourceState(d3d12Image, face, mipLevel, before))
+			{
+				before = oldLayout != GpuImageLayout::Undefined ? D3D12BarrierUtility::GetResourceStateFromLayout(oldLayout, barrier.SourceAccess) : D3D12BarrierUtility::GetBufferStateFromStages(barrier.SourceStages, barrier.SourceAccess);
+				resourceTracker->SetTrackedImageSubresourceState(d3d12Image, face, mipLevel, before);
+			}
 
 			if(before == targetState)
 			{
@@ -134,11 +143,12 @@ void D3D12BarrierHelper::RecordSubresourceBarrier(IGpuImageResource* image,
 				if(isWriteHazard && (before & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0)
 					AppendUavBarrier(nativeResource);
 
+				resourceTracker->SetTrackedImageSubresourceState(d3d12Image, face, mipLevel, targetState);
 				continue;
 			}
 
 			AppendTransition(nativeResource, d3d12Image->GetNativeSubresourceIndex(face, mipLevel), before, targetState);
-			subresource->SetState(targetState);
+			resourceTracker->SetTrackedImageSubresourceState(d3d12Image, face, mipLevel, targetState);
 		}
 	}
 }

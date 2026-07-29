@@ -82,12 +82,19 @@ namespace b3d::render
 		 */
 		D3D12_RESOURCE_STATES GetTrackedBufferState(const D3D12Buffer* buffer) const;
 
+		/** Returns the command-buffer-local native state of an image subresource, if it has been established. */
+		bool TryGetTrackedImageSubresourceState(const D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES& outState) const;
+
+		/** Returns the native state expected when the command buffer begins executing, if it has been established. */
+		bool TryGetInitialImageSubresourceState(const D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES& outState) const;
+
+		/** Updates the command-buffer-local native state of an image subresource. */
+		void SetTrackedImageSubresourceState(const D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES state);
+
 		/**
-		 * Shadow of the base TrackImageUsage that additionally keeps each tracked subresource's native D3D12 state
-		 * in sync with its required layout. The first use of a subresource on a command buffer seeds the shared
-		 * tracker's layout without invoking the barrier hooks (Vulkan reconciles the image's global layout at submit
-		 * time instead); D3D12 advances native states at record time, so the initial transition is emitted here.
-		 * All D3D12 call sites must use this overload.
+		 * Shadow of the base TrackImageUsage that additionally keeps each subresource's command-buffer-local D3D12
+		 * state in sync with its required layout. The first use seeds local state; submission transitions reconcile
+		 * it with state committed by previously submitted command buffers. All D3D12 call sites must use this overload.
 		 */
 		void TrackImageUsage(D3D12Image* image, const GpuTextureSubresourceRange& subresourceRange, GpuImageLayout layout, GpuImageLayout finalLayout, GpuResourceUseFlags useFlags, GpuAccessFlags accessFlags, D3D12BarrierHelper& barrierHelper);
 
@@ -99,6 +106,19 @@ namespace b3d::render
 		 * state stored on the buffer itself) desynchronizes whenever recording order differs from submission order.
 		 */
 		UnorderedMap<const D3D12Buffer*, D3D12_RESOURCE_STATES> mBufferStates;
+
+		struct ImageSubresourceState
+		{
+			ImageSubresourceState(D3D12_RESOURCE_STATES state)
+				: Initial(state), Current(state)
+			{ }
+
+			D3D12_RESOURCE_STATES Initial;
+			D3D12_RESOURCE_STATES Current;
+		};
+
+		/** Native image states local to this command buffer. */
+		UnorderedMap<const D3D12ImageSubresource*, ImageSubresourceState> mImageSubresourceStates;
 	};
 
 	/** @} */

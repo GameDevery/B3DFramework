@@ -21,8 +21,8 @@ namespace b3d::render
 	 *
 	 * D3D12 fuses image layout and access into a single per-(sub)resource D3D12_RESOURCE_STATES value, and a
 	 * transition barrier both moves the state and synchronizes the accesses on either side. Consequently:
-	 *  - Image barriers become per-subresource transitions from the state stored on the D3D12ImageSubresource (which
-	 *    is guaranteed to match what was last emitted) to the state derived from the destination layout/access.
+	 *  - Image barriers become per-subresource transitions between states stored on the command buffer's
+	 *    D3D12ResourceTracker. Committed D3D12ImageSubresource state is reconciled at submission.
 	 *  - Same-state write hazards (UAV -> UAV) become D3D12_RESOURCE_BARRIER_TYPE_UAV barriers.
 	 *  - Buffer state changes are driven by RequireBufferTransition() from D3D12ResourceTracker::TrackBufferUsage,
 	 *    because buffers carry no layout in the core model and read->read state changes (e.g. COPY_SOURCE -> SRV)
@@ -63,10 +63,8 @@ namespace b3d::render
 		void RequireBufferTransition(D3D12Buffer* buffer, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
 		/**
-		 * Ensures the image subresource's native state equals @p state, appending a transition if it does not. The
-		 * subresource's tracked state is advanced immediately (record order). Used for the first use of a subresource
-		 * on a command buffer, which seeds the shared tracker's layout without invoking the barrier hooks (see
-		 * D3D12ResourceTracker::TrackImageUsage).
+		 * Ensures the image subresource's command-buffer-local native state equals @p state, appending a transition
+		 * if it does not. The first use only seeds local state; submission reconciles it with committed state.
 		 */
 		void RequireSubresourceState(D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES state);
 
@@ -80,9 +78,8 @@ namespace b3d::render
 		void RecordBufferBarrier(IGpuBufferResource* buffer, const GpuHazardStageAndAccess& barrier);
 
 		/**
-		 * CRTP hook: accumulates per-subresource native transitions from each subresource's stored state to the state
-		 * derived from @p newLayout + destination access (or from the destination stages when the layout is
-		 * Undefined). Same-state write hazards become UAV barriers. Called by the shared low-level path.
+		 * CRTP hook: accumulates per-subresource native transitions from command-buffer-local state to the state
+		 * derived from @p newLayout and destination access. Same-state write hazards become UAV barriers.
 		 */
 		void RecordSubresourceBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange,
 			const GpuHazardStageAndAccess& barrier, GpuImageLayout& oldLayout, GpuImageLayout newLayout);

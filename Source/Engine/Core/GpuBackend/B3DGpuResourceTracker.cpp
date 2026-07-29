@@ -9,6 +9,10 @@
 using namespace b3d;
 using namespace b3d::render;
 
+GpuSubmissionTransition::GpuSubmissionTransition(IGpuResource& stateResource, const GpuAccessScope& destinationFirstAccessScope, const GpuAccessScope& destinationAllAccessScope)
+	: StateResource(&stateResource), DestinationFirstAccessScope(destinationFirstAccessScope), DestinationAllAccessScope(destinationAllAccessScope)
+{ }
+
 GpuHazardStageState::GpuHazardStageState()
 {
 	// Everything is safe to access by default
@@ -212,33 +216,6 @@ GpuHazardState::TransitionRecipe GpuHazardState::BuildTransitionRecipe(GpuQueueI
 	// currently requires user to manually provide queue sync masks, so this is not relevant at the moment, but may be if we decide to fully rely on the automatic system.
 
 	return result;
-}
-
-GpuResourceRemainingHazards::TransitionRecipe GpuResourceRemainingHazards::BuildTransitionRecipe(const GpuHazardStateWithHistory& destinationCommandBufferHazards, GpuQueueId destinationQueueId) const
-{
-	TransitionRecipe transitionRecipe;
-	transitionRecipe.SourceUnsafeAccessScope = GetUnsafeAccessScope();
-	transitionRecipe.SourceQueueMask = GetQueueMask();
-
-	for(const PerQueueHazards& perQueueHazard : mEntries)
-	{
-		transitionRecipe.PerQueueTransitionRecipes.Add(perQueueHazard.HazardState.BuildTransitionRecipe(perQueueHazard.QueueId, destinationCommandBufferHazards));
-
-		if(perQueueHazard.QueueId.Id == destinationQueueId.Id)
-		{
-			transitionRecipe.RemainingHazards.Add(perQueueHazard.QueueId, transitionRecipe.PerQueueTransitionRecipes.back().RemainingHazardState);
-		}
-		else
-		{
-			// A release/acquire makes the source queue's hazards safe only for this destination queue. Preserve the
-			// original source state so another queue that later consumes the resource still waits for the producer.
-			// TODO(gpu-hazards): Track per-destination queue perspectives to avoid conservatively reacquiring the same
-			// source hazard on repeated submissions to destinationQueueId.
-			transitionRecipe.RemainingHazards.Add(perQueueHazard.QueueId, perQueueHazard.HazardState);
-		}
-	}
-
-	return transitionRecipe;
 }
 
 #if B3D_VERIFY_BARRIERS

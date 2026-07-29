@@ -149,6 +149,7 @@ void D3D12ResourceTracker::Clear()
 {
 	TGpuResourceTracker<D3D12BarrierHelper>::Clear();
 	mBufferStates.clear();
+	mImageSubresourceStates.clear();
 }
 
 D3D12_RESOURCE_STATES D3D12ResourceTracker::GetTrackedBufferState(const D3D12Buffer* buffer) const
@@ -157,15 +158,44 @@ D3D12_RESOURCE_STATES D3D12ResourceTracker::GetTrackedBufferState(const D3D12Buf
 	return it != mBufferStates.end() ? it->second : D3D12_RESOURCE_STATE_COMMON;
 }
 
+bool D3D12ResourceTracker::TryGetTrackedImageSubresourceState(const D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES& outState) const
+{
+	const D3D12ImageSubresource* const subresource = image->GetD3D12Subresource(face, mipLevel);
+	const auto it = mImageSubresourceStates.find(subresource);
+	if(it == mImageSubresourceStates.end())
+		return false;
+
+	outState = it->second.Current;
+	return true;
+}
+
+bool D3D12ResourceTracker::TryGetInitialImageSubresourceState(const D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES& outState) const
+{
+	const D3D12ImageSubresource* const subresource = image->GetD3D12Subresource(face, mipLevel);
+	const auto it = mImageSubresourceStates.find(subresource);
+	if(it == mImageSubresourceStates.end())
+		return false;
+
+	outState = it->second.Initial;
+	return true;
+}
+
+void D3D12ResourceTracker::SetTrackedImageSubresourceState(const D3D12Image* image, u32 face, u32 mipLevel, D3D12_RESOURCE_STATES state)
+{
+	const D3D12ImageSubresource* const subresource = image->GetD3D12Subresource(face, mipLevel);
+	const auto result = mImageSubresourceStates.emplace(subresource, ImageSubresourceState(state));
+	if(!result.second)
+		result.first->second.Current = state;
+}
+
 void D3D12ResourceTracker::TrackImageUsage(D3D12Image* image, const GpuTextureSubresourceRange& subresourceRange, GpuImageLayout layout, GpuImageLayout finalLayout, GpuResourceUseFlags useFlags, GpuAccessFlags accessFlags, D3D12BarrierHelper& barrierHelper)
 {
 	// Shared bookkeeping first: registers the binding (keeping the image and its subresources alive), detects layout
 	// changes/hazards and queues the matching native barriers via the helper's Record hooks.
 	TGpuResourceTracker<D3D12BarrierHelper>::TrackImageUsage(image, subresourceRange, layout, finalLayout, useFlags, accessFlags, barrierHelper);
 
-	// The first use of a subresource seeds the shared tracker's layout without invoking the barrier hooks, so the
-	// native state may still not match. Ensure it does; this is a no-op for subresources the shared path already
-	// transitioned (their native state was advanced by the Record hook).
+	// The first use of a subresource seeds the shared tracker's layout without invoking the barrier hooks. Establish
+	// the matching command-buffer-local native state; the submit-time visitor reconciles it with committed state.
 	for(u32 layerIndex = 0; layerIndex < subresourceRange.ArrayLayerCount; layerIndex++)
 	{
 		for(u32 levelIndex = 0; levelIndex < subresourceRange.MipLevelCount; levelIndex++)
