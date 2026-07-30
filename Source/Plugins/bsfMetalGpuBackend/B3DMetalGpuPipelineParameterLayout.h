@@ -57,8 +57,6 @@ namespace b3d
 			GpuParameterType Type = GpuParameterType::Unknown;
 			/** Metal object type (GPOT_*) for the binding; drives read/write usage flags. */
 			GpuParameterObjectType ObjectType = GPOT_UNKNOWN;
-			/** Element format for typed buffers; the fallback view format when the bound view specifies none. */
-			GpuBufferFormat ElementType = BF_UNKNOWN;
 			/** Array length of this slot; 1 for scalar bindings. */
 			u32 ArraySize = 1;
 			/** First element in the parameter set's dense resolved-resource cache. */

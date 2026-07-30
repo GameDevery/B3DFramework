@@ -255,16 +255,20 @@ static void HIDDeviceAddedCallback(void* context, IOReturn result, void* sender,
 		CFRelease(elements);
 	}
 
-	// Create a queue
+	// Create a queue. IOKit returns null when the device cannot be opened - typically a device the
+	// process has no Input Monitoring authorization for - so the device is still registered (its axes
+	// are polled directly), just without queued button/hat events.
 	newDevice.QueueRef = IOHIDQueueCreate(kCFAllocatorDefault, device, 128, kIOHIDOptionsTypeNone);
+	if(newDevice.QueueRef != nullptr)
+	{
+		for(auto& button : newDevice.Buttons)
+			IOHIDQueueAddElement(newDevice.QueueRef, button.Ref);
 
-	for(auto& button : newDevice.Buttons)
-		IOHIDQueueAddElement(newDevice.QueueRef, button.Ref);
+		for(auto& hat : newDevice.Hats)
+			IOHIDQueueAddElement(newDevice.QueueRef, hat.Ref);
 
-	for(auto& hat : newDevice.Hats)
-		IOHIDQueueAddElement(newDevice.QueueRef, hat.Ref);
-
-	IOHIDQueueStart(newDevice.QueueRef);
+		IOHIDQueueStart(newDevice.QueueRef);
+	}
 
 	// Assign a device ID
 	if(data->Type == HIDType::Gamepad)
@@ -305,8 +309,11 @@ static void HIDDeviceRemovedCallback(void* context, IOReturn result, void* sende
 
 	if(iterFind != data->Devices.end())
 	{
-		IOHIDQueueStop(iterFind->QueueRef);
-		CFRelease(iterFind->QueueRef);
+		if(iterFind->QueueRef != nullptr)
+		{
+			IOHIDQueueStop(iterFind->QueueRef);
+			CFRelease(iterFind->QueueRef);
+		}
 
 		// Release any input the device was holding at the moment of removal
 		if(data->Type == HIDType::Gamepad)
@@ -640,6 +647,9 @@ HIDManager::~HIDManager()
 
 	for(auto& device : mData.Devices)
 	{
+		if(device.QueueRef == nullptr)
+			continue;
+
 		IOHIDQueueStop(device.QueueRef);
 		CFRelease(device.QueueRef);
 	}
@@ -766,8 +776,9 @@ void HIDManager::Capture(IOHIDDeviceRef device, bool ignoreEvents)
 			}
 		}
 
-		// Read queued elements (buttons and hats)
-		while(true)
+		// Read queued elements (buttons and hats). Devices whose queue could not be created report no
+		// button or hat events; see HIDDeviceAddedCallback.
+		while(entry.QueueRef != nullptr)
 		{
 			IOHIDValueRef valueRef = IOHIDQueueCopyNextValueWithTimeout(entry.QueueRef, 0);
 			if(!valueRef)

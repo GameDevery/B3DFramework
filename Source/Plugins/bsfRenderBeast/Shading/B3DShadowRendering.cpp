@@ -1777,16 +1777,21 @@ namespace b3d
 				adjustedProj[1][1] = -proj[1][1];
 			}
 
-			bool renderAllFacesAtOnce = caps.HasCapability(RSC_RENDER_TARGET_LAYERS);
+			bool renderAllFacesAtOnce = caps.HasCapability(RSC_RENDER_TARGET_LAYERS) && caps.HasCapability(RSC_GEOMETRY_PROGRAM);
 
 			GpuBufferSuballocation shadowCubeMatricesBuffer;
 			if(renderAllFacesAtOnce)
 				shadowCubeMatricesBuffer = gShadowCubeMatricesUniformDefinition.AllocateTransient();
 
-			gShadowUniformDefinition.gDepthBias.Set(shadowUniforms, shadowInfo.DepthBias);
-			gShadowUniformDefinition.gInvDepthRange.Set(shadowUniforms, 1.0f / shadowInfo.DepthRange);
-			gShadowUniformDefinition.gMatViewProj.Set(shadowUniforms, Matrix4::kIdentity);
-			gShadowUniformDefinition.gNDCZToDeviceZ.Set(shadowUniforms, RendererView::GetNdczToDeviceZ());
+			auto fnPopulateShadowUniforms = [&shadowInfo](GpuBufferMappedScope& uniforms, const Matrix4& matViewProj)
+			{
+				gShadowUniformDefinition.gDepthBias.Set(uniforms, shadowInfo.DepthBias);
+				gShadowUniformDefinition.gInvDepthRange.Set(uniforms, 1.0f / shadowInfo.DepthRange);
+				gShadowUniformDefinition.gMatViewProj.Set(uniforms, matViewProj);
+				gShadowUniformDefinition.gNDCZToDeviceZ.Set(uniforms, RendererView::GetNdczToDeviceZ());
+			};
+
+			fnPopulateShadowUniforms(shadowUniforms, Matrix4::kIdentity);
 
 			ConvexVolume frustums[6];
 			Vector<Plane> boundingPlanes;
@@ -1858,7 +1863,8 @@ namespace b3d
 				}
 				else
 				{
-					gShadowUniformDefinition.gMatViewProj.Set(shadowUniforms, shadowViewProj);
+					GpuBufferMappedScope faceUniforms = gShadowUniformDefinition.AllocateTransient().Map();
+					fnPopulateShadowUniforms(faceUniforms, shadowViewProj);
 
 					RenderTextureCreateInformation rtDesc;
 					rtDesc.DepthStencilSurface.Texture = cubemap.GetTexture();

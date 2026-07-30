@@ -439,13 +439,11 @@ namespace b3d
 			Lock lock(mSetMutex);
 
 			GpuParameterObjectType objectType = GPOT_UNKNOWN;
-			GpuBufferFormat reflectedElementType = BF_UNKNOWN;
 			for (const MetalArgumentBufferBinding& binding : mMetalLayout->GetBindings())
 			{
 				if (binding.Type == GpuParameterType::StorageBuffer && binding.Slot == slot)
 				{
 					objectType = binding.ObjectType;
-					reflectedElementType = binding.ElementType;
 					break;
 				}
 			}
@@ -469,7 +467,6 @@ namespace b3d
 				existing->Buffer = buffer;
 				existing->View = view;
 				existing->ObjectType = objectType;
-				existing->ElementType = reflectedElementType;
 			}
 			else
 			{
@@ -479,7 +476,6 @@ namespace b3d
 				binding.Buffer = buffer;
 				binding.View = view;
 				binding.ObjectType = objectType;
-				binding.ElementType = reflectedElementType;
 				mStorageBuffers.push_back(std::move(binding));
 			}
 
@@ -920,10 +916,10 @@ namespace b3d
 				if (binding.ObjectType == GPOT_BYTE_BUFFER || binding.ObjectType == GPOT_RWBYTE_BUFFER)
 				{
 					// Typed buffers (texture_buffer in MSL) encode a texture resource ID, not a GPU
-					// address. The view interprets the buffer with the caller's format, falling back to
-					// the format the shader was reflected with.
-					const GpuBufferFormat format = binding.View.Format != BF_UNKNOWN
-						? binding.View.Format : binding.ElementType;
+					// address. An unspecified format is resolved against the buffer's own element format
+					// by the view lookup; the reflected type only describes the component, so it cannot
+					// stand in for a multi-component buffer format here.
+					const GpuBufferFormat format = binding.View.Format;
 					const bool writable = binding.ObjectType == GPOT_RWBYTE_BUFFER;
 					id<MTLTexture> view = mtlBuffer
 						? mtlBuffer->GetTextureBufferView(format, binding.View.Offset, binding.View.Range, writable)

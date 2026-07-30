@@ -14,6 +14,7 @@ namespace b3d
 		class MetalGpuQueue;
 		class MetalHeapAllocator;
 		class MetalResourceManager;
+		class MetalClearPipeline;
 
 		/** @addtogroup MetalGpuBackend
 		 *  @{
@@ -123,6 +124,15 @@ namespace b3d
 			 * heap-backed wrappers release their spans before the heaps are destroyed.
 			 */
 			MetalResourceManager& GetResourceManager() const { B3D_ASSERT(mResourceManager != nullptr); return *mResourceManager; }
+
+			/**
+			 * Returns the device-owned internal clear pipeline, used by
+			 * @c MetalGpuCommandBuffer::ClearViewport to clear a sub-rect of the render target - Metal's
+			 * only native clear is the render pass load action, which always covers a whole attachment.
+			 * Created in @c Initialize and valid for the lifetime of the device; its shader library is
+			 * compiled lazily on the first partial clear, so titles that never issue one pay nothing.
+			 */
+			MetalClearPipeline& GetClearPipeline() const { B3D_ASSERT(mClearPipeline != nullptr); return *mClearPipeline; }
 
 			/**
 			 * Returns @c true once @c ~MetalGpuDevice has started executing. Late resource destructors
@@ -266,6 +276,11 @@ namespace b3d
 			// reset before mHeapAllocator in teardown so heap-backed wrappers free their allocator
 			// spans before the heaps that back them are destroyed.
 			TUnique<MetalResourceManager> mResourceManager;
+
+			// Shader library plus pipeline / depth-stencil state caches backing ClearViewport's
+			// sub-rect clear. Constructed in Initialize and destroyed before the resource manager,
+			// since its Metal objects are created straight off the MTLDevice.
+			TUnique<MetalClearPipeline> mClearPipeline;
 
 			QueueInfo mQueueInfos[GQT_COUNT];
 			GpuDeviceCapabilities mCapabilities;

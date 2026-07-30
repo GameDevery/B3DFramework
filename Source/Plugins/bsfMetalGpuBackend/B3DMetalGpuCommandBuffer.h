@@ -21,6 +21,7 @@ namespace b3d
 		class IMetalRenderWindowSurface;
 		class MetalVertexInput;
 		class MetalImage;
+		class MetalGpuBuffer;
 
 		/** @addtogroup MetalGpuBackend
 		 *  @{
@@ -225,6 +226,13 @@ namespace b3d
 			 *								vertex description that could not be resolved on Metal.
 			 */
 			TShared<MetalVertexInput> ResolveVertexInputForDraw(bool& outSkipDraw);
+
+			/**
+			 * Resolves @c mBoundVertexBuffers to their native handles and binds any that differ from what
+			 * the current render encoder already holds. Called at the start of every draw, before barriers
+			 * are executed, so a restarted render pass replays an up-to-date binding list.
+			 */
+			void ApplyVertexBuffersToRenderEncoder();
 #endif
 
 			MetalGpuDevice& mGpuDevice;
@@ -242,6 +250,17 @@ namespace b3d
 			TShared<MetalGpuGraphicsPipelineState> mBoundGraphicsPipeline;
 			TShared<GpuComputePipelineState> mBoundComputePipeline;
 			TShared<GpuBuffer> mBoundIndexBuffer;
+			/**
+			 * Vertex buffers bound by @c SetVertexBuffers, indexed by engine stream index; null slots are
+			 * legal and mean "no buffer bound for this stream".
+			 *
+			 * Deliberately holds the engine-level buffers rather than resolved @c id<MTLBuffer> handles:
+			 * the engine may recreate a bound buffer's backing between the bind and the draw, which is
+			 * exactly what @c GpuBufferUtility::Write does on its discard path when the target is already
+			 * bound. A handle resolved at bind time would keep pointing at the retired allocation and the
+			 * draw would read stale data. Mirrors @c VulkanGpuCommandBuffer::mVertexBuffers.
+			 */
+			TInlineArray<TShared<MetalGpuBuffer>, 4> mBoundVertexBuffers;
 			TShared<VertexDescription> mBoundVertexDescription;
 			/**
 			 * A'3: parameter sets indexed by @c GpuParameterSet::GetSet(). Replaces the former single

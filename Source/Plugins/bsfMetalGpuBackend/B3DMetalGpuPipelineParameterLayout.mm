@@ -174,7 +174,6 @@ namespace b3d
 						record.Slot = entry->Slot;
 						record.Type = entry->Type;
 						record.ObjectType = entry->ObjectType;
-					record.ElementType = entry->ElementType;
 						record.ArraySize = entry->ArraySize;
 						record.DynamicOffsetIndex = entry->DynamicOffsetIndex;
 						record.StageMask = BuildStageMask(entry->Usage);

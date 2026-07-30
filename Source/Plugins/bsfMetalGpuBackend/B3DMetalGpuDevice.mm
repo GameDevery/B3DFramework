@@ -8,6 +8,7 @@
 #include "B3DMetalTexture.h"
 #include "B3DMetalHeapAllocator.h"
 #include "B3DMetalResourceManager.h"
+#include "B3DMetalClearPipeline.h"
 #include "B3DMetalGpuProgram.h"
 #include "B3DMetalGpuPipelineState.h"
 #include "Math/B3DMath.h"
@@ -188,6 +189,10 @@ namespace b3d
 				}
 				mImpl->DeferredReleases.clear();
 			}
+
+			// Release the clear pipeline's library and cached states while the MTLDevice they were
+			// created against is still alive.
+			mClearPipeline.reset();
 
 			// Tear down the resource manager before the heap allocator. Any tracked wrappers still
 			// owned by the manager release their native handles and return their allocator spans to
@@ -561,6 +566,11 @@ namespace b3d
 			// after the heap allocator (wrappers sub-allocate from it) and torn down before it in the
 			// destructor so heap-backed wrappers free their spans before the heaps are destroyed.
 			mResourceManager = B3DMakeUnique<MetalResourceManager>(*this);
+
+			// Backs ClearViewport's sub-rect clear. Construction is trivial - the shader library and
+			// pipeline caches are built on the first partial clear, so the cost is only paid by titles
+			// that issue one.
+			mClearPipeline = B3DMakeUnique<MetalClearPipeline>(*this);
 
 			// Shared zero-filled null vertex buffer. Bound by the command buffer at a vertex-input null
 			// stream's slot for shader inputs with no matching vertex-buffer element (see

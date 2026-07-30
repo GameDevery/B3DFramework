@@ -274,7 +274,17 @@ namespace b3d
 
 		id<MTLTexture> MetalGpuBuffer::GetTextureBufferView(GpuBufferFormat format, u32 offset, u32 range, bool writable)
 		{
-			return mBuffer != nullptr ? mBuffer->GetTextureBufferView(format, offset, range, writable) : nil;
+			if (mBuffer == nullptr)
+				return nil;
+
+			// An unspecified view format means "interpret the buffer with its own element format", matching
+			// GpuBufferViewInformation::Format and VulkanGpuBuffer::GetOrCreateView. Shader reflection cannot
+			// supply this: texture_buffer<float> reports only the component type, so a float4 buffer would
+			// otherwise be viewed as single-component and read back garbage.
+			if (format == BF_UNKNOWN)
+				format = mInformation.SimpleStorage.Format;
+
+			return mBuffer->GetTextureBufferView(format, offset, range, writable);
 		}
 	} // namespace render
 } // namespace b3d

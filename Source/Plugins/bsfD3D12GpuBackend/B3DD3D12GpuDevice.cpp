@@ -719,6 +719,7 @@ void D3D12GpuDevice::InitializeCapabilities()
 	mCapabilities.MinimumUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
 
 	mCapabilities.SetCapability(RSC_TEXTURE_COMPRESSION_BC);
+	mCapabilities.SetCapability(RSC_GEOMETRY_PROGRAM);
 	mCapabilities.SetCapability(RSC_COMPUTE_PROGRAM);
 	mCapabilities.SetCapability(RSC_LOAD_STORE);
 	mCapabilities.SetCapability(RSC_LOAD_STORE_MSAA);

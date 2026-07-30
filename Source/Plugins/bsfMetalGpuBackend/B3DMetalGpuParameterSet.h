@@ -68,8 +68,6 @@ namespace b3d
 				GpuBufferViewInformation View;
 				/** Reflected slot type: structured buffers bind by GPU address, typed ones through a texture-buffer view. */
 				GpuParameterObjectType ObjectType = GPOT_UNKNOWN;
-				/** Reflected element format, used as the view format when the bound view specifies none. */
-				GpuBufferFormat ElementType = BF_UNKNOWN;
 			};
 
 			/** Record of a single texture binding (sampled or storage). */

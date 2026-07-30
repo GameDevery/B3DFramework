@@ -14,6 +14,7 @@
 #include "B3DMetalGpuTimelineFence.h"
 #include "B3DMetalRenderTexture.h"
 #include "B3DMetalRenderWindowSurface.h"
+#include "B3DMetalClearPipeline.h"
 #include "B3DMetalUtility.h"
 #include "B3DIMetalRenderWindowSurface.h"
 #include "GpuBackend/B3DRenderWindow.h"
@@ -856,11 +857,24 @@ namespace b3d
 
 		void MetalGpuCommandBuffer::SetVertexBuffers(u32 index, TShared<GpuBuffer>* buffers, u32 bufferCount)
 		{
+			EnsureValidThread();
+
+			// Only record the engine-level buffers here; the native handles are resolved in
+			// ApplyVertexBuffersToRenderEncoder at draw time. See mBoundVertexBuffers for why.
+			const u32 endIndex = index + bufferCount;
+			while ((u32)mBoundVertexBuffers.Size() < endIndex)
+				mBoundVertexBuffers.Add(nullptr);
+
+			for (u32 bufferIndex = 0; bufferIndex < bufferCount; bufferIndex++)
+				mBoundVertexBuffers[index + bufferIndex] = std::static_pointer_cast<MetalGpuBuffer>(buffers[bufferIndex]);
+		}
+
+		void MetalGpuCommandBuffer::ApplyVertexBuffersToRenderEncoder()
+		{
 			// B1: setVertexBuffer:offset:atIndex: retains transient objects inside the encoder state
 			// snapshot; drain them locally so they do not survive past the call under the fiber scheduler.
 			@autoreleasepool
 			{
-			EnsureValidThread();
 			if (mImpl->RenderEncoder == nil)
 				return;
 
@@ -872,9 +886,9 @@ namespace b3d
 			// where it collided with parameter-set argument buffers and left slot 16 unbound.
 			const u32 baseIndex = kMetalVertexBufferSlotBase;
 
-			for (u32 bufferIndex = 0; bufferIndex < bufferCount; bufferIndex++)
+			for (u32 streamIndex = 0; streamIndex < (u32)mBoundVertexBuffers.Size(); streamIndex++)
 			{
-				auto metalBuffer = std::static_pointer_cast<MetalGpuBuffer>(buffers[bufferIndex]);
+				const TShared<MetalGpuBuffer>& metalBuffer = mBoundVertexBuffers[streamIndex];
 				id<MTLBuffer> buffer = metalBuffer ? metalBuffer->GetMetalBuffer() : nil;
 				if (buffer == nil)
 					continue;
@@ -883,13 +897,16 @@ namespace b3d
 				if (resource != nullptr)
 					mResourceTracker.TrackBufferUsage(resource, GpuResourceUseFlag::VertexBuffer, GpuAccessFlag::Read, mBarrierHelper);
 
-				const NSUInteger metalIndex = baseIndex + index + bufferIndex;
-				[mImpl->RenderEncoder setVertexBuffer:buffer offset:0 atIndex:metalIndex];
+				const NSUInteger metalIndex = baseIndex + streamIndex;
 
 				auto existing = std::find_if(mImpl->VertexBufferBindings.begin(), mImpl->VertexBufferBindings.end(),
 					[metalIndex](const Impl::VertexBufferBinding& binding) { return binding.Index == metalIndex; });
 				if (existing != mImpl->VertexBufferBindings.end())
 				{
+					// The encoder already holds this exact allocation; skip the redundant native call.
+					if (existing->Buffer == buffer && existing->Offset == 0)
+						continue;
+
 					existing->Buffer = buffer;
 					existing->Offset = 0;
 				}
@@ -900,10 +917,9 @@ namespace b3d
 					binding.Index = metalIndex;
 					mImpl->VertexBufferBindings.push_back(binding);
 				}
-			}
 
-			if (!ExecutePendingBarriers())
-				return;
+				[mImpl->RenderEncoder setVertexBuffer:buffer offset:0 atIndex:metalIndex];
+			}
 			} // @autoreleasepool
 		}
 
@@ -1010,6 +1026,11 @@ namespace b3d
 			// runloop tick so accumulation across frames would otherwise be visible.
 			@autoreleasepool
 			{
+			// Resolve vertex-buffer handles now rather than at SetVertexBuffers time - the engine may have
+			// recreated a bound buffer's backing in between. Must precede the barrier flush so the usage it
+			// tracks is included, and so a pass restart replays the refreshed binding list.
+			ApplyVertexBuffersToRenderEncoder();
+
 			for (const TShared<GpuParameterSet>& slotSet : mBoundParameterSets)
 			{
 				if (slotSet)
@@ -1094,6 +1115,9 @@ namespace b3d
 			// residency emission, and the draw encode.
 			@autoreleasepool
 			{
+			// See Draw() - vertex-buffer handles are resolved per draw, ahead of the barrier flush.
+			ApplyVertexBuffersToRenderEncoder();
+
 			auto metalIndex = std::static_pointer_cast<MetalGpuBuffer>(mBoundIndexBuffer);
 			MetalBuffer* indexResource = metalIndex ? metalIndex->GetMetalResource() : nullptr;
 			if (indexResource != nullptr)
@@ -1387,6 +1411,7 @@ namespace b3d
 #endif
 			mImpl->RestartRenderPassDescriptor = nil;
 			mImpl->VertexBufferBindings.clear();
+			mBoundVertexBuffers.Clear();
 			// The normalized viewport intentionally survives pass boundaries; it is re-applied in
 			// pixel units for the new pass once the encoder is open.
 			mImpl->HasScissor = false;
@@ -1710,6 +1735,7 @@ namespace b3d
 #endif
 			mImpl->RestartRenderPassDescriptor = nil;
 			mImpl->VertexBufferBindings.clear();
+			mBoundVertexBuffers.Clear();
 			// The normalized viewport intentionally survives pass boundaries (see SetViewport).
 			mImpl->HasScissor = false;
 			mImpl->VisibilityMode = MTLVisibilityResultModeDisabled;
@@ -1825,8 +1851,82 @@ namespace b3d
 				return;
 			}
 
-			B3D_LOG(Error, LogRenderBackend,
-				"MetalGpuCommandBuffer::ClearViewport cannot clear a partial viewport without the backend's internal clear pipeline.");
+			// Metal's only native clear is the render pass load action, which always covers a whole
+			// attachment, so a sub-rect clear has to be drawn. The clear pipeline rasterizes a single
+			// oversized triangle through the current viewport; color comes from the fragment shader,
+			// depth from its [[depth]] output, and stencil from the depth-stencil state's replace
+			// operation against the reference value set below.
+			@autoreleasepool
+			{
+			const bool clearsDepth = mask.IsSet(RT_DEPTH) && mRenderPassPipelineKey.DepthFormat != 0;
+			const bool clearsStencil = mask.IsSet(RT_STENCIL) && mRenderPassPipelineKey.StencilFormat != 0;
+
+			MetalClearPipeline::Key key;
+			std::memcpy(key.ColorFormats, mRenderPassPipelineKey.ColorFormats, sizeof(key.ColorFormats));
+			key.DepthFormat = mRenderPassPipelineKey.DepthFormat;
+			key.StencilFormat = mRenderPassPipelineKey.StencilFormat;
+			key.SampleCount = mRenderPassPipelineKey.SampleCount;
+			key.WritesDepth = clearsDepth;
+			for (u32 attachmentIndex = 0; attachmentIndex < B3D_MAXIMUM_RENDER_TARGET_COUNT; attachmentIndex++)
+			{
+				const RenderSurfaceMaskBits bit = (RenderSurfaceMaskBits)(RT_COLOR0 << attachmentIndex);
+				if (mask.IsSet(bit) && mRenderPassPipelineKey.ColorFormats[attachmentIndex] != 0)
+					key.ColorWriteMask |= (u8)(1u << attachmentIndex);
+			}
+
+			if (key.ColorWriteMask == 0 && !clearsDepth && !clearsStencil)
+				return;
+
+			MetalClearPipeline& clearPipeline = mGpuDevice.GetClearPipeline();
+			id<MTLRenderPipelineState> pipelineState = clearPipeline.GetOrCreatePipelineState(key);
+			id<MTLDepthStencilState> depthStencilState = clearPipeline.GetOrCreateDepthStencilState(clearsDepth, clearsStencil);
+			if (pipelineState == nil || depthStencilState == nil)
+				return;
+
+			MetalClearPipeline::Parameters parameters;
+			parameters.Color[0] = color.R;
+			parameters.Color[1] = color.G;
+			parameters.Color[2] = color.B;
+			parameters.Color[3] = color.A;
+			parameters.Depth = depth;
+
+			// The engine's clear is defined by the viewport alone, so an unrelated scissor left over
+			// from earlier draws must not narrow it. Restore whatever was set once the clear is drawn.
+			const MTLScissorRect previousScissor = mImpl->Scissor;
+			const bool hadScissor = mImpl->HasScissor;
+
+			MTLScissorRect clearScissor;
+			clearScissor.x = (NSUInteger)mImpl->Viewport.originX;
+			clearScissor.y = (NSUInteger)mImpl->Viewport.originY;
+			clearScissor.width = (NSUInteger)mImpl->Viewport.width;
+			clearScissor.height = (NSUInteger)mImpl->Viewport.height;
+			[mImpl->RenderEncoder setScissorRect:clearScissor];
+
+			[mImpl->RenderEncoder setRenderPipelineState:pipelineState];
+			[mImpl->RenderEncoder setDepthStencilState:depthStencilState];
+			[mImpl->RenderEncoder setCullMode:MTLCullModeNone];
+			[mImpl->RenderEncoder setTriangleFillMode:MTLTriangleFillModeFill];
+			[mImpl->RenderEncoder setDepthBias:0.0f slopeScale:0.0f clamp:0.0f];
+			[mImpl->RenderEncoder setStencilReferenceValue:stencil];
+			[mImpl->RenderEncoder setFragmentBytes:&parameters
+				length:sizeof(parameters)
+				atIndex:kMetalClearParametersBufferSlot];
+			[mImpl->RenderEncoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+
+			// Every other piece of state the clear touched (pipeline, depth-stencil state, cull mode,
+			// fill mode, depth bias, stencil reference) is re-applied unconditionally by the next draw,
+			// so only the scissor needs restoring here. With no scissor previously set, widen back to
+			// the whole pass - Metal has no way to disable the test outright.
+			if (hadScissor)
+			{
+				[mImpl->RenderEncoder setScissorRect:previousScissor];
+			}
+			else
+			{
+				DisableScissorTest();
+				mImpl->HasScissor = false;
+			}
+			} // @autoreleasepool
 		}
 
 		void MetalGpuCommandBuffer::EnableScissorTest(u32 left, u32 top, u32 right, u32 bottom)
@@ -3147,6 +3247,7 @@ namespace b3d
 			mImpl->PendingEventSignals.clear();
 			mImpl->RestartRenderPassDescriptor = nil;
 			mImpl->VertexBufferBindings.clear();
+			mBoundVertexBuffers.Clear();
 			mImpl->HasViewport = false;
 			mImpl->NormalizedViewport = Area2(0.0f, 0.0f, 1.0f, 1.0f);
 			mImpl->HasScissor = false;
