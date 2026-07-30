@@ -143,17 +143,6 @@ namespace b3d
 			const VulkanBuiltinResources& GetBuiltinResources() const { return mBuiltinResources;  }
 
 			/**
-			 * Returns a set of command buffer semaphores depending on the provided sync mask.
-			 *
-			 * @param	syncMask		Mask that has a bit enabled for each queue to retrieve the semaphore for.
-			 *							If a command buffer on a queue is not currently executing, semaphore won't be returned.
-			 * @param	outSemaphores	Array into which all required semaphores will be appended to. 
-			 *
-			 * @note	Submit thread only.
-			 */
-			void GetSyncSemaphores(GpuQueueMask syncMask, TInlineArray<VulkanSemaphore*, 8>& outSemaphores) const;
-
-			/**
 			 * @name Resource Creation
 			 * @{
 			 */

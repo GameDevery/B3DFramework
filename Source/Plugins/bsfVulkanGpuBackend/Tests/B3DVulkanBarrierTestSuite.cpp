@@ -21,7 +21,8 @@ namespace
 		return backend.GetVulkanDevice(0).get();
 	}
 
-	void RunBufferHandoff(TestSuite& testSuite, GpuQueueType sourceQueueType, GpuQueueType destinationQueueType)
+	void RunBufferHandoff(TestSuite& testSuite, GpuQueueType sourceQueueType, GpuQueueType destinationQueueType,
+		bool waitForSourceCompletion = false)
 	{
 		VulkanGpuDevice* const device = GetActiveVulkanDevice();
 		if(device == nullptr || device->GetQueueCount(sourceQueueType) == 0 || device->GetQueueCount(destinationQueueType) == 0)
@@ -61,6 +62,9 @@ namespace
 
 		const TShared<GpuWorkContext> context = GpuWorkContext::Create(*device);
 		context->SubmitCommandBuffer(sourceCommandBuffer, GpuQueueMask::kNone);
+		if(waitForSourceCompletion)
+			device->WaitUntilIdle();
+
 		context->SubmitCommandBuffer(destinationCommandBuffer, GpuQueueMask::kNone);
 		device->WaitUntilIdle();
 
@@ -76,6 +80,8 @@ VulkanBarrierTestSuite::VulkanBarrierTestSuite()
 {
 	B3D_ADD_TEST(VulkanBarrierTestSuite::TestGraphicsToComputeBufferHandoff)
 	B3D_ADD_TEST(VulkanBarrierTestSuite::TestComputeToGraphicsBufferHandoff)
+	B3D_ADD_TEST(VulkanBarrierTestSuite::TestCompletedGraphicsToComputeBufferHandoff)
+	B3D_ADD_TEST(VulkanBarrierTestSuite::TestCompletedQueueProgressFanOut)
 	B3D_ADD_TEST(VulkanBarrierTestSuite::TestSameQueueBufferBoundary)
 }
 
@@ -87,6 +93,42 @@ void VulkanBarrierTestSuite::TestGraphicsToComputeBufferHandoff()
 void VulkanBarrierTestSuite::TestComputeToGraphicsBufferHandoff()
 {
 	RunBufferHandoff(*this, GQT_COMPUTE, GQT_GRAPHICS);
+}
+
+void VulkanBarrierTestSuite::TestCompletedGraphicsToComputeBufferHandoff()
+{
+	RunBufferHandoff(*this, GQT_GRAPHICS, GQT_COMPUTE, true);
+}
+
+void VulkanBarrierTestSuite::TestCompletedQueueProgressFanOut()
+{
+	VulkanGpuDevice* const device = GetActiveVulkanDevice();
+	if(device == nullptr || device->GetQueueCount(GQT_GRAPHICS) == 0 || device->GetQueueCount(GQT_COMPUTE) == 0 ||
+		device->GetQueueCount(GQT_TRANSFER) == 0)
+		return;
+
+	const TShared<render::GpuCommandBufferPool> graphicsPool = device->CreateGpuCommandBufferPool(
+		GpuCommandBufferPoolCreateInformation::CreateForThisThread(GQT_GRAPHICS));
+	const TShared<render::GpuCommandBufferPool> computePool = device->CreateGpuCommandBufferPool(
+		GpuCommandBufferPoolCreateInformation::CreateForThisThread(GQT_COMPUTE));
+	const TShared<render::GpuCommandBufferPool> transferPool = device->CreateGpuCommandBufferPool(
+		GpuCommandBufferPoolCreateInformation::CreateForThisThread(GQT_TRANSFER));
+
+	const TShared<render::GpuCommandBuffer> sourceCommandBuffer =
+		graphicsPool->Create(GpuCommandBufferCreateInformation::Create("Vulkan queue progress fan-out source"));
+	const TShared<render::GpuCommandBuffer> computeCommandBuffer =
+		computePool->Create(GpuCommandBufferCreateInformation::Create("Vulkan queue progress fan-out compute"));
+	const TShared<render::GpuCommandBuffer> transferCommandBuffer =
+		transferPool->Create(GpuCommandBufferCreateInformation::Create("Vulkan queue progress fan-out transfer"));
+
+	const TShared<GpuWorkContext> context = GpuWorkContext::Create(*device);
+	context->SubmitCommandBuffer(sourceCommandBuffer, GpuQueueMask::kNone);
+	device->WaitUntilIdle();
+
+	const GpuQueueMask graphicsProgress(GpuQueueId(GQT_GRAPHICS, 0));
+	context->SubmitCommandBuffer(computeCommandBuffer, graphicsProgress);
+	context->SubmitCommandBuffer(transferCommandBuffer, graphicsProgress);
+	device->WaitUntilIdle();
 }
 
 void VulkanBarrierTestSuite::TestSameQueueBufferBoundary()

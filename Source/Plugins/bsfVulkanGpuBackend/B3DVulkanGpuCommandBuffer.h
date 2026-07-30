@@ -30,9 +30,6 @@ namespace b3d
 		 *  @{
 		 */
 
-// Maximum number of command buffers that another command buffer can be dependant on (via a sync mask)
-#define B3D_MAX_COMMAND_BUFFER_DEPENDENCIES 2
-
 		/** Wrapper around a Vulkan semaphore object that manages its usage and lifetime. */
 		class VulkanSemaphore : public VulkanResource
 		{
@@ -98,6 +95,7 @@ namespace b3d
 			TShared<VulkanGpuCommandBuffer> PrimaryCommandBuffer; /**< Primary command buffer we're submitting. This should be submitted after the destination queue transition command buffer. This submit should contain the semaphores if destination queue transition command buffer is not present. */
 			GpuQueueMask RequiredWaitMask = GpuQueueMask::kNone; /**< Resource-derived queue dependencies to combine with the caller-provided synchronization mask. */
 			TInlineArray<VulkanSemaphore*, 8> Semaphores; /**< Semaphores that need to be waited on before executing the command buffers. */
+			TInlineArray<VulkanSemaphore*, 2> SignalSemaphores; /**< Binary semaphores signaled after the complete logical submission. */
 		};
 
 		/** CommandBuffer implementation for Vulkan. */
@@ -170,29 +168,6 @@ namespace b3d
 
 			/** Returns a fence that can be used for tracking when the command buffer is done executing. */
 			VkFence GetFence() const { return mFence; }
-
-			/**
-			 * Returns a semaphore that may be used for synchronizing execution between command buffers executing on the same
-			 * queue.
-			 */
-			VulkanSemaphore* GetIntraQueueSemaphore() const { return mIntraQueueSemaphore; }
-
-			/**
-			 * Returns a semaphore that may be used for synchronizing execution between command buffers executing on different
-			 * queues. Note that these semaphores get used each time they are requested, and there is only a fixed number
-			 * available. If all are used up, null will be returned. New semaphores are generated when allocateSemaphores()
-			 * is called.
-			 */
-			VulkanSemaphore* RequestInterQueueSemaphore() const;
-
-			/**
-			 * Allocates a new set of semaphores that will be signaled when the command buffer finishes execution.
-			 * Releases the previously allocated semaphores, if they exist. Use GetIntraQueueSemaphore() &
-			 * RequestInterQueueSemaphore() to retrieve latest allocated semaphores.
-			 *
-			 * @param	outSemaphores	Output array to append all allocated semaphores in. 
-			 */
-			u32 AllocateSignalSemaphores(TInlineArray<VkSemaphore, 8>& outSemaphores);
 
 			/** Returns true if the command buffer is currently being processed by the device. */
 			bool IsSubmitted() const { return mState == GpuCommandBufferState::Executing; }
@@ -475,10 +450,6 @@ namespace b3d
 			VulkanGpuCommandBufferPool& mPool;
 			VkFence mFence;
 			ThreadId mOwnerThread;
-
-			VulkanSemaphore* mIntraQueueSemaphore = nullptr;
-			VulkanSemaphore* mInterQueueSemaphores[B3D_MAX_COMMAND_BUFFER_DEPENDENCIES]{};
-			mutable u32 mNumUsedInterQueueSemaphores = 0;
 
 			VulkanFramebuffer* mFramebuffer = nullptr;
 			RenderSurfaceMask mRenderTargetReadOnlyMask = RT_NONE;

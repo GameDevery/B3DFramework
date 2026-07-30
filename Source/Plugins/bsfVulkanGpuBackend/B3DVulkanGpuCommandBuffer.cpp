@@ -217,15 +217,6 @@ VulkanGpuCommandBuffer::~VulkanGpuCommandBuffer()
 	else if(mState != GpuCommandBufferState::Ready)
 		mResourceTracker.NotifyUnbound();
 
-	if(mIntraQueueSemaphore != nullptr)
-		mIntraQueueSemaphore->Destroy();
-
-	for(u32 i = 0; i < B3D_MAX_COMMAND_BUFFER_DEPENDENCIES; i++)
-	{
-		if(mInterQueueSemaphores[i] != nullptr)
-			mInterQueueSemaphores[i]->Destroy();
-	}
-
 	vkDestroyFence(device, mFence, gVulkanAllocator);
 	B3DFree(mDescriptorSetsTemp);
 }
@@ -1275,42 +1266,6 @@ void VulkanGpuCommandBuffer::EndRenderPass()
 	mBoundParamsDirty = true;
 
 	// TODO - Probably best to clear mBoundParams since I cleared the cache above
-}
-
-u32 VulkanGpuCommandBuffer::AllocateSignalSemaphores(TInlineArray<VkSemaphore, 8>& outSemaphores)
-{
-	// TODO - Do I need multiple semaphores? Can't I just have one?
-
-	u32 count = 0;
-
-	if(mIntraQueueSemaphore != nullptr)
-		mIntraQueueSemaphore->Destroy();
-
-	mIntraQueueSemaphore = GetVulkanGpuDevice().GetResourceManager().Create<VulkanSemaphore>("IntraQueue");
-
-	outSemaphores.Add(mIntraQueueSemaphore->GetHandle());
-	count++;
-
-	for(u32 i = 0; i < B3D_MAX_COMMAND_BUFFER_DEPENDENCIES; i++)
-	{
-		if(mInterQueueSemaphores[i] != nullptr)
-			mInterQueueSemaphores[i]->Destroy();
-
-		mInterQueueSemaphores[i] = GetVulkanGpuDevice().GetResourceManager().Create<VulkanSemaphore>("InterQueue");
-		outSemaphores.Add(mInterQueueSemaphores[i]->GetHandle());
-		count++;
-	}
-
-	mNumUsedInterQueueSemaphores = 0;
-	return count;
-}
-
-VulkanSemaphore* VulkanGpuCommandBuffer::RequestInterQueueSemaphore() const
-{
-	if(mNumUsedInterQueueSemaphores >= B3D_MAX_COMMAND_BUFFER_DEPENDENCIES)
-		return nullptr;
-
-	return mInterQueueSemaphores[mNumUsedInterQueueSemaphores++];
 }
 
 namespace

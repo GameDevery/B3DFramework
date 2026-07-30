@@ -19,6 +19,12 @@ namespace b3d
 		/** Copies data through a GPU-local buffer from compute to graphics with no caller-provided queue mask. */
 		void TestComputeToGraphicsBufferHandoff();
 
+		/** Copies data across queues after the source command buffer has completed and reset. */
+		void TestCompletedGraphicsToComputeBufferHandoff();
+
+		/** Waits on one completed graphics submission from two destination queues. */
+		void TestCompletedQueueProgressFanOut();
+
 		/** Copies data through a GPU-local buffer in consecutive graphics command buffers. */
 		void TestSameQueueBufferBoundary();
 	};

@@ -179,11 +179,8 @@ GpuSubmissionTransition GpuSubmissionTransition::Build(IGpuResource& stateResour
 	const bool destinationWrites = destinationAllAccessScope.WriteStages != GpuStageFlag::None;
 	const GpuQueueMask destinationQueueMask(destinationQueueId);
 
-	// TODO: Our submission hazard tracking depends on the fact that semaphores are issued for all cross-queue resource access. But if
-	// some queue already finished executing before the next submission, no semaphore will be issued. For this reason,
-	// we either need to ensure we wait on a timeline semaphore value from the last submission on that queue instead,
-	// or manually do a full resource barrier. Alternatively, we can still wait on the first queue's semaphore even if it has finished,
-	// it would have been signalled. That is probably the best option.
+	// Backends must preserve a waitable progress point for the latest submission on every queue. Cross-queue dependencies remain
+	// required after the source submission completes because its memory dependency must still be acquired by a destination queue.
 	const GpuQueueMask activeReaderQueues = sourceState.ReaderQueues & stateResource.GetUseInfo(GpuAccessFlag::Read);
 
 	GpuSubmissionTransition transition(stateResource, destinationHazardState.GetFirstAccessScope(), destinationAllAccessScope);

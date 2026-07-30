@@ -435,20 +435,18 @@ void VulkanSwapChain::Present(u32 imageIndex, GpuQueue& queue, GpuQueueMask sync
 		imageSubresource->SetLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
 
-	VulkanGpuDevice& presentDevice = vulkanQueue.GetDevice();
-	const GpuQueueMask queueMask = vulkanQueue.GetId();
-
-	// Ignore myself as we handle this in VulkanGpuQueue::Present() already
-	syncMask &= ~queueMask;
-
 	B3D_ENSURE(mSemaphoresBuffer.Empty());
-	presentDevice.GetSyncSemaphores(syncMask, mSemaphoresBuffer);
 
 	// Wait on present (i.e. until the back buffer becomes available), if we haven't already done so
 	AppendWaitSemaphoreIfRequired(imageIndex, mSemaphoresBuffer);
 
+	VulkanSemaphore* const presentSemaphore = vulkanQueue.SubmitPresentBridge(syncMask, mSemaphoresBuffer);
+	mSemaphoresBuffer.Clear();
+	mSemaphoresBuffer.Add(presentSemaphore);
+
 	const VkResult result = vulkanQueue.Present(this, imageIndex, mSemaphoresBuffer);
 	mSemaphoresBuffer.Clear();
+	presentSemaphore->Destroy();
 
 	if(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)
 	{
