@@ -79,7 +79,7 @@ void D3D12BarrierHelper::RequireSubresourceState(D3D12Image* image, u32 face, u3
 	resourceTracker->SetTrackedImageSubresourceState(image, face, mipLevel, state);
 }
 
-void D3D12BarrierHelper::RecordBufferBarrier(IGpuBufferResource* buffer, const GpuHazardStageAndAccess& barrier)
+void D3D12BarrierHelper::RecordBufferBarrier(IGpuBufferResource* buffer, const GpuBarrierScope& barrier)
 {
 	// State-changing buffer transitions are emitted by RequireBufferTransition (a D3D12 transition barrier also
 	// synchronizes both sides, resolving the hazard this hook was called for). The only hazard a transition cannot
@@ -102,7 +102,7 @@ void D3D12BarrierHelper::RecordBufferBarrier(IGpuBufferResource* buffer, const G
 }
 
 void D3D12BarrierHelper::RecordSubresourceBarrier(IGpuImageResource* image,
-	const GpuTextureSubresourceRange& subresourceRange, const GpuHazardStageAndAccess& barrier,
+	const GpuTextureSubresourceRange& subresourceRange, const GpuBarrierScope& barrier,
 	GpuImageLayout& oldLayout, GpuImageLayout newLayout)
 {
 	(void)oldLayout; // The native before-state comes from the per-subresource stored state, not the core layout.

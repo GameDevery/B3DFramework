@@ -1325,20 +1325,16 @@ namespace
 		void VisitBuffer(const GpuSubmissionBufferTransition& transition) override
 		{
 			VulkanBuffer* const buffer = static_cast<VulkanBuffer*>(transition.Buffer);
-			const GpuHazardState::TransitionRecipe& sameQueueTransition = transition.SameQueueTransitionRecipe;
 
 			GpuQueueId ownerQueueId;
 			const bool hasOwnerQueue = buffer->GetOwnerQueueId(ownerQueueId);
 			const u32 sourceQueueFamily = hasOwnerQueue ? mDevice.GetQueueFamily(ownerQueueId.GetType()) : mDestinationQueueFamily;
 			const bool needsOwnershipTransfer = hasOwnerQueue && buffer->IsExclusive() && sourceQueueFamily != mDestinationQueueFamily;
 
-			if(!needsOwnershipTransfer && sameQueueTransition.HasDependency())
+			if(!needsOwnershipTransfer && transition.HasSameQueueDependency())
 			{
-				if(sameQueueTransition.MemoryDependency.IsValid())
-					mDestinationQueueBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), sameQueueTransition.MemoryDependency);
-
-				if(sameQueueTransition.ExecutionDependency.IsValid())
-					mDestinationQueueBarriers.AddExecutionBarrier(sameQueueTransition.ExecutionDependency);
+				mDestinationQueueBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), transition.MemoryBarrier);
+				mDestinationQueueBarriers.AddBufferBarrier(buffer->GetVulkanHandle(), transition.ExecutionBarrier);
 			}
 
 			if(needsOwnershipTransfer)
@@ -1373,7 +1369,6 @@ namespace
 		{
 			VulkanImage* const image = static_cast<VulkanImage*>(transition.Image);
 			VulkanImageSubresource* const subresource = static_cast<VulkanImageSubresource*>(transition.StateResource);
-			const GpuHazardState::TransitionRecipe& sameQueueTransition = transition.SameQueueTransitionRecipe;
 			const VkImageLayout oldLayout = subresource->GetLayout();
 			const VkImageLayout requestedInitialLayout = VulkanUtility::ToVkImageLayout(transition.InitialLayout);
 			const VkImageLayout newLayout = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED ? requestedInitialLayout : oldLayout;
@@ -1386,13 +1381,10 @@ namespace
 			const bool needsOwnershipTransfer = hasOwnerQueue && subresource->IsExclusive() && sourceQueueFamily != mDestinationQueueFamily;
 			const bool needsFullSync = needsOwnershipTransfer || layoutMismatch;
 
-			if(!needsFullSync && sameQueueTransition.HasDependency())
+			if(!needsFullSync && transition.HasSameQueueDependency())
 			{
-				if(sameQueueTransition.MemoryDependency.IsValid())
-					mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sameQueueTransition.MemoryDependency, oldLayout, newLayout);
-
-				if(sameQueueTransition.ExecutionDependency.IsValid())
-					mDestinationQueueBarriers.AddExecutionBarrier(sameQueueTransition.ExecutionDependency);
+				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, transition.MemoryBarrier, oldLayout, newLayout);
+				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, transition.ExecutionBarrier, oldLayout, newLayout);
 			}
 
 			if(!needsFullSync)

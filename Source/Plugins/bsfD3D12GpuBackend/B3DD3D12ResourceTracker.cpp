@@ -5,9 +5,8 @@
 #include "B3DD3D12Texture.h"
 #include "B3DD3D12GpuBuffer.h"
 #include "B3DD3D12BarrierUtility.h"
-// COMPLETE D3D12BarrierHelper - load-bearing: the .inl below names TBarrierHelper::BarrierTrackingInfo and calls
-// barrierHelper.AddBufferBarrier(...) / AddSubresourceBarrier(...), so the helper must be a complete type before the
-// .inl is included. Do not reorder.
+// COMPLETE D3D12BarrierHelper - load-bearing: the .inl below calls barrierHelper.AddBufferBarrier(...) /
+// AddSubresourceBarrier(...), so the helper must be a complete type before the .inl is included. Do not reorder.
 #include "Utility/B3DD3D12BarrierHelper.h"
 #include "GpuBackend/B3DGpuBackendUtility.h"
 #include "Allocators/B3DFrameAllocator.h"

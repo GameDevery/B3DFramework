@@ -75,14 +75,14 @@ namespace b3d::render
 		 * CRTP hook: same-state write hazards on buffers become UAV barriers. State-changing transitions are handled
 		 * by RequireBufferState (see class doc). Called by the shared low-level path.
 		 */
-		void RecordBufferBarrier(IGpuBufferResource* buffer, const GpuHazardStageAndAccess& barrier);
+		void RecordBufferBarrier(IGpuBufferResource* buffer, const GpuBarrierScope& barrier);
 
 		/**
 		 * CRTP hook: accumulates per-subresource native transitions from command-buffer-local state to the state
 		 * derived from @p newLayout and destination access. Same-state write hazards become UAV barriers.
 		 */
 		void RecordSubresourceBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange,
-			const GpuHazardStageAndAccess& barrier, GpuImageLayout& oldLayout, GpuImageLayout newLayout);
+			const GpuBarrierScope& barrier, GpuImageLayout& oldLayout, GpuImageLayout newLayout);
 
 		/** Appends a transition barrier for a single (sub)resource. */
 		void AppendTransition(ID3D12Resource* resource, u32 nativeSubresource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);

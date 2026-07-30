@@ -21,8 +21,8 @@ namespace b3d::render
 	 *
 	 * All of the backend-independent work lives here: converting resource usage to pipeline stages, the WAW/RAW/WAR
 	 * hazard analysis that derives the source access from the tracked state, subdividing a subresource range into the
-	 * tracked blocks it overlaps, accumulating the per-barrier tracking info, and running the post-barrier tracker
-	 * callbacks. Only the actual native barrier accumulation and emission is backend-specific.
+	 * tracked blocks it overlaps, accumulating layout and barrier tracking info, and running the post-barrier
+	 * tracker callbacks. Only the actual native barrier accumulation and emission is backend-specific.
 	 *
 	 * Implemented with CRTP - a backend derives as `class XBarrierHelper : public TGpuBarrierHelper<XBarrierHelper>`
 	 * and provides:
@@ -39,15 +39,6 @@ namespace b3d::render
 	class TGpuBarrierHelper
 	{
 	public:
-		/** Information needed to update hazard tracking after barrier execution. Either Buffer or Image is set. */
-		struct BarrierTrackingInfo
-		{
-			IGpuBufferResource* Buffer = nullptr;
-			IGpuImageResource* Image = nullptr;
-			GpuTextureSubresourceRange ImageSubresourceRange{};
-			GpuHazardStageAndAccess StageAndAccess;
-		};
-
 		/**
 		 * Constructs a barrier helper associated with the provided resource tracker.
 		 *
@@ -65,15 +56,14 @@ namespace b3d::render
 		 * @param sourceAccess			Type of access (read/write) before the barrier.
 		 * @param destinationUsage		How the buffer will be used after the barrier.
 		 * @param destinationAccess		Type of access (read/write) after the barrier.
-		 * @return						Information about a barrier that was queued, or null if none was queued. Only valid until next call to Add/Execute/Clear.
 		 */
-		const BarrierTrackingInfo* AddBufferBarrier(IGpuBufferResource* buffer, GpuResourceUseFlags sourceUsage, GpuAccessFlags sourceAccess, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess);
+		void AddBufferBarrier(IGpuBufferResource* buffer, GpuResourceUseFlags sourceUsage, GpuAccessFlags sourceAccess, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess);
 
 		/** Adds a memory barrier for a buffer resource. Automatically deduces source usage/access from current tracked state. */
-		const BarrierTrackingInfo* AddBufferBarrier(IGpuBufferResource* buffer, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess);
+		void AddBufferBarrier(IGpuBufferResource* buffer, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess);
 
 		/** Adds a memory barrier for a buffer resource. Automatically deduces source usage/access from provided tracked state. */
-		const BarrierTrackingInfo* AddBufferBarrier(IGpuBufferResource* buffer, const GpuBufferTrackingState& bufferTrackingState, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess);
+		void AddBufferBarrier(IGpuBufferResource* buffer, const GpuBufferTrackingState& bufferTrackingState, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess);
 
 		/**
 		 * Adds a memory barrier for an image resource.
@@ -86,17 +76,25 @@ namespace b3d::render
 		 * @param destinationAccessFlags	Type of access (read/write) after the barrier.
 		 * @param oldLayout					Current layout of the image before the barrier.
 		 * @param newLayout					Layout the image will be transitioned to after the barrier.
-		 * @return							Information about a barrier that was queued, or null if none was queued. Only valid until next call to Add/Execute/Clear.
 		 */
-		const BarrierTrackingInfo* AddImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, GpuResourceUseFlags sourceUsage, GpuAccessFlags sourceAccessFlags, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccessFlags, GpuImageLayout oldLayout, GpuImageLayout newLayout);
+		void AddImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, GpuResourceUseFlags sourceUsage, GpuAccessFlags sourceAccessFlags, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccessFlags, GpuImageLayout oldLayout, GpuImageLayout newLayout);
 
 		/** Adds a memory barrier for an image resource. Automatically deduces source usage/access and layout from current tracked state. */
-		const BarrierTrackingInfo* AddImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess, GpuImageLayout newLayout);
+		void AddImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess, GpuImageLayout newLayout);
 
 		/** Adds a memory barrier for an existing subresource of an image resource. Automatically deduces source usage/access and layout from provided tracked state. */
-		const BarrierTrackingInfo* AddSubresourceBarrier(IGpuImageResource* image, const GpuImageSubresourceTrackingState& subresourceTrackingState, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess, GpuImageLayout newLayout);
+		void AddSubresourceBarrier(IGpuImageResource* image, const GpuImageSubresourceTrackingState& subresourceTrackingState, GpuResourceUseFlags destinationUsage, GpuAccessFlags destinationAccess, GpuImageLayout newLayout);
 
 	protected:
+		/** Information needed to update hazard tracking after barrier execution. Either Buffer or Image is set. */
+		struct BarrierTrackingInfo
+		{
+			IGpuBufferResource* Buffer = nullptr;
+			IGpuImageResource* Image = nullptr;
+			GpuTextureSubresourceRange ImageSubresourceRange{};
+			GpuBarrierScope Barrier;
+		};
+
 		/** Information needed to update layout after barrier execution. */
 		struct LayoutTrackingInfo
 		{
@@ -107,22 +105,22 @@ namespace b3d::render
 		};
 
 		/**
-		 * Shared low-level buffer barrier path on explicit stage masks. Asks the derived backend to accumulate the native
-		 * barrier (RecordBufferBarrier), then records the bookkeeping needed for the post-barrier tracker updates.
+		 * Shared low-level buffer barrier path. Asks the derived backend to accumulate the native barrier
+		 * (RecordBufferBarrier), then records the bookkeeping needed after execution.
 		 */
-		const BarrierTrackingInfo* AddBufferBarrier(IGpuBufferResource* buffer, const GpuHazardStageAndAccess& stageAndAccess);
+		void AddBufferBarrier(IGpuBufferResource* buffer, const GpuBarrierScope& barrier);
 
 		/**
-		 * Shared low-level image subresource barrier path on explicit stage masks. Asks the derived backend to accumulate
-		 * the native barrier (RecordSubresourceBarrier; it may reconcile @p oldLayout from an already-merged
+		 * Shared low-level image subresource barrier path. Asks the derived backend to accumulate the native barrier
+		 * (RecordSubresourceBarrier; it may reconcile @p oldLayout from an already-merged
 		 * barrier), then records the layout transition and bookkeeping needed for the post-barrier tracker updates.
 		 */
-		const BarrierTrackingInfo* AddSubresourceBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, const GpuHazardStageAndAccess& stageAndAccess, GpuImageLayout oldLayout, GpuImageLayout newLayout);
+		void AddSubresourceBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, const GpuBarrierScope& barrier, GpuImageLayout oldLayout, GpuImageLayout newLayout);
 
 		/**
-		 * Runs the post-barrier tracker callbacks for everything accumulated since the last Clear: advances the tracked
-		 * layout for each recorded transition, then marks each source->destination pair safe to access. The derived
-		 * Execute must call this after emitting the native barriers (and before CommitPendingHazardRegistrations).
+		 * Runs the post-barrier tracker callbacks for everything accumulated since the last Clear: advances tracked
+		 * layouts, then records every source->destination barrier. The derived Execute must call this after emitting
+		 * the native barriers and before committing the pending accesses.
 		 */
 		void ApplyPostBarrierTracking();
 

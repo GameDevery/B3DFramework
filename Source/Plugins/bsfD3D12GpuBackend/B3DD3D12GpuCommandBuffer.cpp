@@ -1139,7 +1139,7 @@ namespace
 			if((initialState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == 0)
 				return;
 
-			if(transition.SameQueueTransitionRecipe.HasDependency())
+			if(transition.HasSameQueueDependency())
 				AppendUavBarrier(mDestinationBarriers, mDestinationUavBarrierResources, buffer->GetD3D12Resource());
 		}
 
@@ -1183,7 +1183,7 @@ namespace
 
 			if(transitionSourceState != initialState)
 				AppendTransition(mDestinationBarriers, image->GetD3D12Resource(), nativeSubresource, transitionSourceState, initialState);
-			else if((initialState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0 && transition.SameQueueTransitionRecipe.HasDependency())
+			else if((initialState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0 && transition.HasSameQueueDependency())
 				AppendUavBarrier(mDestinationBarriers, mDestinationUavBarrierResources, image->GetD3D12Resource());
 
 			subresource->SetState(finalState);

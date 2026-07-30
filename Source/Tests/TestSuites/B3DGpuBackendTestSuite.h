@@ -13,11 +13,11 @@ namespace b3d
 		GpuBackendTestSuite();
 
 	private:
-		/** Verifies that accesses are accumulated into barrier-delimited hazard history epochs. */
-		void TestHazardHistoryEpochs();
+		/** Verifies the flat write-generation hazard state and command-buffer summary. */
+		void TestResourceHazardState();
 
 		/** Verifies cross-command-buffer dependencies and propagation of unresolved hazards. */
-		void TestTransitionRecipe();
+		void TestResourceTransition();
 
 		/** Verifies writer epochs allow parallel reads and only wait for active conflicting queues. */
 		void TestSubmissionTransitionPlanning();

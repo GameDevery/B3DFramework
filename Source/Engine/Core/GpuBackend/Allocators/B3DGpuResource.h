@@ -151,32 +151,6 @@ namespace b3d
 	 *  @{
 	 */
 
-	namespace render
-	{
-		/**
-		 * Submission state for a resource. The latest writer keeps the full hazard state, while read-only submissions
-		 * are represented as parallel queue branches within that writer epoch.
-		 */
-		struct B3D_EXPORT GpuResourceSubmissionState
-		{
-			/** Returns unresolved accesses accumulated by the writer and all parallel readers. */
-			GpuAccessScope GetUnsafeAccessScope() const
-			{
-				GpuAccessScope scope;
-				scope.Add(WriterHazards.GetUnsafeReadStages() | ReaderStages, GpuAccessFlag::Read);
-				scope.Add(WriterHazards.GetUnsafeWriteStages(), GpuAccessFlag::Write);
-				return scope;
-			}
-
-			GpuHazardState WriterHazards; /**< Full hazards on the queue containing the latest write. */
-			GpuQueueId WriterQueueId; /**< Queue containing the latest write. Valid only when HasWriter is true. */
-			GpuQueueMask AcquiredQueues = GpuQueueMask::kNone; /**< Queues that already acquired the latest write. */
-			GpuQueueMask ReaderQueues = GpuQueueMask::kNone; /**< Queues with read submissions after the latest write. */
-			GpuStageFlags ReaderStages = GpuStageFlag::None; /**< Conservative stage union for ReaderQueues. */
-			bool HasWriter = false; /**< Whether the current epoch was created by a write. */
-		};
-	}
-
 	/**
 	 * Common base for backend GPU resources (VulkanResource, D3D12Resource, MetalResource, NullResource).
 	 * Provides the cross-backend portion of the lifetime state machine — aggregate bound/in-use counters,

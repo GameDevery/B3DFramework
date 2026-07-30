@@ -27,7 +27,8 @@ namespace
 		{
 			ParallelAccessWaitMask = transition.ParallelAccessWaitMask;
 			ExclusiveAccessWaitMask = transition.ExclusiveAccessWaitMask;
-			SameQueueTransitionRecipe = transition.SameQueueTransitionRecipe;
+			MemoryBarrier = transition.MemoryBarrier;
+			ExecutionBarrier = transition.ExecutionBarrier;
 		}
 
 		void VisitImage(const GpuSubmissionImageTransition&) override
@@ -37,30 +38,47 @@ namespace
 
 		GpuQueueMask ParallelAccessWaitMask = GpuQueueMask::kNone;
 		GpuQueueMask ExclusiveAccessWaitMask = GpuQueueMask::kNone;
-		GpuHazardState::TransitionRecipe SameQueueTransitionRecipe;
+		GpuBarrierScope MemoryBarrier;
+		GpuBarrierScope ExecutionBarrier;
 	};
 
 	struct SubmissionTestResult
 	{
 		GpuQueueMask ParallelAccessWaitMask;
 		GpuQueueMask ExclusiveAccessWaitMask;
-		GpuHazardState::TransitionRecipe SameQueueTransitionRecipe;
+		GpuBarrierScope MemoryBarrier;
+		GpuBarrierScope ExecutionBarrier;
 	};
+
+	template<class THazardState>
+	GpuBarrierScope ResolveTestAccess(THazardState& state, GpuStageFlags stages, GpuAccessFlags access,
+		GpuStageFlags broadenedReadStages = GpuStageFlag::None)
+	{
+		const GpuBarrierScope barrier = state.GetRequiredBarrier(stages, access, broadenedReadStages);
+		state.RecordBarrier(barrier);
+		state.RecordAccess(stages, access);
+		return barrier;
+	}
 
 	SubmissionTestResult ResolveTestSubmission(SubmissionTestBuffer& buffer, GpuQueueId queueId, GpuStageFlags stages, GpuAccessFlags access)
 	{
-		GpuHazardStateWithHistory hazards;
-		hazards.Access = access;
-		hazards.RegisterStageAccess(stages, access);
+		GpuResourceHazardState hazardState;
+		ResolveTestAccess(hazardState, stages, access);
 
 		TGpuResourceTracker<SubmissionTestBarrierHelper> tracker;
-		GpuBufferTrackingState trackingState = {};
-		trackingState.WriteHazardTracking = &hazards;
+		GpuBufferTrackingState trackingState;
+		trackingState.HazardState = &hazardState;
 		tracker.GetBuffers().insert(std::make_pair(&buffer, trackingState));
 
 		SubmissionTestVisitor visitor;
 		tracker.ResolveSubmissionTransitions(queueId, visitor);
-		return { visitor.ParallelAccessWaitMask, visitor.ExclusiveAccessWaitMask, visitor.SameQueueTransitionRecipe };
+
+		SubmissionTestResult result;
+		result.ParallelAccessWaitMask = visitor.ParallelAccessWaitMask;
+		result.ExclusiveAccessWaitMask = visitor.ExclusiveAccessWaitMask;
+		result.MemoryBarrier = visitor.MemoryBarrier;
+		result.ExecutionBarrier = visitor.ExecutionBarrier;
+		return result;
 	}
 
 	void BeginTestRead(SubmissionTestBuffer& buffer, GpuQueueId queueId)
@@ -78,108 +96,208 @@ namespace
 GpuBackendTestSuite::GpuBackendTestSuite()
 	: TestSuite("GpuBackendTestSuite")
 {
-	B3D_ADD_TEST(GpuBackendTestSuite::TestHazardHistoryEpochs)
-	B3D_ADD_TEST(GpuBackendTestSuite::TestTransitionRecipe)
+	B3D_ADD_TEST(GpuBackendTestSuite::TestResourceHazardState)
+	B3D_ADD_TEST(GpuBackendTestSuite::TestResourceTransition)
 	B3D_ADD_TEST(GpuBackendTestSuite::TestSubmissionTransitionPlanning)
 }
 
-void GpuBackendTestSuite::TestHazardHistoryEpochs()
+void GpuBackendTestSuite::TestResourceHazardState()
 {
-	GpuHazardStateWithHistory hazardHistory;
-	for(u32 accessIndex = 0; accessIndex < 1000; ++accessIndex)
-	{
-		if((accessIndex & 1) == 0)
-			hazardHistory.RegisterStageAccess(GpuStageFlag::Transfer, GpuAccessFlag::Read);
-		else
-			hazardHistory.RegisterStageAccess(GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write);
-	}
+	GpuResourceWriteEpochHazardState state;
+	B3D_TEST_ASSERT(!ResolveTestAccess(state, GpuStageFlag::Transfer, GpuAccessFlag::Write).IsValid())
+	B3D_TEST_ASSERT(state.WriteStages == GpuStageFlag::Transfer)
 
-	B3D_TEST_ASSERT(hazardHistory.GetCompletedEpochs().Size() == 0)
+	const GpuBarrierScope fragmentRead = ResolveTestAccess(state, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
+	B3D_TEST_ASSERT(fragmentRead.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(fragmentRead.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(fragmentRead.DestinationStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(fragmentRead.DestinationAccess == GpuAccessFlag::Read)
+	B3D_TEST_ASSERT(state.ReaderStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(state.VisibleStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(!ResolveTestAccess(state, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read).IsValid())
 
-	const GpuAccessScope& currentAccessScope = hazardHistory.GetCurrentAccessScope();
-	B3D_TEST_ASSERT(currentAccessScope.GetAccess(GpuStageFlag::Transfer) == GpuAccessFlag::Read)
-	B3D_TEST_ASSERT(currentAccessScope.GetAccess(GpuStageFlag::ComputeShaderNonUniform) == GpuAccessFlag::Write)
+	const GpuBarrierScope computeRead = ResolveTestAccess(state, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
+	B3D_TEST_ASSERT(computeRead.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(computeRead.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
+	B3D_TEST_ASSERT(state.ReaderStages == (GpuStageFlag::FragmentShaderNonUniform | GpuStageFlag::ComputeShaderNonUniform))
+	B3D_TEST_ASSERT(state.VisibleStages == state.ReaderStages)
 
-	hazardHistory.RegisterBarrier(GpuHazardStageAndAccess(GpuStageFlag::Transfer, GpuAccessFlag::Read, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write));
-	B3D_TEST_ASSERT(hazardHistory.GetCompletedEpochs().Size() == 1)
-	B3D_TEST_ASSERT(!hazardHistory.GetCurrentAccessScope().IsValid())
+	const GpuBarrierScope colorWrite = ResolveTestAccess(state, GpuStageFlag::ColorAttachment, GpuAccessFlag::Write);
+	B3D_TEST_ASSERT(colorWrite.SourceStages == (GpuStageFlag::Transfer | GpuStageFlag::FragmentShaderNonUniform | GpuStageFlag::ComputeShaderNonUniform))
+	B3D_TEST_ASSERT(colorWrite.SourceAccess == (GpuAccessFlag::Read | GpuAccessFlag::Write))
+	B3D_TEST_ASSERT(colorWrite.DestinationStages == GpuStageFlag::ColorAttachment)
+	B3D_TEST_ASSERT(colorWrite.DestinationAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(state.WriteStages == GpuStageFlag::ColorAttachment)
+	B3D_TEST_ASSERT(state.ReaderStages == GpuStageFlag::None)
+	B3D_TEST_ASSERT(state.VisibleStages == GpuStageFlag::None)
 
-	const GpuHazardStateWithHistory::Epoch& completedEpoch = hazardHistory.GetCompletedEpochs()[0];
-	B3D_TEST_ASSERT(completedEpoch.AccessScope.GetAccess(GpuStageFlag::Transfer) == GpuAccessFlag::Read)
-	B3D_TEST_ASSERT(completedEpoch.AccessScope.GetAccess(GpuStageFlag::ComputeShaderNonUniform) == GpuAccessFlag::Write)
-	B3D_TEST_ASSERT(completedEpoch.IssuedBarrier.SourceStages == GpuStageFlag::Transfer)
-	B3D_TEST_ASSERT(completedEpoch.IssuedBarrier.SourceAccess == GpuAccessFlag::Read)
-	B3D_TEST_ASSERT(completedEpoch.IssuedBarrier.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
-	B3D_TEST_ASSERT(completedEpoch.IssuedBarrier.DestinationAccess == GpuAccessFlag::Write)
+	const GpuBarrierScope readAfterWrite = ResolveTestAccess(state, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
+	B3D_TEST_ASSERT(readAfterWrite.SourceStages == GpuStageFlag::ColorAttachment)
 
-	for(u32 accessIndex = 0; accessIndex < 1000; ++accessIndex)
-		hazardHistory.RegisterStageAccess(GpuStageFlag::ColorAttachment, GpuAccessFlag::Write);
+	GpuResourceWriteEpochHazardState barrierState;
+	ResolveTestAccess(barrierState, GpuStageFlag::Transfer, GpuAccessFlag::Write);
+	barrierState.RecordBarrier(GpuBarrierScope(GpuStageFlag::Transfer, GpuAccessFlag::Write, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write));
+	B3D_TEST_ASSERT(barrierState.GetRequiredBarrier(GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read).IsValid())
+	barrierState.RecordBarrier(GpuBarrierScope(GpuStageFlag::Transfer, GpuAccessFlag::Write, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read));
+	B3D_TEST_ASSERT(!barrierState.GetRequiredBarrier(GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read).IsValid())
 
-	B3D_TEST_ASSERT(hazardHistory.GetCompletedEpochs().Size() == 1)
-	B3D_TEST_ASSERT(hazardHistory.GetCurrentAccessScope().GetAccess(GpuStageFlag::ColorAttachment) == GpuAccessFlag::Write)
+	GpuResourceWriteEpochHazardState layoutTransitionState;
+	ResolveTestAccess(layoutTransitionState, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
+	const GpuBarrierScope layoutTransitionDependency = layoutTransitionState.GetRequiredBarrier(
+		GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read | GpuAccessFlag::Write);
+	B3D_TEST_ASSERT(layoutTransitionDependency.SourceStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(layoutTransitionDependency.SourceAccess == GpuAccessFlag::Read)
+	B3D_TEST_ASSERT(layoutTransitionDependency.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
+	B3D_TEST_ASSERT(layoutTransitionDependency.DestinationAccess == (GpuAccessFlag::Read | GpuAccessFlag::Write))
 
-	const GpuAccessScope accumulatedAccessScope = hazardHistory.GetAccumulatedAccessScope();
-	B3D_TEST_ASSERT(accumulatedAccessScope.GetStages().IsSet(GpuStageFlag::Transfer))
-	B3D_TEST_ASSERT(accumulatedAccessScope.GetStages().IsSet(GpuStageFlag::ComputeShaderNonUniform))
-	B3D_TEST_ASSERT(accumulatedAccessScope.GetStages().IsSet(GpuStageFlag::ColorAttachment))
+	GpuResourceHazardState commandHazardState;
+	B3D_TEST_ASSERT(!ResolveTestAccess(commandHazardState, GpuStageFlag::Transfer, GpuAccessFlag::Read).IsValid())
+	const GpuBarrierScope internalWriteBarrier = ResolveTestAccess(commandHazardState,
+		GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write);
+	B3D_TEST_ASSERT(internalWriteBarrier.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(internalWriteBarrier.SourceAccess == GpuAccessFlag::Read)
+	B3D_TEST_ASSERT(internalWriteBarrier.DestinationAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(commandHazardState.EntryReadStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(commandHazardState.FirstWriteStages == GpuStageFlag::ComputeShaderNonUniform)
+	B3D_TEST_ASSERT(commandHazardState.AllAccessScope.ReadStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(commandHazardState.AllAccessScope.WriteStages == GpuStageFlag::ComputeShaderNonUniform)
+	B3D_TEST_ASSERT(commandHazardState.LastWriteEpochHazardState.WriteStages ==
+		GpuStageFlag::ComputeShaderNonUniform)
 
-	GpuHazardStateWithHistory leadingBarrierHistory;
-	leadingBarrierHistory.RegisterBarrier(GpuHazardStageAndAccess(GpuStageFlag::Transfer, GpuAccessFlag::Write, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read));
-	leadingBarrierHistory.RegisterStageAccess(GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
+	GpuResourceHazardState leadingBarrierHazardState;
+	leadingBarrierHazardState.RecordBarrier(GpuBarrierScope(GpuStageFlag::Transfer, GpuAccessFlag::Write,
+		GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read));
+	leadingBarrierHazardState.RecordBarrier(GpuBarrierScope(GpuStageFlag::VertexShaderNonUniform,
+		GpuAccessFlag::Write, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read));
+	B3D_TEST_ASSERT(leadingBarrierHazardState.LeadingBarriers.Size() == 2)
 
-	B3D_TEST_ASSERT(leadingBarrierHistory.GetCompletedEpochs().Size() == 1)
-	B3D_TEST_ASSERT(!leadingBarrierHistory.GetCompletedEpochs()[0].AccessScope.IsValid())
-	B3D_TEST_ASSERT(leadingBarrierHistory.GetCurrentAccessScope().GetAccess(GpuStageFlag::FragmentShaderNonUniform) == GpuAccessFlag::Read)
+	GpuResourceWriteEpochHazardState shaderWriteChainState;
+	B3D_TEST_ASSERT(!ResolveTestAccess(shaderWriteChainState,
+		GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write).IsValid())
+
+	const GpuBarrierScope fragmentWriteBarrier = ResolveTestAccess(shaderWriteChainState,
+		GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Write);
+	B3D_TEST_ASSERT(fragmentWriteBarrier.SourceStages == GpuStageFlag::ComputeShaderNonUniform)
+	B3D_TEST_ASSERT(fragmentWriteBarrier.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(fragmentWriteBarrier.DestinationStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(fragmentWriteBarrier.DestinationAccess == GpuAccessFlag::Write)
+
+	const GpuBarrierScope vertexReadBarrier = ResolveTestAccess(shaderWriteChainState,
+		GpuStageFlag::VertexShaderNonUniform, GpuAccessFlag::Read);
+	B3D_TEST_ASSERT(vertexReadBarrier.SourceStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(vertexReadBarrier.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(vertexReadBarrier.DestinationStages == GpuStageFlag::VertexShaderNonUniform)
+	B3D_TEST_ASSERT(vertexReadBarrier.DestinationAccess == GpuAccessFlag::Read)
 }
 
-void GpuBackendTestSuite::TestTransitionRecipe()
+void GpuBackendTestSuite::TestResourceTransition()
 {
 	const GpuQueueId sourceQueueId(GQT_GRAPHICS, 0);
+	SubmissionTestBuffer buffer;
 
-	GpuHazardState sourceHazardState;
-	sourceHazardState.ClearSafeAccess(GpuStageFlag::Transfer, GpuAccessFlag::Write);
+	auto fnSetWriterState = [&buffer, sourceQueueId](const GpuResourceWriteEpochHazardState& writerHazards)
+	{
+		GpuResourceSubmissionState submissionState;
+		submissionState.WriterHazards = writerHazards;
+		submissionState.WriterQueueId = sourceQueueId;
+		submissionState.AcquiredQueues = sourceQueueId;
+		submissionState.HasWriter = true;
+		buffer.SetSubmissionState(std::move(submissionState));
+	};
 
-	GpuHazardStateWithHistory fragmentReadHistory;
-	fragmentReadHistory.RegisterStageAccess(GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
+	GpuResourceWriteEpochHazardState sourceWriteEpochHazardState;
+	ResolveTestAccess(sourceWriteEpochHazardState, GpuStageFlag::Transfer, GpuAccessFlag::Write);
+	fnSetWriterState(sourceWriteEpochHazardState);
 
-	const GpuHazardState::TransitionRecipe fragmentReadRecipe = sourceHazardState.BuildTransitionRecipe(sourceQueueId, fragmentReadHistory);
-	B3D_TEST_ASSERT(fragmentReadRecipe.SourceQueueId.Id == sourceQueueId.Id)
-	B3D_TEST_ASSERT(fragmentReadRecipe.MemoryDependency.SourceStages == GpuStageFlag::Transfer)
-	B3D_TEST_ASSERT(fragmentReadRecipe.MemoryDependency.SourceAccess == GpuAccessFlag::Write)
-	B3D_TEST_ASSERT(fragmentReadRecipe.MemoryDependency.DestinationStages == GpuStageFlag::FragmentShaderNonUniform)
-	B3D_TEST_ASSERT(fragmentReadRecipe.MemoryDependency.DestinationAccess == GpuAccessFlag::Read)
-	B3D_TEST_ASSERT(!fragmentReadRecipe.ExecutionDependency.IsValid())
-	B3D_TEST_ASSERT(fragmentReadRecipe.RemainingHazardState.MemoryBarrierTracking.GetUnsafeAccessStages(GpuStageFlag::FragmentShaderNonUniform) == GpuStageFlag::None)
-	B3D_TEST_ASSERT(fragmentReadRecipe.RemainingHazardState.MemoryBarrierTracking.GetUnsafeAccessStages(GpuStageFlag::ComputeShaderNonUniform).IsSet(GpuStageFlag::Transfer))
+	GpuResourceHazardState fragmentReadHazardState;
+	ResolveTestAccess(fragmentReadHazardState, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
 
-	GpuHazardStateWithHistory computeReadHistory;
-	computeReadHistory.RegisterStageAccess(GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
+	const GpuSubmissionTransition fragmentReadTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, fragmentReadHazardState);
+	B3D_TEST_ASSERT(fragmentReadTransition.StateResource == &buffer)
+	B3D_TEST_ASSERT(fragmentReadTransition.MemoryBarrier.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(fragmentReadTransition.MemoryBarrier.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(fragmentReadTransition.MemoryBarrier.DestinationStages == GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(fragmentReadTransition.MemoryBarrier.DestinationAccess == GpuAccessFlag::Read)
+	B3D_TEST_ASSERT(!fragmentReadTransition.ExecutionBarrier.IsValid())
+	B3D_TEST_ASSERT(fragmentReadTransition.PostTransitionSubmissionState.WriterHazards.VisibleStages ==
+		GpuStageFlag::FragmentShaderNonUniform)
+	B3D_TEST_ASSERT(fragmentReadTransition.PostTransitionSubmissionState.WriterHazards.ReaderStages ==
+		GpuStageFlag::FragmentShaderNonUniform)
 
-	const GpuHazardState::TransitionRecipe computeReadRecipe = fragmentReadRecipe.RemainingHazardState.BuildTransitionRecipe(sourceQueueId, computeReadHistory);
-	B3D_TEST_ASSERT(computeReadRecipe.MemoryDependency.SourceStages == GpuStageFlag::Transfer)
-	B3D_TEST_ASSERT(computeReadRecipe.MemoryDependency.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
+	GpuResourceHazardState computeReadHazardState;
+	ResolveTestAccess(computeReadHazardState, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
 
-	GpuHazardStateWithHistory multiEpochHistory;
-	multiEpochHistory.RegisterStageAccess(GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
-	multiEpochHistory.RegisterBarrier(GpuHazardStageAndAccess(GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read));
-	multiEpochHistory.RegisterStageAccess(GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
+	GpuResourceSubmissionState fragmentReadPostState = fragmentReadTransition.PostTransitionSubmissionState;
+	buffer.SetSubmissionState(std::move(fragmentReadPostState));
+	const GpuSubmissionTransition computeReadTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, computeReadHazardState);
+	B3D_TEST_ASSERT(computeReadTransition.MemoryBarrier.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(computeReadTransition.MemoryBarrier.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
 
-	const GpuHazardState::TransitionRecipe multiEpochRecipe = sourceHazardState.BuildTransitionRecipe(sourceQueueId, multiEpochHistory);
-	B3D_TEST_ASSERT(multiEpochHistory.GetFirstAccessScope().GetStages() == GpuStageFlag::FragmentShaderNonUniform)
-	B3D_TEST_ASSERT(multiEpochRecipe.MemoryDependency.DestinationStages == (GpuStageFlag::FragmentShaderNonUniform | GpuStageFlag::ComputeShaderNonUniform))
+	fnSetWriterState(sourceWriteEpochHazardState);
+	GpuResourceHazardState readThenWriteHazardState;
+	ResolveTestAccess(readThenWriteHazardState, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
+	ResolveTestAccess(readThenWriteHazardState, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Write);
 
-	const GpuAccessScope destinationAccessScope = multiEpochRecipe.GetDestinationAccessScope();
-	B3D_TEST_ASSERT(destinationAccessScope.GetAccess(GpuStageFlag::FragmentShaderNonUniform) == GpuAccessFlag::Read)
-	B3D_TEST_ASSERT(destinationAccessScope.GetAccess(GpuStageFlag::ComputeShaderNonUniform) == GpuAccessFlag::Read)
+	const GpuSubmissionTransition readThenWriteTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, readThenWriteHazardState);
+	B3D_TEST_ASSERT(readThenWriteTransition.MemoryBarrier.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(readThenWriteTransition.MemoryBarrier.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(readThenWriteTransition.MemoryBarrier.DestinationStages ==
+		(GpuStageFlag::ComputeShaderNonUniform | GpuStageFlag::FragmentShaderNonUniform))
+	B3D_TEST_ASSERT(readThenWriteTransition.MemoryBarrier.DestinationAccess ==
+		(GpuAccessFlag::Read | GpuAccessFlag::Write))
+	B3D_TEST_ASSERT(!readThenWriteTransition.ExecutionBarrier.IsValid())
+	B3D_TEST_ASSERT(readThenWriteTransition.PostTransitionSubmissionState.WriterHazards.WriteStages ==
+		GpuStageFlag::FragmentShaderNonUniform)
 
-	GpuHazardStateWithHistory leadingBarrierHistory;
-	leadingBarrierHistory.RegisterBarrier(GpuHazardStageAndAccess(GpuStageFlag::Transfer, GpuAccessFlag::Write, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read));
-	leadingBarrierHistory.RegisterStageAccess(GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read);
+	GpuResourceWriteEpochHazardState sourceWithReader = sourceWriteEpochHazardState;
+	ResolveTestAccess(sourceWithReader, GpuStageFlag::VertexShaderNonUniform, GpuAccessFlag::Read);
+	fnSetWriterState(sourceWithReader);
+	GpuResourceHazardState writeHazardState;
+	ResolveTestAccess(writeHazardState, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write);
+	const GpuSubmissionTransition writeTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, writeHazardState);
+	B3D_TEST_ASSERT(writeTransition.MemoryBarrier.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(writeTransition.MemoryBarrier.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(writeTransition.ExecutionBarrier.SourceStages == GpuStageFlag::VertexShaderNonUniform)
+	B3D_TEST_ASSERT(writeTransition.ExecutionBarrier.SourceAccess == GpuAccessFlag::Read)
+	B3D_TEST_ASSERT(writeTransition.MemoryBarrier.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
+	B3D_TEST_ASSERT(writeTransition.ExecutionBarrier.DestinationStages == GpuStageFlag::ComputeShaderNonUniform)
 
-	const GpuHazardState::TransitionRecipe leadingBarrierRecipe = sourceHazardState.BuildTransitionRecipe(sourceQueueId, leadingBarrierHistory);
-	B3D_TEST_ASSERT(!leadingBarrierRecipe.MemoryDependency.IsValid())
-	B3D_TEST_ASSERT(leadingBarrierRecipe.RequiresCrossQueueDependency)
-	B3D_TEST_ASSERT(leadingBarrierRecipe.RemainingHazardState.MemoryBarrierTracking.GetUnsafeAccessStages(GpuStageFlag::FragmentShaderNonUniform) == GpuStageFlag::None)
+	fnSetWriterState(sourceWriteEpochHazardState);
+	GpuResourceHazardState exactLeadingBarrierHazardState;
+	exactLeadingBarrierHazardState.RecordBarrier(GpuBarrierScope(GpuStageFlag::Transfer,
+		GpuAccessFlag::Write, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read));
+	ResolveTestAccess(exactLeadingBarrierHazardState, GpuStageFlag::FragmentShaderNonUniform,
+		GpuAccessFlag::Read);
+	const GpuSubmissionTransition exactLeadingBarrierTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, exactLeadingBarrierHazardState);
+	B3D_TEST_ASSERT(!exactLeadingBarrierTransition.MemoryBarrier.IsValid())
+
+	fnSetWriterState(sourceWriteEpochHazardState);
+	GpuResourceHazardState leadingBarrierOnlyHazardState;
+	leadingBarrierOnlyHazardState.RecordBarrier(GpuBarrierScope(GpuStageFlag::Transfer,
+		GpuAccessFlag::Write, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read));
+	const GpuSubmissionTransition leadingBarrierOnlyTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, leadingBarrierOnlyHazardState);
+	B3D_TEST_ASSERT(leadingBarrierOnlyHazardState.HasSubmissionEffect())
+	B3D_TEST_ASSERT(leadingBarrierOnlyTransition.PostTransitionSubmissionState.WriterHazards.VisibleStages ==
+		GpuStageFlag::FragmentShaderNonUniform)
+
+	fnSetWriterState(sourceWriteEpochHazardState);
+	GpuResourceHazardState mismatchedLeadingBarriersHazardState;
+	mismatchedLeadingBarriersHazardState.RecordBarrier(GpuBarrierScope(GpuStageFlag::Transfer,
+		GpuAccessFlag::Write, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read));
+	mismatchedLeadingBarriersHazardState.RecordBarrier(GpuBarrierScope(GpuStageFlag::VertexShaderNonUniform,
+		GpuAccessFlag::Write, GpuStageFlag::FragmentShaderNonUniform, GpuAccessFlag::Read));
+	ResolveTestAccess(mismatchedLeadingBarriersHazardState, GpuStageFlag::FragmentShaderNonUniform,
+		GpuAccessFlag::Read);
+	const GpuSubmissionTransition mismatchedLeadingBarriersTransition =
+		GpuSubmissionTransition::Build(buffer, sourceQueueId, mismatchedLeadingBarriersHazardState);
+	B3D_TEST_ASSERT(mismatchedLeadingBarriersTransition.MemoryBarrier.SourceStages == GpuStageFlag::Transfer)
+	B3D_TEST_ASSERT(mismatchedLeadingBarriersTransition.MemoryBarrier.DestinationStages == GpuStageFlag::FragmentShaderNonUniform)
 }
 
 void GpuBackendTestSuite::TestSubmissionTransitionPlanning()
@@ -229,6 +347,8 @@ void GpuBackendTestSuite::TestSubmissionTransitionPlanning()
 	BeginTestRead(readOnlyBuffer, firstReaderQueue);
 	const SubmissionTestResult sameQueueWrite = ResolveTestSubmission(readOnlyBuffer, firstReaderQueue, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write);
 	B3D_TEST_ASSERT(sameQueueWrite.ParallelAccessWaitMask.IsEmpty())
-	B3D_TEST_ASSERT(sameQueueWrite.SameQueueTransitionRecipe.ExecutionDependency.IsValid())
+	B3D_TEST_ASSERT(sameQueueWrite.ExecutionBarrier.IsValid())
+	B3D_TEST_ASSERT(sameQueueWrite.ExecutionBarrier.SourceAccess == GpuAccessFlag::Read)
+	B3D_TEST_ASSERT(!sameQueueWrite.MemoryBarrier.IsValid())
 	EndTestRead(readOnlyBuffer, firstReaderQueue);
 }

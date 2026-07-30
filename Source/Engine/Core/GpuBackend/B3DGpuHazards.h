@@ -4,11 +4,16 @@
 
 #include "B3DPrerequisites.h"
 #include "GpuBackend/B3DGpuQueue.h"
+#include "GpuBackend/B3DGpuTextureSubresource.h"
 
 #define B3D_VERIFY_BARRIERS B3D_BUILD_TYPE_DEVELOPMENT // If enabled, ensures that memory barriers are properly issued
 
 namespace b3d
 {
+	class IGpuResource;
+	class IGpuBufferResource;
+	class IGpuImageResource;
+
 	/** Flags that determine how is a resource being accessed by the GPU. */
 	enum class GpuAccessFlag
 	{
@@ -22,6 +27,8 @@ namespace b3d
 
 	namespace render
 	{
+		enum class GpuImageLayout;
+
 		/**
 		 * Determines on which pipeline stage and in what manner a resource is being accessed. Combined with read/write
 		 * access flags this uniquely determines the synchronization (pipeline/cache barriers) a backend must issue.
@@ -109,11 +116,11 @@ namespace b3d
 		};
 
 		/** Describes a source and destination stage & access participating in a hazard barrier. */
-		struct GpuHazardStageAndAccess
+		struct GpuBarrierScope
 		{
-			GpuHazardStageAndAccess() = default;
+			GpuBarrierScope() = default;
 
-			GpuHazardStageAndAccess(GpuStageFlags sourceStages, GpuAccessFlags sourceAccess, GpuStageFlags destinationStages, GpuAccessFlags destinationAccess)
+			GpuBarrierScope(GpuStageFlags sourceStages, GpuAccessFlags sourceAccess, GpuStageFlags destinationStages, GpuAccessFlags destinationAccess)
 				: SourceStages(sourceStages), SourceAccess(sourceAccess), DestinationStages(destinationStages), DestinationAccess(destinationAccess)
 			{ }
 
@@ -126,178 +133,173 @@ namespace b3d
 			bool IsValid() const { return SourceStages != GpuStageFlag::None && DestinationStages != GpuStageFlag::None; }
 		};
 
-		/** Keeps track on which pipeline stages a resource was written/read, and on which stages it may be safely accessed from. */
-		struct B3D_EXPORT GpuHazardStageState
+		/**
+		 * Contains hazards that determine what kind of barrier (if any) needs to be issued on the next access of the resource. This information
+		 * is all that is required to determine barriers within a single command buffer recording scope.
+		 *
+		 * Each write waits on all prior reads & writes, and then resets the hazard state as all hazards are guaranteed to be resolved.
+		 * Each read waits on prior writes (except those that have been waited on by prior reads - represented as visible stages).
+		 */
+		struct B3D_EXPORT GpuResourceWriteEpochHazardState
 		{
-			static constexpr u32 kPipelineStageCount = 16;
+			/** Stages that produced the write starting the current write epoch. */
+			GpuStageFlags WriteStages = GpuStageFlag::None;
 
-			/** For each pipeline stage, stores in which stages is it safe to access the resource. */
-			std::array<GpuStageFlags, kPipelineStageCount> SafeAccess;
+			/** Stages that read the resource after the most recent write. */
+			GpuStageFlags ReaderStages = GpuStageFlag::None;
 
-			GpuHazardStageState();
-
-			/** Clears safe access for all provided pipeline stages. */
-			void ClearStageSafeAccess(GpuStageFlags stages);
+			/** Stages where the most recent write has been made visible for reads. */
+			GpuStageFlags VisibleStages = GpuStageFlag::None;
 
 			/**
-			 * Adds safe access for all provided pipeline stages.
+			 * Determines the barrier required before an access without changing the tracked state.
 			 *
-			 * @param	sourceStages		One or multiple stages to add the safe access to.
-			 * @param	destinationStages	Stages to register as being safe to access from.
+			 * @p broadenedReadStages may optionally be used to specify additional stages beyond what's currently required. Usually does not increase the cost
+			 * of the barrier by much, and saves cost by skipping future barriers to be issued for those stages (e.g. whenever reading a resource you
+			 * may want to issue a barrier with all shader stages).
 			 */
-			void AddStageSafeAccess(GpuStageFlags sourceStages, GpuStageFlags destinationStages);
+			GpuBarrierScope GetRequiredBarrier(GpuStageFlags stages, GpuAccessFlags access, GpuStageFlags broadenedReadStages = GpuStageFlag::None) const;
 
-			/** Checks is it safe to access the resource in all the provided pipeline stages. */
-			bool IsAccessSafe(GpuStageFlags stages) const;
+			/** Records that a resource was accessed on a particular stage. This either starts a new write epoch or appends the list of readers. */
+			void RecordAccess(GpuStageFlags stages, GpuAccessFlags access);
 
-			/** Returns a list of all source stages that we cannot safely access data from the provided @p stages. */
-			GpuStageFlags GetUnsafeAccessStages(GpuStageFlags stages) const;
-
-			/** Writes a descriptive error message when access is unsafe. */
-			void LogUnsafeAccess(GpuStageFlags stages, GpuAccessFlags currentAccessType, GpuAccessFlags previousAccessType) const;
+			/** Marks stages that a write was made visible to after the provided barrier was issued. */
+			void RecordBarrier(const GpuBarrierScope& barrier);
 		};
-
-		struct GpuHazardStateWithHistory;
 
 		/**
-		 * Outstanding read/write hazards and the destination stages that can safely access them.
-		 * For each stage it maps which other stage can safely access that stage. Reads/writes have separate mappings:
-		 *  - ExecutionBarrierTracking records which stages have accessed the resource for reads. Those cannot be written without issuing an execution barrier first.
-		 *  - MemoryBarrierTracking records which stages have accessed the resource for writes. Those cannot be read or written without issuing a memory barrier first.
+		 * Tracks accesses, barriers and write-epoch hazards for one resource over a single command buffer recording scope. This information
+		 * is all that is required to determine barriers both within a single command buffer recording scope and between two command buffer submissions.
 		 */
-		struct B3D_EXPORT GpuHazardState
+		struct B3D_EXPORT GpuResourceHazardState
 		{
-			/** Read stages that require an execution dependency before a subsequent write. */
-			GpuHazardStageState ExecutionBarrierTracking;
+			GpuStageFlags EntryReadStages = GpuStageFlag::None; /**< Reads recorded before the first write. */
+			GpuStageFlags FirstWriteStages = GpuStageFlag::None; /**< Stages of the first write. */
+			GpuAccessFlags FirstWriteAccess = GpuAccessFlag::None; /**< Access flags of the first access that writes. May include Read for read-modify-write access. */
 
-			/** Write stages that require a memory dependency before a subsequent read or write. */
-			GpuHazardStageState MemoryBarrierTracking;
+			TInlineArray<GpuBarrierScope, 1> LeadingBarriers; /**< Explicit (user) barriers recorded before the first access. */
+			GpuAccessScope AllAccessScope; /**< All accesses recorded in the tracking scope. */
+			GpuResourceWriteEpochHazardState LastWriteEpochHazardState; /**< Last write-epoch hazard state in the recording scope. */
 
-			/** Registers a resource access as unsafe for subsequent conflicting accesses. */
-			void ClearSafeAccess(GpuStageFlags stages, GpuAccessFlags access);
+			/** See GpuResourceWriteEpocHazardState::GetRequiredBarrier */
+			GpuBarrierScope GetRequiredBarrier(GpuStageFlags stages, GpuAccessFlags access, GpuStageFlags broadenedReadStages = GpuStageFlag::None) const;
 
-			/** Marks a source access as safe for the specified destination scope. */
-			void AddSafeAccess(const GpuHazardStageAndAccess& barrier);
+			/** Records that a resource was accessed on a particular stage. */
+			void RecordAccess(GpuStageFlags stages, GpuAccessFlags access);
 
-			/** Combines hazards; a destination is safe only if it is safe in both inputs. */
-			void Merge(const GpuHazardState& other);
+			/** Records a barrier and credits any visibility it establishes. */
+			void RecordBarrier(const GpuBarrierScope& barrier);
 
-			/** Returns stages from which reads are unsafe. */
-			GpuStageFlags GetUnsafeReadStages() const { return ExecutionBarrierTracking.GetUnsafeAccessStages(GpuStageFlag::All); }
+			/** Returns true if the tracking scope accesses the resource. */
+			bool HasAccess() const { return AllAccessScope.IsValid(); }
 
-			/** Returns stages from which writes are unsafe. */
-			GpuStageFlags GetUnsafeWriteStages() const { return MemoryBarrierTracking.GetUnsafeAccessStages(GpuStageFlag::All); }
+			/** Returns true if the tracking scope can change the resource's carried hazard state. */
+			bool HasSubmissionEffect() const { return HasAccess() || !LeadingBarriers.Empty(); }
 
-			/** Returns true if any stages still have unsafe read or write access. */
-			bool HasUnsafeStages() const { return GetUnsafeReadStages() != GpuStageFlag::None || GetUnsafeWriteStages() != GpuStageFlag::None; }
+			/** Returns true if the tracking scope writes the resource. */
+			bool HasWrite() const { return FirstWriteStages != GpuStageFlag::None; }
 
-			// Defined after the class, as it embeds the enclosing class by value (which requires it to be complete).
-			struct TransitionRecipe;
-
-			/**
-			 * Replays @p destinationCommandBufferHazards' recorded access/barrier history against these hazards,
-			 * determining the barriers the destination command buffer must issue before it begins and the hazards
-			 * that remain unresolved afterwards. Neither input is mutated. @p sourceQueueId identifies the queue
-			 * these hazards were produced on and is stamped into the recipe verbatim.
-			 */
-			TransitionRecipe BuildTransitionRecipe(GpuQueueId sourceQueueId, const GpuHazardStateWithHistory& destinationCommandBufferHazards) const;
+			/** Returns the tracking scope's entry access scope. */
+			GpuAccessScope GetFirstAccessScope() const;
 		};
 
-		/** Holds information about barriers that need to be issued between two command buffers, as well as the hazards that remain. */
-		struct GpuHazardState::TransitionRecipe
+		/**
+		 * Submission state for a resource. The latest writer keeps the full hazard state, while read-only submissions
+		 * are represented as parallel queue branches within that writer epoch.
+		 */
+		struct B3D_EXPORT GpuResourceSubmissionState
 		{
-			GpuQueueId SourceQueueId; /**< Queue that produced the source hazards this recipe resolves. */
-			GpuHazardStageAndAccess MemoryDependency; /**< Memory dependency required before the destination command buffer begins. */
-			GpuHazardStageAndAccess ExecutionDependency; /** Execution dependency required before the destination command buffer begins. */
-			GpuHazardState RemainingHazardState; /** Remaining hazards that need to be evaluated for future command buffer submissions. */
+			GpuResourceWriteEpochHazardState WriterHazards; /**< Write-epoch hazards on the queue containing the latest write. */
+			GpuQueueId WriterQueueId; /**< Queue containing the latest write. Valid only when HasWriter is true. */
+			GpuQueueMask AcquiredQueues = GpuQueueMask::kNone; /**< Queues that already acquired the latest write. */
+			GpuQueueMask ReaderQueues = GpuQueueMask::kNone; /**< Queues with read submissions after the latest write. */
+			GpuStageFlags ReaderStages = GpuStageFlag::None; /**< Conservative stage union for ReaderQueues. */
+			bool HasWriter = false; /**< Whether the current epoch was created by a write. */
 
-			/** If the source command buffer has issued an internal barrier we depend on, we need wait on its queue, otherwise we risk running before the barrier is issued. */
-			bool RequiresCrossQueueDependency = false;
-
-			/** Returns destination accesses that must be covered by a boundary dependency. */
-			GpuAccessScope GetDestinationAccessScope() const
+			/** Returns unresolved accesses accumulated by the writer and all parallel readers. */
+			GpuAccessScope GetUnsafeAccessScope() const
 			{
 				GpuAccessScope scope;
-
-				if(MemoryDependency.IsValid())
-					scope.Add(MemoryDependency.DestinationStages, MemoryDependency.DestinationAccess);
-
-				if(ExecutionDependency.IsValid())
-					scope.Add(ExecutionDependency.DestinationStages, ExecutionDependency.DestinationAccess);
-
+				scope.Add(WriterHazards.ReaderStages | ReaderStages, GpuAccessFlag::Read);
+				scope.Add(WriterHazards.WriteStages, GpuAccessFlag::Write);
 				return scope;
-			}
-
-			/** Returns true if destination command buffer execution must be ordered after the source submission. */
-			bool HasDependency() const
-			{
-				return MemoryDependency.IsValid() || ExecutionDependency.IsValid() || RequiresCrossQueueDependency;
 			}
 		};
 
-		/** Tracks resource hazards and executed barriers within a command buffer. */
-		struct B3D_EXPORT GpuHazardStateWithHistory
+		/** 
+		 * Contains required barriers and waits for a GPU resource during a command buffer submission. The exact transitions depend on 
+		 * the GPU backend to interpret them, but generally falls into the following categories: 
+		 * - Command buffer submitted on the same queue that the resource was used on previously. In this case the backend may issue a memory barrier and/or 
+		 *   execution barrier to ensure proper ordering of resource accesses.
+		 * - Command buffer submitted on a different queue than the resource was used on previously. In that case the backend may issue a semaphore wait to 
+		 *   ensure that the previous queue has completed its work before the current queue starts using the resource.
+		 *
+		 * In either case, the transition also contains the post-submission state of the resource, which will be used to update the resource's submission state 
+		 * after the command buffer is submitted, so the next submitted command buffer can calculate its required transition.
+		 */
+		struct B3D_EXPORT GpuSubmissionTransition
 		{
-			/** Accumulated stages & accesses marked unsafe in-between barriers, and the following barrier that made the accesses safe. */
-			struct Epoch
-			{
-				GpuAccessScope AccessScope;
-				GpuHazardStageAndAccess IssuedBarrier;
-			};
+			IGpuResource* StateResource = nullptr;
+			GpuAccessScope DestinationFirstAccessScope;
+			GpuAccessScope DestinationAllAccessScope;
+			GpuAccessScope SourceAccessScope; /**< Conservative source scope for backend ownership/layout/state transitions. */
+			GpuBarrierScope MemoryBarrier; /**< Same-queue memory dependency recorded before destination execution. */
+			GpuBarrierScope ExecutionBarrier; /**< Same-queue execution dependency recorded before destination execution. */
+			GpuResourceSubmissionState PostTransitionSubmissionState; /**< State committed after the visitor constructs native synchronization. */
 
-			GpuAccessFlags Access; /**< Has the resource been read or written so far. */
-			GpuHazardState State; /**< Currently active hazards. */
+			/**
+			 * Complete cross-queue wait set required to make the command buffer's recorded resource accesses safe while
+			 * preserving parallelism where legal. Reads wait for the latest writer but remain parallel with other readers;
+			 * writes wait for active readers and therefore naturally become exclusive.
+			 */
+			GpuQueueMask ParallelAccessWaitMask = GpuQueueMask::kNone;
 
-			/** Notifies the tracker that a stage (or stages) is/are being accessed, making certain stage accesses unsafe. */
-			void RegisterStageAccess(GpuStageFlags stages, GpuAccessFlags access)
-			{
-				mCurrentAccessScope.Add(stages, access);
-				State.ClearSafeAccess(stages, access);
-			}
+			/**
+			 * Alternative complete wait set for an operation that requires exclusive resource access, such as mutating
+			 * image layout, queue ownership, native resource state or compression metadata. Use this instead of
+			 * ParallelAccessWaitMask for that operation, not in addition to it.
+			 */
+			GpuQueueMask ExclusiveAccessWaitMask = GpuQueueMask::kNone;
 
-			/** Notifies the tracker that a barrier was issued, making certain stage accesses safe. */
-			void RegisterBarrier(const GpuHazardStageAndAccess& barrier)
-			{
-				// We accumulate all accesses between barriers as we need to replay them for the transition recipe
-				Epoch epoch;
-				epoch.AccessScope = mCurrentAccessScope;
-				epoch.IssuedBarrier = barrier;
-				mCompletedEpochs.Add(epoch);
+			GpuSubmissionTransition(IGpuResource& stateResource, const GpuAccessScope& destinationFirstAccessScope, const GpuAccessScope& destinationAllAccessScope);
 
-				mCurrentAccessScope = GpuAccessScope();
-				State.AddSafeAccess(barrier);
-			}
+			/** Returns true if a barrier must be recorded on the destination queue. */
+			bool HasSameQueueDependency() const { return MemoryBarrier.IsValid() || ExecutionBarrier.IsValid(); }
 
-			/** Returns epochs terminated by an executed barrier. */
-			const TInlineArray<Epoch, 2>& GetCompletedEpochs() const { return mCompletedEpochs; }
+			/** Builds the complete synchronization and post-submission state for one resource on @p destinationQueueId. */
+			static GpuSubmissionTransition Build(IGpuResource& stateResource, GpuQueueId destinationQueueId, const GpuResourceHazardState& destinationHazardState);
+		};
 
-			/** Returns access scope recorded after the most recently registered barrier. */
-			const GpuAccessScope& GetCurrentAccessScope() const { return mCurrentAccessScope; }
+		/** Submission-boundary description for a buffer. */
+		struct B3D_EXPORT GpuSubmissionBufferTransition : GpuSubmissionTransition
+		{
+			GpuSubmissionBufferTransition(IGpuBufferResource& buffer, GpuSubmissionTransition&& transition)
+				: GpuSubmissionTransition(std::move(transition)), Buffer(&buffer)
+			{ }
 
-			/** Returns the conservative union of all committed access scopes. */
-			GpuAccessScope GetAccumulatedAccessScope() const
-			{
-				GpuAccessScope accesses = mCurrentAccessScope;
+			IGpuBufferResource* Buffer = nullptr;
+		};
 
-				for(const Epoch& epoch : mCompletedEpochs)
-					accesses.Add(epoch.AccessScope);
+		/** Submission-boundary description for one image face/mip. */
+		struct B3D_EXPORT GpuSubmissionImageTransition : GpuSubmissionTransition
+		{
+			GpuSubmissionImageTransition(IGpuImageResource& image, const GpuTextureSubresourceRange& imageRange, GpuImageLayout initialLayout, GpuImageLayout finalLayout, GpuSubmissionTransition&& transition)
+				: GpuSubmissionTransition(std::move(transition)), Image(&image), ImageRange(imageRange), InitialLayout(initialLayout), FinalLayout(finalLayout)
+			{ }
 
-				return accesses;
-			}
+			IGpuImageResource* Image = nullptr;
+			GpuTextureSubresourceRange ImageRange;
+			GpuImageLayout InitialLayout{};
+			GpuImageLayout FinalLayout{};
+		};
 
-			/** Returns accesses before the first barrier was issued. Used for cross-command buffer barrier execution. */
-			GpuAccessScope GetFirstAccessScope() const;
-
-#if B3D_VERIFY_BARRIERS
-			/** Verifies that the access is safe from the provided stage and access type. Logs errors if not. */
-			void VerifySafeAccess(GpuStageFlags destinationAccessStageFlags, GpuAccessFlags destinationAccess) const;
-#endif
-
-			// Note - Add LayoutTransitionTracking? Tracks last use of an imagine in a specific layout, and which layouts can be safely transitioned to/from without a barrier
-
-		private:
-			TInlineArray<Epoch, 2> mCompletedEpochs;
-			GpuAccessScope mCurrentAccessScope;
+		/** Receives submission-boundary transitions generated by a resource tracker. */
+		class B3D_EXPORT GpuSubmissionTransitionVisitor
+		{
+		public:
+			virtual ~GpuSubmissionTransitionVisitor() = default;
+			virtual void VisitBuffer(const GpuSubmissionBufferTransition& transition) = 0;
+			virtual void VisitImage(const GpuSubmissionImageTransition& transition) = 0;
 		};
 
 	}
