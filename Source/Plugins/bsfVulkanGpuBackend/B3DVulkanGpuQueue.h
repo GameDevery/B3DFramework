@@ -11,55 +11,22 @@ namespace b3d
 	namespace render
 	{
 		struct VulkanGpuCommandBufferSubmitInformation;
-		class VulkanBinaryQueueProgress;
-
-		/** A waitable point in a Vulkan queue's submission history. */
-		struct VulkanQueueSyncPoint
-		{
-			VulkanQueueSyncPoint() = default;
-			VulkanQueueSyncPoint(GpuQueueId sourceQueueId, VkSemaphore semaphore, u64 semaphoreValue, u64 progressValue, const TShared<VulkanBinaryQueueProgress>& binaryProgress)
-				: SourceQueueId(sourceQueueId), Semaphore(semaphore), SemaphoreValue(semaphoreValue), ProgressValue(progressValue), BinaryProgress(binaryProgress)
-			{ }
-
-			bool IsValid() const { return Semaphore != VK_NULL_HANDLE && ProgressValue != 0; }
-
-			GpuQueueId SourceQueueId;
-			VkSemaphore Semaphore = VK_NULL_HANDLE;
-			u64 SemaphoreValue = 0;
-			u64 ProgressValue = 0;
-			TShared<VulkanBinaryQueueProgress> BinaryProgress;
-		};
-
-		/** Queue-owned binary compatibility record used when timeline semaphores are unavailable. */
-		class VulkanBinaryQueueProgress
-		{
-		public:
-			VulkanBinaryQueueProgress(VulkanGpuDevice& device, GpuQueueId sourceQueueId, u64 value);
-			~VulkanBinaryQueueProgress();
-
-			VulkanBinaryQueueProgress(const VulkanBinaryQueueProgress&) = delete;
-			VulkanBinaryQueueProgress& operator=(const VulkanBinaryQueueProgress&) = delete;
-
-			/** Returns the semaphore dedicated to @p destinationQueueId. */
-			VkSemaphore GetSemaphore(GpuQueueId destinationQueueId) const { return mSemaphores[destinationQueueId.Id]; }
-
-			/** Appends every valid signal semaphore in this record. */
-			void AppendSignalSemaphores(TInlineArray<VkSemaphore, 8>& outSemaphores) const;
-
-			/** Returns the source queue submission value represented by this record. */
-			u64 GetValue() const { return mValue; }
-
-		private:
-			VkDevice mDevice = VK_NULL_HANDLE;
-			Array<VkSemaphore, B3D_MAX_UNIQUE_QUEUES> mSemaphores{};
-			u64 mValue = 0;
-		};
 
 		/** @addtogroup Vulkan
 		 *  @{
 		 */
 
-		/** Vulkan implementation of a GPU queue. */
+		/**
+		 * Vulkan implementation of a GPU queue.
+		 *
+		 * All engine-internal ordering is expressed through a single timeline semaphore owned by each queue: every
+		 * submission signals the queue's timeline with a monotonically increasing value, and inter-queue dependencies
+		 * wait on the source queue's timeline at its last submitted value. Binary semaphores appear only at the
+		 * swapchain boundary (image acquisition and present), where the Vulkan API requires them.
+		 *
+		 * Unless a method notes otherwise, all queue state is confined to the submit thread and requires no locking.
+		 * Submissions retire strictly in FIFO order.
+		 */
 		class VulkanGpuQueue : public GpuQueue
 		{
 		public:
@@ -82,13 +49,6 @@ namespace b3d
 			 */
 			void ExecuteSubmitOnSubmitThread(const VulkanGpuCommandBufferSubmitInformation& submitInformation, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences);
 
-			/**
-			 * Submits a synchronization bridge and returns the binary semaphore that a present operation must wait on.
-			 *
-			 * @note Submit thread only.
-			 */
-			VulkanSemaphore* SubmitPresentBridge(GpuQueueMask syncMask, TArrayView<VulkanSemaphore* const> waitSemaphores);
-
 			/** Returns the internal handle to the Vulkan queue object. */
 			VkQueue GetVulkanHandle() const { return mQueue; }
 
@@ -96,24 +56,18 @@ namespace b3d
 			VulkanGpuDevice& GetDevice() const { return static_cast<VulkanGpuDevice&>(mGpuDevice); }
 
 			/**
-			 * Checks if anything is currently executing on this queue.
-			 *
-			 * @note	This status is only updated after RefreshCompletionStateOnSubmitThread has been called.
-			 * @note	Submit thread only.
-			 */
-			bool IsExecuting() const;
-
-			/**
-			 * Presents the back buffer of the provided swap chain.
+			 * Presents the back buffer of the provided swap chain, after waiting for the provided semaphores and for the
+			 * queues selected by @p syncMask.
 			 *
 			 * @param	swapChain			Swap chain whose back buffer to present.
 			 * @param	swapChainImageIndex	Index of the swap chain image to be presented. Must have been acquired previously.
-			 * @param	waitSemaphores		Optional semaphores to wait on before presenting the queue.
+			 * @param	syncMask			Inter-queue sync mask.
+			 * @param	waitSemaphores		Optional semaphores to wait on before presenting.
 			 * @return						Return code of the present operation.
 			 *
 			 * @note	Submit thread only.
 			 */
-			VkResult Present(VulkanSwapChain* swapChain, u32 swapChainImageIndex, TArrayView<VulkanSemaphore*> waitSemaphores);
+			VkResult Present(VulkanSwapChain* swapChain, u32 swapChainImageIndex, GpuQueueMask syncMask, TArrayView<VulkanSemaphore* const> waitSemaphores);
 
 			/**
 			 * Checks if any of the active command buffers finished executing on the queue and updates their states accordingly. Note that you must follow this call
@@ -129,125 +83,69 @@ namespace b3d
 			void RefreshCompletionState(bool forceWait, bool queueEmpty = false, u32 lastSubmitIndex = ~0u);
 
 			/**
-			 * Returns the last command buffer that was submitted on this queue.
-			 *
-			 * @note	Submit thread only.
-			 */
-			TShared<VulkanGpuCommandBuffer> GetLastCommandBuffer() const { return mLastSubmittedCommandBuffer; }
-
-			/**
 			 * Returns the submit index of the most recently submitted work (command buffer or present) on this queue, or 0 if
-			 * nothing has been submitted yet. Capture this at a frame boundary and pass it to RefreshCompletionStateOnSubmitThread()
+			 * nothing has been submitted yet. Capture this at a frame boundary and pass it to RefreshCompletionState()
 			 * to wait for all of that frame's work to complete.
 			 *
 			 * @note	Submit thread only.
 			 */
 			u32 GetLastSubmitIndex() const { return mNextSubmitIndex - 1; }
 
-			/** Appends persistent progress points for every source queue selected by @p syncMask. Submit thread only. */
-			void AppendQueueSyncPoints(GpuQueueMask syncMask, TInlineArray<VulkanQueueSyncPoint, 8>& outSyncPoints) const;
-
 		protected:
 			/**
-			 * Prepares a list of semaphores that can be provided to submit or present calls.
-			 *
-			 * @param		inSemaphores	External wait semaphores that need to be waited on.
-			 * @param		outSemaphores	All semaphores (external ones, and possibly additional ones), as Vulkan handles. To be appended to this array.
-			 * @return						Number of semaphores appended to the output array.
-			 */
-			u32 RegisterSemaphoresAndGetHandles(TArrayView<VulkanSemaphore* const> inSemaphores, TInlineArray<VkSemaphore, 8>& outSemaphores);
-
-			/** Information about one or multiple submitted command buffers on a queue. */
-			struct QueueSubmissionInformation
-			{
-				QueueSubmissionInformation(const TShared<VulkanGpuCommandBuffer>& lastSubmittedCommandBuffer, u32 submitIndex, u32 commandBufferCount)
-					: LastSubmittedCommandBuffer(lastSubmittedCommandBuffer), SubmitIndex(submitIndex), CommandBufferCount(commandBufferCount)
-				{}
-
-				QueueSubmissionInformation(VulkanSwapChain* swapChain, u32 submitIndex, u32 commandBufferCount)
-					: PresentOperationSwapChain(swapChain), SubmitIndex(submitIndex), CommandBufferCount(commandBufferCount)
-				{}
-
-				TShared<VulkanGpuCommandBuffer> LastSubmittedCommandBuffer; /**< Last command buffer that was submitted, if the submit operation had any command buffers. */
-				VulkanSwapChain* PresentOperationSwapChain = nullptr; /**< Swap chain in case the submit operation was a present operation. */
-				u32 SubmitIndex;
-				u32 CommandBufferCount;
-			};
-
-			/** Information about a single submitted command buffer. */
-			struct QueueSubmissionEntryInformation
-			{
-				QueueSubmissionEntryInformation(const TShared<VulkanGpuCommandBuffer>& commandBuffer, u32 semaphoreCount, TArrayView<const VulkanQueueSyncPoint> queueSyncPoints, const TShared<VulkanBinaryQueueProgress>& signaledBinaryProgress);
-
-				TShared<VulkanGpuCommandBuffer> CommandBuffer; /**< Submitted command buffer. If null, the submission is a present call. */
-				u32 SemaphoreCount = 0;
-				TInlineArray<TShared<VulkanBinaryQueueProgress>, 4> BinaryProgressDependencies;
-				TShared<VulkanBinaryQueueProgress> SignaledBinaryProgress;
-			};
-
-			/**
-			 * Per-submit scratch storage backing a single VkSubmitInfo (or VkPresentInfoKHR). Each submit owns
-			 * its own SubmitWorkBuffer pulled from a pool.
+			 * Scratch storage backing a single VkSubmitInfo (or VkPresentInfoKHR). Its data must stay untouched until the
+			 * corresponding vkQueueSubmit/vkQueuePresentKHR call returns.
 			 */
 			struct SubmitWorkBuffer
 			{
-				TInlineArray<VkSemaphore, 8> SignalSemaphores;
-				TInlineArray<u64, 8> SignalValues;
 				TInlineArray<VkSemaphore, 8> WaitSemaphores;
 				TInlineArray<u64, 8> WaitValues;
 				TInlineArray<VkPipelineStageFlags, 8> WaitStages;
-				TInlineArray<VkCommandBuffer, 8> CommandBuffers;
+				TInlineArray<VkSemaphore, 8> SignalSemaphores;
+				TInlineArray<u64, 8> SignalValues;
+				TInlineArray<VkCommandBuffer, 2> CommandBuffers;
 				VkTimelineSemaphoreSubmitInfo TimelineSubmitInfo = {};
+
+				/** Appends a wait operation, keeping all wait arrays in lockstep. Use a zero @p value for binary semaphores. */
+				void AddWait(VkSemaphore semaphore, u64 value = 0, VkPipelineStageFlags stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+
+				/** Appends a signal operation, keeping both signal arrays in lockstep. Use a zero @p value for binary semaphores. */
+				void AddSignal(VkSemaphore semaphore, u64 value = 0);
 
 				void Clear();
 			};
 
 			/**
-			 * Registers the command buffer for submission and generates the VkSubmitInfo structure that can be submitted to the queue.
-			 *
-			 * @param	commandBuffer		Command buffer to be submitted.
-			 * @param	waitSemaphores		Set of semaphores that should be waited on before the command buffers start executing.
-			 * @param	signalFences		Optional timeline-fence + value pairs to also signal when this submit finishes.
+			 * A submitted batch (command buffers or a present operation) together with everything that must stay alive, and
+			 * be released, once the GPU finishes executing it.
 			 */
-			VkSubmitInfo RegisterSubmissionAndGenerateSubmitInfo(const TShared<VulkanGpuCommandBuffer>& commandBuffer, TArrayView<VulkanSemaphore* const> waitSemaphores, TArrayView<const VulkanQueueSyncPoint> queueSyncPoints, TArrayView<VulkanSemaphore* const> signalSemaphores, TArrayView<const GpuTimelineFenceAndValue> signalFences, const TShared<VulkanBinaryQueueProgress>& signalBinaryProgress, u64 signalTimelineProgressValue);
+			struct SubmissionRecord
+			{
+				u32 SubmitIndex = 0;
+				TInlineArray<TShared<VulkanGpuCommandBuffer>, 2> CommandBuffers; /**< Command buffers in submission order. The last one owns the fence used to detect completion. Empty for present operations. */
+				VulkanSwapChain* PresentSwapChain = nullptr; /**< Swap chain in case the submission was a present operation. */
+				TInlineArray<VulkanSemaphore*, 4> RetainedSemaphores; /**< Managed semaphores the submission waits on, released on retirement. */
+				TInlineArray<TShared<GpuTimelineFence>, 2> RetainedFences; /**< Keeps fences the submission signals alive until the signal has executed. */
+			};
 
-			/**
-			 * Acquires a SubmitWorkBuffer for a new submit. Grows the pool on first use, but reuses existing
-			 * heap-allocated buffers across frames (their previously grown capacity is retained). 
-			 *
-			 * @note	Submit thread only.
-			 */
-			SubmitWorkBuffer& AcquireSubmitWorkBuffer();
+			/** Appends timeline waits covering the last submission of every source queue selected by @p syncMask. Submit thread only. */
+			void AppendSyncMaskWaits(GpuQueueMask syncMask, SubmitWorkBuffer& outWorkBuffer) const;
 
-			/**
-			 * Releases all currently acquired SubmitWorkBuffers back to the pool for reuse. Call after the
-			 * submitted VkSubmitInfo array has been handed to vkQueueSubmit (or vkQueuePresentKHR), at which
-			 * point Vulkan no longer references the buffers' data pointers.
-			 *
-			 * @note	Submit thread only.
-			 */
-			void ReleaseAllSubmitWorkBuffers();
+			/** Marks the semaphores as in use by this queue and stores them in @p outRecord for release on retirement. Submit thread only. */
+			void RetainSemaphores(SubmissionRecord& outRecord, TArrayView<VulkanSemaphore* const> semaphores);
+
+			/** Wires @p outWorkBuffer's arrays into a VkSubmitInfo. The returned structure points into @p outWorkBuffer and shares its lifetime. */
+			VkSubmitInfo BuildVkSubmitInfo(SubmitWorkBuffer& outWorkBuffer) const;
 
 			VkQueue mQueue;
-			mutable Mutex mMutex;
 			VkSemaphore mProgressTimeline = VK_NULL_HANDLE;
 			u64 mNextProgressValue = 1;
-			u64 mLastSubmittedProgressValue = 0;
-			TShared<VulkanBinaryQueueProgress> mLastBinaryProgress;
-			Array<u64, B3D_MAX_UNIQUE_QUEUES> mLastWaitedBinaryProgressValues{};
+			u64 mLastSubmittedProgressValue = 0; /**< Timeline value of the most recent successful submission, or 0 if nothing was submitted yet. */
 
-			Queue<QueueSubmissionEntryInformation> mActiveCommandBuffers;
-			Queue<VulkanSemaphore*> mActiveSemaphores;
-
-			List<QueueSubmissionInformation> mActiveSubmissions;
-
-			TShared<VulkanGpuCommandBuffer> mLastSubmittedCommandBuffer;
 			u32 mNextSubmitIndex = 1;
+			Deque<SubmissionRecord> mActiveSubmissions;
 
-			Vector<TUnique<SubmitWorkBuffer>> mSubmitWorkBufferPool;
-			u32 mActiveSubmitWorkBufferCount = 0;
-
-			TInlineArray<VulkanSemaphore*, 8> mWaitSemaphoreBuffer; // Input wrapper for ExecuteSubmitOnSubmitThread; cleared between adjacent submits.
+			Array<SubmitWorkBuffer, 2> mSubmitWorkBuffers; /**< Slot 0 backs the transition submit (or a present), slot 1 the primary submit. */
 		};
 
 		/** @} */

@@ -1451,7 +1451,7 @@ VulkanGpuCommandBufferSubmitInformation VulkanGpuCommandBuffer::PrepareForSubmit
 
 	// Wait on present (i.e. until the back buffer becomes available) for any surfaces
 	for(IVulkanRenderWindowSurface* surface : mAcquiredSurfaces)
-		surface->AppendWaitSemaphoresIfRequired(submitInformation.Semaphores);
+		surface->AppendWaitSemaphoresIfRequired(submitInformation.WaitSemaphores);
 
 	submitInformation.PrimaryCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(GetShared());
 

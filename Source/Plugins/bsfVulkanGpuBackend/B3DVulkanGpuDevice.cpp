@@ -165,8 +165,8 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 	if(transferQueueFamilyIndex != ~0u)
 		fnPopulateQueueInfo(GQT_TRANSFER, transferQueueFamilyIndex);
 
-	// Set up extensions. Required: swapchain, maintenance1, maintenance2, maintenance4. Plus optional ones
-	// discovered below (shader_viewport_index_layer, timeline_semaphore).
+	// Set up extensions. Required: swapchain, maintenance1, maintenance2, maintenance4, timeline_semaphore
+	// (availability verified below). Plus optional ones discovered below (shader_viewport_index_layer).
 	const char* extensions[12];
 	uint32_t extensionCount = 0;
 
@@ -226,6 +226,9 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 			mSupportsTimelineSemaphore = false;
 	}
 #endif
+
+	if(!mSupportsTimelineSemaphore)
+		B3D_LOG(Fatal, LogRenderBackend, "The Vulkan device does not support timeline semaphores (VK_KHR_timeline_semaphore, core in Vulkan 1.2). The Vulkan backend requires them for queue synchronization; update the graphics driver or use a different backend.");
 
 	// Build the enabled-feature pNext chain. Maintenance4 is required and enabled unconditionally; if the
 	// physical device lacks the extension/feature, the vkCreateDevice below fails its assert.

@@ -440,13 +440,8 @@ void VulkanSwapChain::Present(u32 imageIndex, GpuQueue& queue, GpuQueueMask sync
 	// Wait on present (i.e. until the back buffer becomes available), if we haven't already done so
 	AppendWaitSemaphoreIfRequired(imageIndex, mSemaphoresBuffer);
 
-	VulkanSemaphore* const presentSemaphore = vulkanQueue.SubmitPresentBridge(syncMask, mSemaphoresBuffer);
+	const VkResult result = vulkanQueue.Present(this, imageIndex, syncMask, mSemaphoresBuffer);
 	mSemaphoresBuffer.Clear();
-	mSemaphoresBuffer.Add(presentSemaphore);
-
-	const VkResult result = vulkanQueue.Present(this, imageIndex, mSemaphoresBuffer);
-	mSemaphoresBuffer.Clear();
-	presentSemaphore->Destroy();
 
 	if(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)
 	{

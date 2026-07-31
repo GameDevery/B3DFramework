@@ -94,7 +94,7 @@ namespace b3d
 			TShared<VulkanGpuCommandBuffer> DestinationQueueTransitionCommandBuffer; /**< Contains image layout transitions and transitions from source to the destination queue, if there are any. Should be submitted after the query reset command buffer. This submit should contain the provided semaphores if not empty. */
 			TShared<VulkanGpuCommandBuffer> PrimaryCommandBuffer; /**< Primary command buffer we're submitting. This should be submitted after the destination queue transition command buffer. This submit should contain the semaphores if destination queue transition command buffer is not present. */
 			GpuQueueMask RequiredWaitMask = GpuQueueMask::kNone; /**< Resource-derived queue dependencies to combine with the caller-provided synchronization mask. */
-			TInlineArray<VulkanSemaphore*, 8> Semaphores; /**< Semaphores that need to be waited on before executing the command buffers. */
+			TInlineArray<VulkanSemaphore*, 8> WaitSemaphores; /**< Semaphores that need to be waited on before executing the command buffers. */
 			TInlineArray<VulkanSemaphore*, 2> SignalSemaphores; /**< Binary semaphores signaled after the complete logical submission. */
 		};
 
