@@ -7,6 +7,7 @@
 #include "../../../Engine/Core/GpuBackend/B3DRenderWindow.h"
 #include "../../../Engine/Core/GpuBackend/B3DVideoModeInfo.h"
 #include "B3DScriptVideoMode.generated.h"
+#include "../../../Engine/Utility/Image/B3DColor.h"
 
 namespace b3d
 {
@@ -22,6 +23,9 @@ namespace b3d
 		uint32_t MultisampleCount;
 		MonoString* MultisampleHint;
 		bool Gamma;
+		Color ClearColor;
+		float ClearDepth;
+		uint8_t ClearStencil;
 		int32_t Left;
 		int32_t Top;
 		MonoString* Title;

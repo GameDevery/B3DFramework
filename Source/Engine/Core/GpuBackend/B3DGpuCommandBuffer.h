@@ -417,19 +417,10 @@ namespace b3d
 			RenderSurfaceMask LoadMask = RT_NONE;
 
 			/**
-			 * Determines which surfaces to clear when the render pass starts. Use @p ClearColor, @p ClearDepth and @p ClearStencil
-			 * to determine which values to clear them to.
+			 * Determines which surfaces to clear when the render pass starts. Surfaces are cleared to the values they
+			 * were created with, as reported by RenderTarget::GetClearValues().
 			 */
 			RenderSurfaceMask ClearMask = RT_NONE;
-
-			/** Determines the color to which to clear all color attachments, for attachments that clear is enabled in @p ClearMask. */
-			Color ClearColor = Color::kBlack;
-
-			/** Determines the depth to which to clear the depth attachment, if clear is enabled in @p ClearMask. */
-			float ClearDepth = 1.0f;
-
-			/** Determines the stencil to which to clear the stencil attachment, if clear is enabled in @p ClearStencil. */
-			u32 ClearStencil = 0;
 
 			/**
 			 * Set of all GPU parameters that will be bound during this render pass. The command buffer will pre-register all resources
@@ -597,25 +588,21 @@ namespace b3d
 			virtual void SetViewport(const Area2& area) = 0;
 
 			/**
-			 * Clears the currently active render target.
+			 * Clears the currently active render target. Each surface is cleared to the value it was created with, as
+			 * reported by RenderTarget::GetClearValues().
 			 *
 			 * @param	mask			Mask determining which surfaces of the render target to clear.
-			 * @param	color			The color to clear the color buffer with, if enabled.
-			 * @param	depth			The value to initialize the depth buffer with, if enabled.
-			 * @param	stencil			The value to initialize the stencil buffer with, if enabled.
 			 */
-			virtual void ClearRenderTarget(RenderSurfaceMask mask, const Color& color = Color::kBlack, float depth = 1.0f, u16 stencil = 0) = 0;
+			virtual void ClearRenderTarget(RenderSurfaceMask mask) = 0;
 
 			/**
 			 * Clears the currently active viewport (meaning it clears just a sub-area of a render-target that is covered by the
-			 * viewport, as opposed to ClearRenderTarget() which always clears the entire render target).
+			 * viewport, as opposed to ClearRenderTarget() which always clears the entire render target). Each surface is
+			 * cleared to the value it was created with, as reported by RenderTarget::GetClearValues().
 			 *
 			 * @param	mask			Mask determining which surfaces of the render target to clear.
-			 * @param	color			The color to clear the color buffer with, if enabled.
-			 * @param	depth			The value to initialize the depth buffer with, if enabled.
-			 * @param	stencil			The value to initialize the stencil buffer with, if enabled.
 			 */
-			virtual void ClearViewport(RenderSurfaceMask mask, const Color& color = Color::kBlack, float depth = 1.0f, u16 stencil = 0) = 0;
+			virtual void ClearViewport(RenderSurfaceMask mask) = 0;
 
 			/**
 			 * Allows you to set up a region in which rendering can take place. Coordinates are in pixels. No rendering will be

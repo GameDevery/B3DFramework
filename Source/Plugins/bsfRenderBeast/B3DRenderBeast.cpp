@@ -647,7 +647,7 @@ bool RenderBeast::RenderOverlay(GpuCommandBuffer& commandBuffer, RenderBeastScen
 	if(clearMask != RT_NONE)
 	{
 		commandBuffer.BeginRenderPass(RenderPassCreateInformation(target));
-		commandBuffer.ClearViewport(clearMask, viewport->GetClearColorValue(), viewport->GetClearDepthValue(), viewport->GetClearStencilValue());
+		commandBuffer.ClearViewport(clearMask);
 		commandBuffer.EndRenderPass();
 	}
 
@@ -715,9 +715,7 @@ void RenderBeast::CaptureSceneCubeMap(RendererScene& scene, GpuCommandBuffer& co
 
 	RendererViewCreateInformation viewDesc;
 	viewDesc.Target.ClearFlags = FBT_COLOR | FBT_DEPTH;
-	viewDesc.Target.ClearColor = Color::kBlack;
-	viewDesc.Target.ClearDepthValue = 1.0f;
-	viewDesc.Target.ClearStencilValue = 0;
+	viewDesc.Target.BackgroundColor = Color::kBlack;
 
 	viewDesc.Target.NrmViewRect = Area2(0, 0, 1.0f, 1.0f);
 	viewDesc.Target.ViewRect = Area2I(0, 0, texProps.Width, texProps.Height);

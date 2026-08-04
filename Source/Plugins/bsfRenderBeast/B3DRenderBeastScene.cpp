@@ -1377,9 +1377,7 @@ RendererViewCreateInformation RenderBeastScene::CreateViewDesc(Camera* camera) c
 	if(clearFlags.IsSet(ClearFlagBits::Stencil))
 		viewDesc.Target.ClearFlags |= FBT_STENCIL;
 
-	viewDesc.Target.ClearColor = viewport->GetClearColorValue();
-	viewDesc.Target.ClearDepthValue = viewport->GetClearDepthValue();
-	viewDesc.Target.ClearStencilValue = viewport->GetClearStencilValue();
+	viewDesc.Target.BackgroundColor = viewport->GetBackgroundColor();
 
 	viewDesc.Target.Target = viewport->GetTarget();
 	viewDesc.Target.NrmViewRect = viewport->GetArea();

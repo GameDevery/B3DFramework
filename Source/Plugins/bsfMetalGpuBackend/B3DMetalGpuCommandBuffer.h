@@ -60,8 +60,8 @@ namespace b3d
 			void EndRenderPass() override;
 			bool IsInRenderPass() const override;
 			void SetViewport(const Area2& area) override;
-			void ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override;
-			void ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override;
+			void ClearRenderTarget(RenderSurfaceMask mask) override;
+			void ClearViewport(RenderSurfaceMask mask) override;
 			void EnableScissorTest(u32 left, u32 top, u32 right, u32 bottom) override;
 			void DisableScissorTest() override;
 			void SetStencilReferenceValue(u32 value) override;
@@ -281,6 +281,9 @@ namespace b3d
 			IMetalRenderWindowSurface* mAcquiredWindowSurface = nullptr;
 			u32 mRenderPassWidth = 0;
 			u32 mRenderPassHeight = 0;
+
+			/** Fixed clear values of the bound target's surfaces, used by both the pass load actions and explicit clears. */
+			RenderTargetClearValues mRenderPassClearValues;
 			TInlineArray<MetalImage*, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> mRenderPassAttachmentImages;
 
 			/** Occlusion pool whose visibility buffer is attached to the current native render encoder. */

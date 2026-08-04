@@ -191,6 +191,11 @@ RenderWindow::RenderWindow(const RenderWindowCreateInformation& createInformatio
 	:  mCreateInformation(createInformation), mWindowId(windowId), mPlatformWindowHandle(platformWindowHandle), mParentWindow(parentWindow), mRenderWindowProperties(CreateRenderWindowProperties(createInformation))
 {
 	mRenderTargetProperties = CreateRenderTargetProperties(createInformation);
+
+	mClearValues.Colors[0] = createInformation.ClearColor;
+	mClearValues.Depth = createInformation.ClearDepth;
+	mClearValues.Stencil = createInformation.ClearStencil;
+
 	mShowOnSwap = mCreateInformation.HideUntilSwap && !mCreateInformation.Hidden;
 }
 
@@ -208,6 +213,7 @@ void RenderWindow::Initialize()
 		renderWindowSurfaceCreateInformation.RefreshRate = mCreateInformation.VideoMode.RefreshRate;
 		renderWindowSurfaceCreateInformation.PlatformWindowHandle = mPlatformWindowHandle;
 		renderWindowSurfaceCreateInformation.Headless = mCreateInformation.Headless;
+		renderWindowSurfaceCreateInformation.ClearColor = mCreateInformation.ClearColor;
 
 		// Let the backend create the appropriate surface type (windowed or headless)
 		mRenderWindowSurface = b3d::RenderWindowManager::Instance().CreateRenderWindowSurface(renderWindowSurfaceCreateInformation);

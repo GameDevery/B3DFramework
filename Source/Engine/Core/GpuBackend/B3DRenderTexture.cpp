@@ -97,6 +97,27 @@ static RenderTargetProperties CreateRenderTextureProperties(const render::Render
 	return RenderTargetProperties();
 }
 
+static RenderTargetClearValues CreateRenderTextureClearValues(const render::RenderTextureCreateInformation& createInformation)
+{
+	RenderTargetClearValues clearValues;
+
+	for(u32 i = 0; i < B3D_MAXIMUM_RENDER_TARGET_COUNT; i++)
+	{
+		const TShared<render::Texture>& texture = createInformation.ColorSurfaces[i].Texture;
+		if(texture != nullptr)
+			clearValues.Colors[i] = texture->GetProperties().ClearColor;
+	}
+
+	const TShared<render::Texture>& depthStencilTexture = createInformation.DepthStencilSurface.Texture;
+	if(depthStencilTexture != nullptr)
+	{
+		clearValues.Depth = depthStencilTexture->GetProperties().ClearDepth;
+		clearValues.Stencil = depthStencilTexture->GetProperties().ClearStencil;
+	}
+
+	return clearValues;
+}
+
 TShared<RenderTexture> RenderTexture::Create(const TextureCreateInformation& textureCreateInformation, bool createDepth, PixelFormat depthStencilFormat)
 {
 	return TextureManager::Instance().CreateRenderTexture(textureCreateInformation, createDepth, depthStencilFormat);
@@ -177,6 +198,7 @@ RenderTexture::RenderTexture(const RenderTextureCreateInformation& createInforma
 	: mInformation(createInformation)
 {
 	mRenderTargetProperties = CreateRenderTextureProperties(createInformation, false);
+	mClearValues = CreateRenderTextureClearValues(createInformation);
 }
 
 void RenderTexture::Initialize()

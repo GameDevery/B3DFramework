@@ -1872,7 +1872,6 @@ void GUIRenderer::Render(const Camera& camera, const RendererViewContext& viewCo
 	if(rebuildCachedRenderTexture)
 	{
 		mainRenderPassCreateInformation.ClearMask = RT_COLOR_ALL;
-		mainRenderPassCreateInformation.ClearColor = Color::kZero;;
 	}
 
 	// Begin render pass with all accumulated GPU parameters
@@ -1899,7 +1898,7 @@ void GUIRenderer::Render(const Camera& camera, const RendererViewContext& viewCo
 			commandBuffer.SetViewport(normalizedRegionArea);
 
 			if(!rebuildCachedRenderTexture)
-				commandBuffer.ClearViewport(RT_COLOR_ALL, Color::kZero);
+				commandBuffer.ClearViewport(RT_COLOR_ALL);
 		}
 
 		commandBuffer.SetViewport(Area2(0.0f, 0.0f, 1.0f, 1.0f));

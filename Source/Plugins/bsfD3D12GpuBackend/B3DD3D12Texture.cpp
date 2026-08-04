@@ -204,18 +204,19 @@ namespace b3d
 
 			if (props.Usage.IsSet(TextureUsageFlag::RenderTarget) || props.Usage.IsSet(TextureUsageFlag::DepthStencil))
 			{
+				// The texture's clear value is immutable, so the optimized clear value always matches the clears issued against it.
 				clearValue.Format = mDXGIFormat;
 				if (PixelUtility::IsDepth(props.Format))
 				{
-					clearValue.DepthStencil.Depth = 1.0f;
-					clearValue.DepthStencil.Stencil = 0;
+					clearValue.DepthStencil.Depth = props.ClearDepth;
+					clearValue.DepthStencil.Stencil = props.ClearStencil;
 				}
 				else
 				{
-					clearValue.Color[0] = 0.0f;
-					clearValue.Color[1] = 0.0f;
-					clearValue.Color[2] = 0.0f;
-					clearValue.Color[3] = 0.0f;
+					clearValue.Color[0] = props.ClearColor.R;
+					clearValue.Color[1] = props.ClearColor.G;
+					clearValue.Color[2] = props.ClearColor.B;
+					clearValue.Color[3] = props.ClearColor.A;
 				}
 				pClearValue = &clearValue;
 			}

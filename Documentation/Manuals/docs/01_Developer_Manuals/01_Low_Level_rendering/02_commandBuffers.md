@@ -56,8 +56,8 @@ Once created, you can record rendering commands by calling methods on the comman
 // Begin render pass
 commandBuffer->BeginRenderPass(renderTarget, 0, RT_NONE);
 
-// Clear the render target
-commandBuffer->ClearRenderTarget(FBT_COLOR | FBT_DEPTH, Color::kBlue, 1.0f, 0, 0xFF);
+// Clear the render target, to the values its surfaces were created with
+commandBuffer->ClearRenderTarget(RT_COLOR_ALL | RT_DEPTH);
 
 // Bind pipeline state and resources
 commandBuffer->SetGpuGraphicsPipelineState(pipelineState);

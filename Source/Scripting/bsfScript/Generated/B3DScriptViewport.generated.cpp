@@ -33,12 +33,8 @@ namespace b3d
 		sInteropMetaData.ScriptClass->AddInternalCall("Internal_GetPixelArea", (void*)&ScriptViewport::InternalGetPixelArea);
 		sInteropMetaData.ScriptClass->AddInternalCall("Internal_SetClearFlags", (void*)&ScriptViewport::InternalSetClearFlags);
 		sInteropMetaData.ScriptClass->AddInternalCall("Internal_GetClearFlags", (void*)&ScriptViewport::InternalGetClearFlags);
-		sInteropMetaData.ScriptClass->AddInternalCall("Internal_SetClearColorValue", (void*)&ScriptViewport::InternalSetClearColorValue);
-		sInteropMetaData.ScriptClass->AddInternalCall("Internal_GetClearColorValue", (void*)&ScriptViewport::InternalGetClearColorValue);
-		sInteropMetaData.ScriptClass->AddInternalCall("Internal_SetClearDepthValue", (void*)&ScriptViewport::InternalSetClearDepthValue);
-		sInteropMetaData.ScriptClass->AddInternalCall("Internal_GetClearDepthValue", (void*)&ScriptViewport::InternalGetClearDepthValue);
-		sInteropMetaData.ScriptClass->AddInternalCall("Internal_SetClearStencilValue", (void*)&ScriptViewport::InternalSetClearStencilValue);
-		sInteropMetaData.ScriptClass->AddInternalCall("Internal_GetClearStencilValue", (void*)&ScriptViewport::InternalGetClearStencilValue);
+		sInteropMetaData.ScriptClass->AddInternalCall("Internal_SetBackgroundColor", (void*)&ScriptViewport::InternalSetBackgroundColor);
+		sInteropMetaData.ScriptClass->AddInternalCall("Internal_GetBackgroundColor", (void*)&ScriptViewport::InternalGetBackgroundColor);
 		sInteropMetaData.ScriptClass->AddInternalCall("Internal_Create", (void*)&ScriptViewport::InternalCreate);
 
 	}
@@ -138,15 +134,15 @@ namespace b3d
 		return __output;
 	}
 
-	void ScriptViewport::InternalSetClearColorValue(ScriptViewport* self, Color* color)
+	void ScriptViewport::InternalSetBackgroundColor(ScriptViewport* self, Color* color)
 	{
 		if(!self->IsNativeObjectValid())
 			return;
 
-		static_cast<Viewport*>(self->GetNativeObject())->SetClearColorValue(*color);
+		static_cast<Viewport*>(self->GetNativeObject())->SetBackgroundColor(*color);
 	}
 
-	void ScriptViewport::InternalGetClearColorValue(ScriptViewport* self, Color* __output)
+	void ScriptViewport::InternalGetBackgroundColor(ScriptViewport* self, Color* __output)
 	{
 		if(!self->IsNativeObjectValid())
 		{
@@ -155,53 +151,9 @@ namespace b3d
 		}
 
 		Color tmp__output;
-		tmp__output = static_cast<Viewport*>(self->GetNativeObject())->GetClearColorValue();
+		tmp__output = static_cast<Viewport*>(self->GetNativeObject())->GetBackgroundColor();
 
 		*__output = tmp__output;
-	}
-
-	void ScriptViewport::InternalSetClearDepthValue(ScriptViewport* self, float depth)
-	{
-		if(!self->IsNativeObjectValid())
-			return;
-
-		static_cast<Viewport*>(self->GetNativeObject())->SetClearDepthValue(depth);
-	}
-
-	float ScriptViewport::InternalGetClearDepthValue(ScriptViewport* self)
-	{
-		float tmp__output;
-		if(!self->IsNativeObjectValid())
-			return {};
-
-		tmp__output = static_cast<Viewport*>(self->GetNativeObject())->GetClearDepthValue();
-
-		float __output;
-		__output = tmp__output;
-
-		return __output;
-	}
-
-	void ScriptViewport::InternalSetClearStencilValue(ScriptViewport* self, uint16_t value)
-	{
-		if(!self->IsNativeObjectValid())
-			return;
-
-		static_cast<Viewport*>(self->GetNativeObject())->SetClearStencilValue(value);
-	}
-
-	uint16_t ScriptViewport::InternalGetClearStencilValue(ScriptViewport* self)
-	{
-		uint16_t tmp__output;
-		if(!self->IsNativeObjectValid())
-			return {};
-
-		tmp__output = static_cast<Viewport*>(self->GetNativeObject())->GetClearStencilValue();
-
-		uint16_t __output;
-		__output = tmp__output;
-
-		return __output;
 	}
 
 	void ScriptViewport::InternalCreate(MonoObject* scriptObject, MonoObject* target, float x, float y, float width, float height)

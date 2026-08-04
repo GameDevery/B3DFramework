@@ -80,8 +80,8 @@ namespace b3d
 			void EndRenderPass() override;
 			bool IsInRenderPass() const override { return mState == GpuCommandBufferState::RecordingRenderPass; }
 			void SetViewport(const Area2& area) override;
-			void ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override;
-			void ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override;
+			void ClearRenderTarget(RenderSurfaceMask mask) override;
+			void ClearViewport(RenderSurfaceMask mask) override;
 			void EnableScissorTest(u32 left, u32 top, u32 right, u32 bottom) override;
 			void DisableScissorTest() override;
 			void SetStencilReferenceValue(u32 value) override;
@@ -241,7 +241,7 @@ namespace b3d
 			void BindGpuParams(bool isGraphics);
 
 			/** Clears the specified area of the currently bound render target. */
-			void ClearViewportArea(const Area2I& area, RenderSurfaceMask mask, const Color& color, float depth, u16 stencil);
+			void ClearViewportArea(const Area2I& area, RenderSurfaceMask mask);
 
 			/**
 			 * Builds the tracker attachment list for the given framebuffer. @p outAttachments must hold at least

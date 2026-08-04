@@ -127,6 +127,11 @@ When adding features or refactoring, don't localize a change just to keep it sma
 - Clean means no code duplication: factor shared logic into one place rather than copy-pasting across call sites.
 - Clean means symmetry: paired operations match (e.g. `begin`/`end`, `acquire`/`release`, `create`/`destroy`).
 
+## Answering Questions and Presenting Plans
+
+- When answering a question or presenting a plan, be as succinct as possible: give the answer directly, note important gotchas if any, and optionally include a short example. Nothing else.
+- Use as few words as possible — no walls of text, no restating context, no exhaustive option surveys.
+
 ## Planning
 
 - When producing an implementation plan, if a big/pivotal decision arises — one the rest of the plan hinges on (e.g. a core data-flow choice, an interface boundary, a correctness assumption that determines whether the whole approach works) — stop and ask before finishing the plan. Do not bake the decision in as an assumption and present a completed plan around it. Surface it early so it can be settled first.

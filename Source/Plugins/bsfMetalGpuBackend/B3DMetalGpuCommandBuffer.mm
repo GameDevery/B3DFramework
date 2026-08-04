@@ -1436,6 +1436,7 @@ namespace b3d
 			mRenderPassWidth = targetProps.Width;
 			mRenderPassHeight = targetProps.Height;
 			mRenderPassPipelineKey.SampleCount = (u16)std::max(1u, targetProps.MultisampleCount);
+			mRenderPassClearValues = target->GetClearValues();
 
 			const RenderSurfaceMask clearMask = createInformation.ClearMask;
 			const RenderSurfaceMask loadMask = createInformation.LoadMask;
@@ -1470,7 +1471,7 @@ namespace b3d
 				color.level = 0;
 				color.slice = 0;
 				color.depthPlane = 0;
-				ConfigureColorAttachmentActions(color, loadMask.IsSet(RT_COLOR0), clearMask.IsSet(RT_COLOR0), createInformation.ClearColor);
+				ConfigureColorAttachmentActions(color, loadMask.IsSet(RT_COLOR0), clearMask.IsSet(RT_COLOR0), mRenderPassClearValues.Colors[0]);
 
 				PackColorFormat(mRenderPassPipelineKey.ColorFormats, 0, metalSurface->GetColorFormat());
 
@@ -1490,7 +1491,7 @@ namespace b3d
 						if (clearMask.IsSet(RT_DEPTH))
 						{
 							depth.loadAction = MTLLoadActionClear;
-							depth.clearDepth = createInformation.ClearDepth;
+							depth.clearDepth = mRenderPassClearValues.Depth;
 						}
 						else
 						{
@@ -1510,7 +1511,7 @@ namespace b3d
 						if (clearMask.IsSet(RT_STENCIL))
 						{
 							stencil.loadAction = MTLLoadActionClear;
-							stencil.clearStencil = createInformation.ClearStencil;
+							stencil.clearStencil = mRenderPassClearValues.Stencil;
 						}
 						else
 						{
@@ -1542,7 +1543,7 @@ namespace b3d
 					ConfigureColorAttachmentSubresource(color, *metalTex, surface.Face, surface.MipLevel);
 
 					const RenderSurfaceMaskBits bit = (RenderSurfaceMaskBits)(RT_COLOR0 << attachmentIndex);
-					ConfigureColorAttachmentActions(color, loadMask.IsSet(bit), clearMask.IsSet(bit), createInformation.ClearColor);
+					ConfigureColorAttachmentActions(color, loadMask.IsSet(bit), clearMask.IsSet(bit), mRenderPassClearValues.Colors[attachmentIndex]);
 
 					PackColorFormat(mRenderPassPipelineKey.ColorFormats, attachmentIndex, [mtlTex pixelFormat]);
 
@@ -1579,7 +1580,7 @@ namespace b3d
 							if (clearMask.IsSet(RT_DEPTH))
 							{
 								depth.loadAction = MTLLoadActionClear;
-								depth.clearDepth = createInformation.ClearDepth;
+								depth.clearDepth = mRenderPassClearValues.Depth;
 							}
 							else
 							{
@@ -1599,7 +1600,7 @@ namespace b3d
 							if (clearMask.IsSet(RT_STENCIL))
 							{
 								stencil.loadAction = MTLLoadActionClear;
-								stencil.clearStencil = createInformation.ClearStencil;
+								stencil.clearStencil = mRenderPassClearValues.Stencil;
 							}
 							else
 							{
@@ -1785,7 +1786,7 @@ namespace b3d
 			[mImpl->RenderEncoder setViewport:vp];
 		}
 
-		void MetalGpuCommandBuffer::ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+		void MetalGpuCommandBuffer::ClearRenderTarget(RenderSurfaceMask mask)
 		{
 			EnsureValidThread();
 			if (mask == RT_NONE || mImpl->RenderEncoder == nil || mImpl->RestartRenderPassDescriptor == nil)
@@ -1802,6 +1803,7 @@ namespace b3d
 				if (!mask.IsSet(bit) || attachment.texture == nil)
 					continue;
 
+				const Color& color = mRenderPassClearValues.Colors[attachmentIndex];
 				attachment.loadAction = MTLLoadActionClear;
 				attachment.clearColor = MTLClearColorMake(color.R, color.G, color.B, color.A);
 				hasAttachment = true;
@@ -1810,13 +1812,13 @@ namespace b3d
 			if (mask.IsSet(RT_DEPTH) && clearDescriptor.depthAttachment.texture != nil)
 			{
 				clearDescriptor.depthAttachment.loadAction = MTLLoadActionClear;
-				clearDescriptor.depthAttachment.clearDepth = depth;
+				clearDescriptor.depthAttachment.clearDepth = mRenderPassClearValues.Depth;
 				hasAttachment = true;
 			}
 			if (mask.IsSet(RT_STENCIL) && clearDescriptor.stencilAttachment.texture != nil)
 			{
 				clearDescriptor.stencilAttachment.loadAction = MTLLoadActionClear;
-				clearDescriptor.stencilAttachment.clearStencil = stencil;
+				clearDescriptor.stencilAttachment.clearStencil = mRenderPassClearValues.Stencil;
 				hasAttachment = true;
 			}
 
@@ -1836,7 +1838,7 @@ namespace b3d
 			} // @autoreleasepool
 		}
 
-		void MetalGpuCommandBuffer::ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+		void MetalGpuCommandBuffer::ClearViewport(RenderSurfaceMask mask)
 		{
 			EnsureValidThread();
 			if (mask == RT_NONE || mImpl->RenderEncoder == nil)
@@ -1847,7 +1849,7 @@ namespace b3d
 				mImpl->Viewport.width == (double)mRenderPassWidth && mImpl->Viewport.height == (double)mRenderPassHeight);
 			if (coversRenderTarget)
 			{
-				ClearRenderTarget(mask, color, depth, stencil);
+				ClearRenderTarget(mask);
 				return;
 			}
 
@@ -1867,11 +1869,23 @@ namespace b3d
 			key.StencilFormat = mRenderPassPipelineKey.StencilFormat;
 			key.SampleCount = mRenderPassPipelineKey.SampleCount;
 			key.WritesDepth = clearsDepth;
+
+			MetalClearPipeline::Parameters parameters;
+			parameters.Depth = mRenderPassClearValues.Depth;
+
 			for (u32 attachmentIndex = 0; attachmentIndex < B3D_MAXIMUM_RENDER_TARGET_COUNT; attachmentIndex++)
 			{
 				const RenderSurfaceMaskBits bit = (RenderSurfaceMaskBits)(RT_COLOR0 << attachmentIndex);
-				if (mask.IsSet(bit) && mRenderPassPipelineKey.ColorFormats[attachmentIndex] != 0)
-					key.ColorWriteMask |= (u8)(1u << attachmentIndex);
+				if (!mask.IsSet(bit) || mRenderPassPipelineKey.ColorFormats[attachmentIndex] == 0)
+					continue;
+
+				const Color& color = mRenderPassClearValues.Colors[attachmentIndex];
+				parameters.Color[attachmentIndex][0] = color.R;
+				parameters.Color[attachmentIndex][1] = color.G;
+				parameters.Color[attachmentIndex][2] = color.B;
+				parameters.Color[attachmentIndex][3] = color.A;
+
+				key.ColorWriteMask |= (u8)(1u << attachmentIndex);
 			}
 
 			if (key.ColorWriteMask == 0 && !clearsDepth && !clearsStencil)
@@ -1882,13 +1896,6 @@ namespace b3d
 			id<MTLDepthStencilState> depthStencilState = clearPipeline.GetOrCreateDepthStencilState(clearsDepth, clearsStencil);
 			if (pipelineState == nil || depthStencilState == nil)
 				return;
-
-			MetalClearPipeline::Parameters parameters;
-			parameters.Color[0] = color.R;
-			parameters.Color[1] = color.G;
-			parameters.Color[2] = color.B;
-			parameters.Color[3] = color.A;
-			parameters.Depth = depth;
 
 			// The engine's clear is defined by the viewport alone, so an unrelated scissor left over
 			// from earlier draws must not narrow it. Restore whatever was set once the clear is drawn.
@@ -1907,7 +1914,7 @@ namespace b3d
 			[mImpl->RenderEncoder setCullMode:MTLCullModeNone];
 			[mImpl->RenderEncoder setTriangleFillMode:MTLTriangleFillModeFill];
 			[mImpl->RenderEncoder setDepthBias:0.0f slopeScale:0.0f clamp:0.0f];
-			[mImpl->RenderEncoder setStencilReferenceValue:stencil];
+			[mImpl->RenderEncoder setStencilReferenceValue:mRenderPassClearValues.Stencil];
 			[mImpl->RenderEncoder setFragmentBytes:&parameters
 				length:sizeof(parameters)
 				atIndex:kMetalClearParametersBufferSlot];

@@ -8,10 +8,10 @@
 
 using namespace b3d;
 
-const Color ViewportBase::kDefaultClearColor = Color(0.0f, 0.3685f, 0.7969f);
+const Color ViewportBase::kDefaultBackgroundColor = Color(0.0f, 0.3685f, 0.7969f);
 
 ViewportBase::ViewportBase(float x, float y, float width, float height)
-	: mNormArea(x, y, width, height), mClearFlags(ClearFlagBits::Color | ClearFlagBits::Depth), mClearColorValue(kDefaultClearColor), mClearDepthValue(1.0f), mClearStencilValue(0)
+	: mNormArea(x, y, width, height), mClearFlags(ClearFlagBits::Color | ClearFlagBits::Depth), mBackgroundColor(kDefaultBackgroundColor)
 {
 }
 
@@ -43,32 +43,9 @@ void ViewportBase::SetClearFlags(ClearFlags flags)
 	MarkRenderProxyDataDirtyInternal();
 }
 
-void ViewportBase::SetClearValues(const Color& clearColor, float clearDepth, u16 clearStencil)
+void ViewportBase::SetBackgroundColor(const Color& color)
 {
-	mClearColorValue = clearColor;
-	mClearDepthValue = clearDepth;
-	mClearStencilValue = clearStencil;
-
-	MarkRenderProxyDataDirtyInternal();
-}
-
-void ViewportBase::SetClearColorValue(const Color& color)
-{
-	mClearColorValue = color;
-
-	MarkRenderProxyDataDirtyInternal();
-}
-
-void ViewportBase::SetClearDepthValue(float depth)
-{
-	mClearDepthValue = depth;
-
-	MarkRenderProxyDataDirtyInternal();
-}
-
-void ViewportBase::SetClearStencilValue(u16 value)
-{
-	mClearStencilValue = value;
+	mBackgroundColor = color;
 
 	MarkRenderProxyDataDirtyInternal();
 }
@@ -78,9 +55,7 @@ namespace b3d
 	B3D_SYNC_BLOCK_BEGIN(Viewport, SyncPacket)
 		B3D_SYNC_BLOCK_ENTRY(mNormArea)
 		B3D_SYNC_BLOCK_ENTRY(mClearFlags)
-		B3D_SYNC_BLOCK_ENTRY(mClearColorValue)
-		B3D_SYNC_BLOCK_ENTRY(mClearDepthValue)
-		B3D_SYNC_BLOCK_ENTRY(mClearStencilValue)
+		B3D_SYNC_BLOCK_ENTRY(mBackgroundColor)
 		B3D_SYNC_BLOCK_ENTRY(mTarget)
 	B3D_SYNC_BLOCK_END
 }

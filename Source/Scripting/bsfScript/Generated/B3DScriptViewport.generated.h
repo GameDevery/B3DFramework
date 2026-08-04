@@ -33,12 +33,8 @@ namespace b3d
 		static void InternalGetPixelArea(ScriptViewport* self, TArea2<int32_t, uint32_t>* __output);
 		static void InternalSetClearFlags(ScriptViewport* self, ClearFlagBits flags);
 		static ClearFlagBits InternalGetClearFlags(ScriptViewport* self);
-		static void InternalSetClearColorValue(ScriptViewport* self, Color* color);
-		static void InternalGetClearColorValue(ScriptViewport* self, Color* __output);
-		static void InternalSetClearDepthValue(ScriptViewport* self, float depth);
-		static float InternalGetClearDepthValue(ScriptViewport* self);
-		static void InternalSetClearStencilValue(ScriptViewport* self, uint16_t value);
-		static uint16_t InternalGetClearStencilValue(ScriptViewport* self);
+		static void InternalSetBackgroundColor(ScriptViewport* self, Color* color);
+		static void InternalGetBackgroundColor(ScriptViewport* self, Color* __output);
 		static void InternalCreate(MonoObject* scriptObject, MonoObject* target, float x, float y, float width, float height);
 	};
 }

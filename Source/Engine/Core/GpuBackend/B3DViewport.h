@@ -56,32 +56,13 @@ namespace b3d
 		B3D_SCRIPT_EXPORT(ExportName(ClearFlags), Property(Getter))
 		ClearFlags GetClearFlags() const { return mClearFlags; }
 
-		/**	Sets values to clear color, depth and stencil buffers to. */
-		void SetClearValues(const Color& clearColor, float clearDepth = 0.0f, u16 clearStencil = 0);
+		/** Determines the background color drawn where nothing else covers the view. */
+		B3D_SCRIPT_EXPORT(ExportName(BackgroundColor), Property(Setter))
+		void SetBackgroundColor(const Color& color);
 
-		/** Determines the color to clear the viewport to before rendering, if color clear is enabled. */
-		B3D_SCRIPT_EXPORT(ExportName(ClearColor), Property(Setter))
-		void SetClearColorValue(const Color& color);
-
-		/** @copydoc SetClearColorValue() */
-		B3D_SCRIPT_EXPORT(ExportName(ClearColor), Property(Getter))
-		const Color& GetClearColorValue() const { return mClearColorValue; }
-
-		/** Determines the value to clear the depth buffer to before rendering, if depth clear is enabled. */
-		B3D_SCRIPT_EXPORT(ExportName(ClearDepth), Property(Setter))
-		void SetClearDepthValue(float depth);
-
-		/** @copydoc SetClearDepthValue() */
-		B3D_SCRIPT_EXPORT(ExportName(ClearDepth), Property(Getter))
-		float GetClearDepthValue() const { return mClearDepthValue; }
-
-		/** Determines the value to clear the stencil buffer to before rendering, if stencil clear is enabled. */
-		B3D_SCRIPT_EXPORT(ExportName(ClearStencil), Property(Setter))
-		void SetClearStencilValue(u16 value);
-
-		/** @copydoc SetClearStencilValue() */
-		B3D_SCRIPT_EXPORT(ExportName(ClearStencil), Property(Getter))
-		u16 GetClearStencilValue() const { return mClearStencilValue; }
+		/** @copydoc SetBackgroundColor() */
+		B3D_SCRIPT_EXPORT(ExportName(BackgroundColor), Property(Getter))
+		const Color& GetBackgroundColor() const { return mBackgroundColor; }
 
 	protected:
 		ViewportBase(float x = 0.0f, float y = 0.0f, float width = 1.0f, float height = 1.0f);
@@ -101,11 +82,9 @@ namespace b3d
 		Area2 mNormArea;
 
 		ClearFlags mClearFlags;
-		Color mClearColorValue;
-		float mClearDepthValue;
-		u16 mClearStencilValue;
+		Color mBackgroundColor;
 
-		static const Color kDefaultClearColor;
+		static const Color kDefaultBackgroundColor;
 	};
 
 	/** Templated common base type used for both main and render thread variants of Viewport. */
@@ -133,7 +112,8 @@ namespace b3d
 
 	/**
 	 * Viewport determines to which RenderTarget should rendering be performed. It allows you to render to a sub-region of the
-	 * target by specifying the area rectangle, and allows you to set up color/depth/stencil clear values for that specific region.
+	 * target by specifying the area rectangle, and determines which of the target's surfaces get cleared before rendering to
+	 * that region.
 	 */
 	class B3D_EXPORT B3D_SCRIPT_EXPORT(DocumentationGroup(Rendering)) Viewport : public IReflectable, public IScriptExportable, public CoreObject, public TViewport<false>
 	{

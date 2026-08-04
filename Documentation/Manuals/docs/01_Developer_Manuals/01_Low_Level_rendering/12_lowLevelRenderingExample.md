@@ -152,6 +152,7 @@ colorAttachmentInformation.Width = 1280;
 colorAttachmentInformation.Height = 720;
 colorAttachmentInformation.Format = PF_RGBA8;
 colorAttachmentInformation.Usage = TextureUsageFlag::RenderTarget;
+colorAttachmentInformation.ClearColor = Color::kBlue;
 
 TShared<Texture> colorAttachment = gpuDevice->CreateTexture(colorAttachmentInformation);
 
@@ -220,12 +221,11 @@ parameterSet->SetSamplerState("gMainTexture", surfaceSampler);
 
 ## Beginning render pass
 
-A render pass is started with the render target and the target is cleared:
+A render pass is started with the render target and the target is cleared. The surfaces are cleared to the values they were created with:
 
 ~~~~~~~~~~~~~{.cpp}
 render::RenderPassCreateInformation renderPassInformation(renderTarget);
 renderPassInformation.ClearMask = RT_COLOR_ALL | RT_DEPTH;
-renderPassInformation.ClearColor = Color::kBlue;
 renderPassInformation.Parameters.Add(parameterSet);
 commandBuffer->BeginRenderPass(renderPassInformation);
 ~~~~~~~~~~~~~

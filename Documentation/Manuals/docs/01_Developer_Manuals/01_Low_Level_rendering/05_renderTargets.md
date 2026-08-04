@@ -71,13 +71,23 @@ commandBuffer->BeginRenderPass(renderPassInfo);
 ~~~~~~~~~~~~~
 
 # Clearing
-Usually a render target will be re-used many times. Unless you are sure that every use will completely overwrite the render target contents, it can be beneficial (and in some cases necessary) to clear the render target to some value. Call @b3d::render::GpuCommandBuffer::ClearRenderTarget to clear the currently bound render target.
+Usually a render target will be re-used many times. Unless you are sure that every use will completely overwrite the render target contents, it can be beneficial (and in some cases necessary) to clear the render target to some value. Call @b3d::render::GpuCommandBuffer::ClearRenderTarget to clear the currently bound render target. Its only parameter is a @b3d::RenderSurfaceMaskBits of which surfaces of the target to clear.
 
-The first parameter represents a @b3d::RenderSurfaceMaskBits of which surfaces of the target to clear. The second, third and fourth parameters represent the clear values for the color, depth and stencil surfaces, respectively.
+A surface is always cleared to the value it was created with. Choose that value through @b3d::TextureInformation::ClearColor, @b3d::TextureInformation::ClearDepth and @b3d::TextureInformation::ClearStencil when creating the texture (or the equivalent fields on @b3d::RenderWindowCreateInformation for a window), and it stays fixed for the lifetime of the resource. Clear commands cannot override it.
 
 ~~~~~~~~~~~~~{.cpp}
-// Clear color and depth surfaces. All color surfaces are cleared to blue color, while depth is cleared to the value of 1
-commandBuffer->ClearRenderTarget(RT_COLOR_ALL | RT_DEPTH, Color::kBlue, 1.0f, 0);
+// The clear values are chosen when the surface textures are created
+TextureCreateInformation colorTextureCreateInformation;
+colorTextureCreateInformation.Width = 1280;
+colorTextureCreateInformation.Height = 720;
+colorTextureCreateInformation.Format = PF_RGBA8;
+colorTextureCreateInformation.Usage = TextureUsageFlag::RenderTarget;
+colorTextureCreateInformation.ClearColor = Color::kBlue;
+
+// ... create the render texture from that texture, then bind it ...
+
+// Clear color and depth surfaces. Color is cleared to blue, depth to the depth texture's own clear value
+commandBuffer->ClearRenderTarget(RT_COLOR_ALL | RT_DEPTH);
 ~~~~~~~~~~~~~
 
 You can also call @b3d::render::GpuCommandBuffer::ClearViewport to clear only the viewport portion of the render target. The parameters are identical to **render::GpuCommandBuffer::ClearRenderTarget()**.

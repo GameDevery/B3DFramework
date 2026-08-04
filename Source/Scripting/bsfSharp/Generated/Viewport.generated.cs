@@ -12,8 +12,8 @@ namespace b3d
 
 	/// <summary>
 	/// Viewport determines to which RenderTarget should rendering be performed. It allows you to render to a sub-region of 
-	/// the target by specifying the area rectangle, and allows you to set up color/depth/stencil clear values for that 
-	/// specific region.
+	/// the target by specifying the area rectangle, and determines which of the target&apos;s surfaces get cleared before 
+	/// rendering to that region.
 	/// </summary>
 	[ShowInInspector]
 	public partial class Viewport : ScriptObject
@@ -73,36 +73,18 @@ namespace b3d
 			set { Internal_SetClearFlags(mCachedPtr, value); }
 		}
 
-		/// <summary>Determines the color to clear the viewport to before rendering, if color clear is enabled.</summary>
+		/// <summary>Determines the background color drawn where nothing else covers the view.</summary>
 		[ShowInInspector]
 		[NativeWrapper]
-		public Color ClearColor
+		public Color BackgroundColor
 		{
 			get
 			{
 				Color temp;
-				Internal_GetClearColorValue(mCachedPtr, out temp);
+				Internal_GetBackgroundColor(mCachedPtr, out temp);
 				return temp;
 			}
-			set { Internal_SetClearColorValue(mCachedPtr, ref value); }
-		}
-
-		/// <summary>Determines the value to clear the depth buffer to before rendering, if depth clear is enabled.</summary>
-		[ShowInInspector]
-		[NativeWrapper]
-		public float ClearDepth
-		{
-			get { return Internal_GetClearDepthValue(mCachedPtr); }
-			set { Internal_SetClearDepthValue(mCachedPtr, value); }
-		}
-
-		/// <summary>Determines the value to clear the stencil buffer to before rendering, if stencil clear is enabled.</summary>
-		[ShowInInspector]
-		[NativeWrapper]
-		public ushort ClearStencil
-		{
-			get { return Internal_GetClearStencilValue(mCachedPtr); }
-			set { Internal_SetClearStencilValue(mCachedPtr, value); }
+			set { Internal_SetBackgroundColor(mCachedPtr, ref value); }
 		}
 
 		[MethodImpl(MethodImplOptions.InternalCall)]
@@ -120,17 +102,9 @@ namespace b3d
 		[MethodImpl(MethodImplOptions.InternalCall)]
 		private static extern ClearFlags Internal_GetClearFlags(IntPtr thisPtr);
 		[MethodImpl(MethodImplOptions.InternalCall)]
-		private static extern void Internal_SetClearColorValue(IntPtr thisPtr, ref Color color);
+		private static extern void Internal_SetBackgroundColor(IntPtr thisPtr, ref Color color);
 		[MethodImpl(MethodImplOptions.InternalCall)]
-		private static extern void Internal_GetClearColorValue(IntPtr thisPtr, out Color __output);
-		[MethodImpl(MethodImplOptions.InternalCall)]
-		private static extern void Internal_SetClearDepthValue(IntPtr thisPtr, float depth);
-		[MethodImpl(MethodImplOptions.InternalCall)]
-		private static extern float Internal_GetClearDepthValue(IntPtr thisPtr);
-		[MethodImpl(MethodImplOptions.InternalCall)]
-		private static extern void Internal_SetClearStencilValue(IntPtr thisPtr, ushort value);
-		[MethodImpl(MethodImplOptions.InternalCall)]
-		private static extern ushort Internal_GetClearStencilValue(IntPtr thisPtr);
+		private static extern void Internal_GetBackgroundColor(IntPtr thisPtr, out Color __output);
 		[MethodImpl(MethodImplOptions.InternalCall)]
 		private static extern void Internal_Create(Viewport managedInstance, RenderTarget target, float x, float y, float width, float height);
 	}

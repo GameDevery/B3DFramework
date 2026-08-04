@@ -6,6 +6,8 @@
 #include "B3DMonoUtil.h"
 #include "../../../Engine/Core/GpuBackend/B3DVideoModeInfo.h"
 #include "B3DScriptVideoMode.generated.h"
+#include "../../../Engine/Utility/Image/B3DColor.h"
+#include "B3DScriptColor.generated.h"
 
 namespace b3d
 {
@@ -39,6 +41,9 @@ namespace b3d
 		tmpMultisampleHint = MonoUtil::MonoToString(value.MultisampleHint);
 		output.MultisampleHint = tmpMultisampleHint;
 		output.Gamma = value.Gamma;
+		output.ClearColor = value.ClearColor;
+		output.ClearDepth = value.ClearDepth;
+		output.ClearStencil = value.ClearStencil;
 		output.Left = value.Left;
 		output.Top = value.Top;
 		String tmpTitle;
@@ -72,6 +77,9 @@ namespace b3d
 		tmpMultisampleHint = MonoUtil::StringToMono(value.MultisampleHint);
 		output.MultisampleHint = tmpMultisampleHint;
 		output.Gamma = value.Gamma;
+		output.ClearColor = value.ClearColor;
+		output.ClearDepth = value.ClearDepth;
+		output.ClearStencil = value.ClearStencil;
 		output.Left = value.Left;
 		output.Top = value.Top;
 		MonoString* tmpTitle;

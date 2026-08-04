@@ -119,8 +119,8 @@ namespace b3d
 			void EndRenderPass() override;
 			bool IsInRenderPass() const override { return mState == GpuCommandBufferState::RecordingRenderPass; }
 			void SetViewport(const Area2& area) override;
-			void ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override;
-			void ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override;
+			void ClearRenderTarget(RenderSurfaceMask mask) override;
+			void ClearViewport(RenderSurfaceMask mask) override;
 			void EnableScissorTest(u32 left, u32 top, u32 right, u32 bottom) override;
 			void DisableScissorTest() override;
 			void SetStencilReferenceValue(u32 value) override;
@@ -406,19 +406,19 @@ namespace b3d
 			/** Binds the currently stored GPU parameter sets, if dirty. */
 			void BindGpuParameters(const TShared<GpuPipelineParameterLayout>& pipelineParameterLayout, VulkanBarrierHelper& barrierHelper);
 
-			/** Creates an array of clear values from the specified clear mask and values. To be used for the explicit clear command, or render bass begin. */
-			Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> BuildClearValues(RenderSurfaceMask clearMask, const Color& color, float depth, u16 stencil);
+			/**
+			 * Creates an array of clear values for the currently bound render target, using the fixed clear values its
+			 * surfaces were created with. To be used for the explicit clear command, or render pass begin.
+			 */
+			Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> BuildClearValues(RenderSurfaceMask clearMask);
 
 			/**
-			 * Executes a clear command in the command buffer.
+			 * Executes a clear command in the command buffer, clearing every masked surface to the value it was created with.
 			 *
 			 * @param area			Area in the currently bound render target to clear.
 			 * @param clearMask		Mask specifying which surfaces of the currently bound render target to clear.
-			 * @param color			Color value used for clearing color attachments.
-			 * @param depth			Depth value used for clearing the depth attachment.
-			 * @param stencil		Stencil value used for clearing the stencil attachment.
 			 */
-			void ClearAttachments(const Area2I& area, RenderSurfaceMask clearMask, const Color& color, float depth, u16 stencil);
+			void ClearAttachments(const Area2I& area, RenderSurfaceMask clearMask);
 
 			/**
 			 * Executes a clear command in the command buffer.

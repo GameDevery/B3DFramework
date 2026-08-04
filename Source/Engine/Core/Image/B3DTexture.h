@@ -6,6 +6,7 @@
 #include "Resources/B3DResource.h"
 #include "GpuBackend/B3DGpuBuffer.h"
 #include "GpuBackend/B3DGpuTextureSubresource.h"
+#include "Image/B3DColor.h"
 #include "Image/B3DPixelUtility.h"
 #include "GpuBackend/B3DTextureView.h"
 #include "Math/B3DVector3I.h"
@@ -57,6 +58,15 @@ namespace b3d
 
 		/** Number of texture slices to create if creating a texture array. Ignored for 3D textures. */
 		u32 ArraySliceCount = 1;
+
+		/**Color the texture is cleared to whenever it is cleared as a color attachment. Only relevant for textures with TextureUsageFlag::RenderTarget. */
+		Color ClearColor = Color::kZero;
+
+		/** Value the texture is cleared to whenever its depth is cleared. Only relevant for textures with TextureUsageFlag::DepthStencil. */
+		float ClearDepth = 1.0f;
+
+		/** Value the texture is cleared to whenever its stencil is cleared. Only relevant for textures with TextureUsageFlag::DepthStencil. */
+		u8 ClearStencil = 0;
 	};
 
 	/** Descriptor structure used for initialization of a Texture. */

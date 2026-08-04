@@ -497,7 +497,7 @@ void RCNodeBasePass::Render(const RenderCompositorNodeInputs& inputs)
 	Area2 area(0.0f, 0.0f, 1.0f, 1.0f);
 	commandBuffer.SetViewport(area);
 
-	commandBuffer.ClearViewport(RT_ALL, Color::kZero);
+	commandBuffer.ClearViewport(RT_ALL);
 
 	commandBuffer.EndRenderPass();
 
@@ -1098,7 +1098,6 @@ void RCNodeDeferredDirectLighting::Render(const RenderCompositorNodeInputs& inpu
 				}
 
 				shadowProjectionPassInfo.ClearMask = RT_COLOR_ALL;
-				shadowProjectionPassInfo.ClearColor = Color::kZero;
 
 				commandBuffer.BeginRenderPass(shadowProjectionPassInfo);
 
@@ -1729,10 +1728,10 @@ void RCNodeSkybox::Render(const RenderCompositorNodeInputs& inputs)
 	else
 	{
 		// Cancel out the linear->SRGB conversion
-		Color clearColor = inputs.View.GetProperties().Target.ClearColor.GetLinear();
+		Color backgroundColor = inputs.View.GetProperties().Target.BackgroundColor.GetLinear();
 
 		material = SkyboxMaterial::GetVariation(true);
-		material->Bind(commandBuffer, inputs.View.GetPerViewBuffer(), nullptr, clearColor);
+		material->Bind(commandBuffer, inputs.View.GetPerViewBuffer(), nullptr, backgroundColor);
 	}
 
 	auto dependencies = GetDependencyDefinition().ResolveDependencies(inputs);

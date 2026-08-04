@@ -407,7 +407,7 @@ camera->SetRenderSettings(renderSettings);
 ~~~~~~~~~~~~~
 
 ## Skybox
-The camera can be configured to use the skybox for rendering the background through @b3d::RenderSettings::EnableSkybox. When disabled, the camera will use the clear color for rendering the background.
+The camera can be configured to use the skybox for rendering the background through @b3d::RenderSettings::EnableSkybox. When disabled, the camera will use @b3d::Viewport::SetBackgroundColor() for rendering the background.
 
 ~~~~~~~~~~~~~{.cpp}
 HCamera camera = ...;

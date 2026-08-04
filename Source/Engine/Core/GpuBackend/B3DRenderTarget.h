@@ -59,6 +59,29 @@ namespace b3d
 		};
 	} // namespace render
 
+	/**
+	 * Fixed values the surfaces of a render target are cleared to. Clear commands provide no values of their own, so
+	 * these are the only values a target is ever cleared to. Sourced from the surface textures for a render texture,
+	 * and from the create information for a render window.
+	 */
+	struct RenderTargetClearValues
+	{
+		RenderTargetClearValues()
+		{
+			for(Color& color : Colors)
+				color = Color::kZero;
+		}
+
+		/** Color each color surface is cleared to, indexed by attachment index. */
+		Color Colors[B3D_MAXIMUM_RENDER_TARGET_COUNT];
+
+		/** Value the depth surface is cleared to. */
+		float Depth = 1.0f;
+
+		/** Value the stencil surface is cleared to. */
+		u8 Stencil = 0;
+	};
+
 	/** Contains various properties that describe a render target. */
 	class B3D_EXPORT RenderTargetProperties
 	{
@@ -174,6 +197,9 @@ namespace b3d
 			/**	Returns properties that describe the render target. */
 			const RenderTargetProperties& GetProperties() const { return mRenderTargetProperties; }
 
+			/** Returns the fixed values this target's surfaces are cleared to. Populated from the render target surfaces when the target is initialized. */
+			const RenderTargetClearValues& GetClearValues() const { return mClearValues; }
+
 			/**
 			 * Returns a number that increments each time the target is rendered to. External systems can use this to
 			 * determine when the target's contents changed.
@@ -207,6 +233,7 @@ namespace b3d
 
 			u64 mUpdateCount = 0;
 			RenderTargetProperties mRenderTargetProperties;
+			RenderTargetClearValues mClearValues;
 		};
 
 		/** @} */

@@ -3684,7 +3684,7 @@ Whether or not an audio source is spatial is controlled by the assigned AudioCli
 		</field>
 	</struct>
 	<class native="Viewport" script="Viewport">
-		<doc>Viewport determines to which RenderTarget should rendering be performed. It allows you to render to a sub-region of the target by specifying the area rectangle, and allows you to set up color/depth/stencil clear values for that specific region.</doc>
+		<doc>Viewport determines to which RenderTarget should rendering be performed. It allows you to render to a sub-region of the target by specifying the area rectangle, and determines which of the target&apos;s surfaces get cleared before rendering to that region.</doc>
 		<ctor>
 			<doc>Creates a new viewport.</doc>
 			<param name="target" type="RenderTarget">
@@ -3710,14 +3710,8 @@ Whether or not an audio source is spatial is controlled by the assigned AudioCli
 		<property name="ClearFlags" type="ClearFlags" getter="GetClearFlags" setter="SetClearFlags" static="false">
 			<doc>Determines which portions of the render target should be cleared before rendering to this viewport is performed.</doc>
 		</property>
-		<property name="ClearColor" type="Color" getter="GetClearColorValue" setter="SetClearColorValue" static="false">
-			<doc>Determines the color to clear the viewport to before rendering, if color clear is enabled.</doc>
-		</property>
-		<property name="ClearDepth" type="float" getter="GetClearDepthValue" setter="SetClearDepthValue" static="false">
-			<doc>Determines the value to clear the depth buffer to before rendering, if depth clear is enabled.</doc>
-		</property>
-		<property name="ClearStencil" type="ushort" getter="GetClearStencilValue" setter="SetClearStencilValue" static="false">
-			<doc>Determines the value to clear the stencil buffer to before rendering, if stencil clear is enabled.</doc>
+		<property name="BackgroundColor" type="Color" getter="GetBackgroundColor" setter="SetBackgroundColor" static="false">
+			<doc>Determines the background color drawn where nothing else covers the view.</doc>
 		</property>
 	</class>
 	<struct native="PlaneColliderShapeInformation" script="PlaneColliderShapeInformation">
@@ -3803,6 +3797,15 @@ Whether or not an audio source is spatial is controlled by the assigned AudioCli
 		</field>
 		<field name="Gamma" type="bool">
 			<doc>Should the written color pixels be gamma corrected before write.</doc>
+		</field>
+		<field name="ClearColor" type="Color">
+			<doc>Color the window&apos;s back buffer is cleared to. Fixed on creation - clear commands provide no value of their own.</doc>
+		</field>
+		<field name="ClearDepth" type="float">
+			<doc>Value the window&apos;s depth buffer is cleared to. Fixed on creation - clear commands provide no value of their own.</doc>
+		</field>
+		<field name="ClearStencil" type="byte">
+			<doc>Value the window&apos;s stencil buffer is cleared to. Fixed on creation - clear commands provide no value of their own.</doc>
 		</field>
 		<field name="Left" type="int">
 			<doc>Window origin on X axis in pixels. -1 == screen center. Relative to monitor provided in videoMode.</doc>

@@ -162,9 +162,12 @@ namespace b3d
 			u32 NumSamples;
 
 			u32 ClearFlags;
-			Color ClearColor;
-			float ClearDepthValue;
-			u16 ClearStencilValue;
+
+			/**
+			 * Background color the skybox pass fills the view with when the scene has no skybox texture. This is not
+			 * the value the target is cleared to - surfaces are cleared to the values they were created with.
+			 */
+			Color BackgroundColor;
 		};
 
 		/** Set of properties describing the output render target used by a renderer view. */

@@ -45,7 +45,12 @@ namespace b3d
 			/** Parameters the clear shader reads; must match the @c B3DClearParameters struct in the MSL source. */
 			struct Parameters
 			{
-				float Color[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+				/**
+				 * Color written to each attachment, indexed by attachment index. Clear colors are a per-texture
+				 * property, so attachments cleared by the same command can carry different values. Entries for
+				 * attachments the clear does not write are ignored - Key::ColorWriteMask masks them off.
+				 */
+				float Color[B3D_MAXIMUM_RENDER_TARGET_COUNT][4] = {};
 				float Depth = 0.0f;
 				float Padding[3] = { 0.0f, 0.0f, 0.0f };
 			};

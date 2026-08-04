@@ -367,7 +367,7 @@ void VulkanGpuCommandBuffer::BeginRenderPass(const RenderPassCreateInformation& 
 
 	const RenderSurfaceMask readMask = mResourceTracker.GetFramebufferReadOnlyMask(mFramebuffer, mRenderTargetReadOnlyMask);
 	const RenderSurfaceMask originalClearMask = createInformation.ClearMask;
-	Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> clearValues = BuildClearValues(originalClearMask, createInformation.ClearColor, createInformation.ClearDepth, createInformation.ClearStencil);
+	Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> clearValues = BuildClearValues(originalClearMask);
 
 	VulkanRenderPass* renderPass = mFramebuffer->GetRenderPass();
 	RenderSurfaceMask clearMask = createInformation.ClearMask;
@@ -449,22 +449,22 @@ void VulkanGpuCommandBuffer::BeginRenderPass(const RenderPassCreateInformation& 
 	B3D_INCREMENT_RENDER_STATISTIC(NumRenderTargetChanges);
 }
 
-void VulkanGpuCommandBuffer::ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+void VulkanGpuCommandBuffer::ClearRenderTarget(RenderSurfaceMask mask)
 {
 	EnsureValidThread();
 
 	Area2I area(0, 0, mFramebuffer->GetWidth(), mFramebuffer->GetHeight());
-	ClearAttachments(area, mask, color, depth, stencil);
+	ClearAttachments(area, mask);
 
 	B3D_INCREMENT_RENDER_STATISTIC(NumClears);
 }
 
-void VulkanGpuCommandBuffer::ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+void VulkanGpuCommandBuffer::ClearViewport(RenderSurfaceMask mask)
 {
 	EnsureValidThread();
 
 	const Area2I viewportArea = GetViewportArea();
-	ClearAttachments(viewportArea, mask, color, depth, stencil);
+	ClearAttachments(viewportArea, mask);
 
 	B3D_INCREMENT_RENDER_STATISTIC(NumClears);
 }
@@ -1552,12 +1552,14 @@ void VulkanGpuCommandBuffer::NotifyParentPoolReset()
 	mState = GpuCommandBufferState::Ready;
 }
 
-Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> VulkanGpuCommandBuffer::BuildClearValues(RenderSurfaceMask clearMask, const Color& color, float depth, u16 stencil)
+Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> VulkanGpuCommandBuffer::BuildClearValues(RenderSurfaceMask clearMask)
 {
 	Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> clearValues{};
 
-	if(clearMask == RT_NONE || mFramebuffer == nullptr)
+	if(clearMask == RT_NONE || mFramebuffer == nullptr || mRenderTarget == nullptr)
 		return clearValues;
+
+	const RenderTargetClearValues& targetClearValues = mRenderTarget->GetClearValues();
 
 	// Determine which attachments require clearing, and their clear values
 	const VulkanRenderPass* renderPass = mFramebuffer->GetRenderPass();
@@ -1570,6 +1572,7 @@ Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> VulkanGpuCommandBuffer:
 		if(!clearMask.IsSet(colorAttachmentBit))
 			continue;
 
+		const Color& color = targetClearValues.Colors[colorAttachment.Index];
 		VkClearColorValue& colorAttachmentClearValue = clearValues[sequentialColorAttachmentIndex].color;
 		colorAttachmentClearValue.float32[0] = color.R;
 		colorAttachmentClearValue.float32[1] = color.G;
@@ -1582,18 +1585,18 @@ Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1> VulkanGpuCommandBuffer:
 		u32 depthAttachmentSequentialIndex = colorAttachmentCount;
 
 		if(clearMask.IsSet(RT_DEPTH))
-			clearValues[depthAttachmentSequentialIndex].depthStencil.depth = depth;
+			clearValues[depthAttachmentSequentialIndex].depthStencil.depth = targetClearValues.Depth;
 
 		if(clearMask.IsSet(RT_STENCIL))
-			clearValues[depthAttachmentSequentialIndex].depthStencil.stencil = stencil;
+			clearValues[depthAttachmentSequentialIndex].depthStencil.stencil = targetClearValues.Stencil;
 	}
 
 	return clearValues;
 }
 
-void VulkanGpuCommandBuffer::ClearAttachments(const Area2I& area, RenderSurfaceMask clearMask, const Color& color, float depth, u16 stencil)
+void VulkanGpuCommandBuffer::ClearAttachments(const Area2I& area, RenderSurfaceMask clearMask)
 {
-	ClearAttachments(area, clearMask, BuildClearValues(clearMask, color, depth, stencil));
+	ClearAttachments(area, clearMask, BuildClearValues(clearMask));
 }
 
 void VulkanGpuCommandBuffer::ClearAttachments(const Area2I& area, RenderSurfaceMask clearMask, const Array<VkClearValue, B3D_MAXIMUM_RENDER_TARGET_COUNT + 1>& clearValues)
@@ -1618,7 +1621,7 @@ void VulkanGpuCommandBuffer::ClearAttachments(const Area2I& area, RenderSurfaceM
 
 		attachments[sequentialClearedAttachmentIndex].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		attachments[sequentialClearedAttachmentIndex].colorAttachment = colorAttachment.Index;
-		attachments[sequentialClearedAttachmentIndex].clearValue.color = clearValues[sequentialClearedAttachmentIndex].color;
+		attachments[sequentialClearedAttachmentIndex].clearValue.color = clearValues[sequentialColorAttachmentIndex].color;
 
 		const u32 colorAttachmentBaseLayer = colorAttachment.BaseLayer;
 		if(sequentialClearedAttachmentIndex == 0)
@@ -1645,13 +1648,13 @@ void VulkanGpuCommandBuffer::ClearAttachments(const Area2I& area, RenderSurfaceM
 			if(clearMask.IsSet(RT_DEPTH))
 			{
 				attachments[sequentialClearedAttachmentIndex].aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
-				attachments[sequentialClearedAttachmentIndex].clearValue.depthStencil.depth = clearValues[sequentialClearedAttachmentIndex].depthStencil.depth;
+				attachments[sequentialClearedAttachmentIndex].clearValue.depthStencil.depth = clearValues[colorAttachmentCount].depthStencil.depth;
 			}
 
 			if(clearMask.IsSet(RT_STENCIL))
 			{
 				attachments[sequentialClearedAttachmentIndex].aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-				attachments[sequentialClearedAttachmentIndex].clearValue.depthStencil.stencil = clearValues[sequentialClearedAttachmentIndex].depthStencil.stencil;
+				attachments[sequentialClearedAttachmentIndex].clearValue.depthStencil.stencil = clearValues[colorAttachmentCount].depthStencil.stencil;
 			}
 
 			attachments[sequentialClearedAttachmentIndex].colorAttachment = 0;

@@ -89,6 +89,15 @@ namespace b3d
 		/** Should the written color pixels be gamma corrected before write. */
 		bool Gamma = false;
 
+		/** Color the window's back buffer is cleared to, when a clear operation is issued. */
+		Color ClearColor = Color::kZero;
+
+		/** Value the window's depth buffer is cleared to, when a clear operation is issued. */
+		float ClearDepth = 1.0f;
+
+		/** Value the window's stencil buffer is cleared to, when a clear operation is issued. */
+		u8 ClearStencil = 0;
+
 		/** Window origin on X axis in pixels. -1 == screen center. Relative to monitor provided in videoMode. */
 		i32 Left = -1;
 
@@ -385,6 +394,7 @@ namespace b3d
 			bool CreateDepthBuffer = false;
 			bool UseHardwareSRGB = false;
 			bool Headless = false; /**< When true, creates a headless surface for offscreen rendering (no OS window is created). */
+			Color ClearColor = Color::kZero; /**< Color the surface's back buffers are cleared to. */
 		};
 
 		/**

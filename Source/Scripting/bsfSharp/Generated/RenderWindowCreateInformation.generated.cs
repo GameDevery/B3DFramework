@@ -28,6 +28,9 @@ namespace b3d
 			value.MultisampleCount = 0;
 			value.MultisampleHint = "";
 			value.Gamma = false;
+			value.ClearColor = Color.Default();
+			value.ClearDepth = 1f;
+			value.ClearStencil = 0;
 			value.Left = -1;
 			value.Top = -1;
 			value.Title = "";
@@ -66,6 +69,19 @@ namespace b3d
 		public string MultisampleHint;
 		/// <summary>Should the written color pixels be gamma corrected before write.</summary>
 		public bool Gamma;
+		/// <summary>
+		/// Color the window&apos;s back buffer is cleared to. Fixed on creation - clear commands provide no value of their own.
+		/// </summary>
+		public Color ClearColor;
+		/// <summary>
+		/// Value the window&apos;s depth buffer is cleared to. Fixed on creation - clear commands provide no value of their own.
+		/// </summary>
+		public float ClearDepth;
+		/// <summary>
+		/// Value the window&apos;s stencil buffer is cleared to. Fixed on creation - clear commands provide no value of their 
+		/// own.
+		/// </summary>
+		public byte ClearStencil;
 		/// <summary>Window origin on X axis in pixels. -1 == screen center. Relative to monitor provided in videoMode.</summary>
 		public int Left;
 		/// <summary>Window origin on Y axis in pixels. -1 == screen center. Relative to monitor provided in videoMode.</summary>

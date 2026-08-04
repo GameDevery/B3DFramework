@@ -585,10 +585,7 @@ void D3D12GpuCommandBuffer::BeginRenderPass(const RenderPassCreateInformation& c
 
 	// Apply clear operations requested for the render pass start
 	if (createInformation.ClearMask != RT_NONE)
-	{
-		ClearViewportArea(GetRenderPassArea(), createInformation.ClearMask, createInformation.ClearColor,
-			createInformation.ClearDepth, (u16)createInformation.ClearStencil);
-	}
+		ClearViewportArea(GetRenderPassArea(), createInformation.ClearMask);
 }
 
 void D3D12GpuCommandBuffer::SetViewport(const Area2& area)
@@ -602,24 +599,26 @@ void D3D12GpuCommandBuffer::SetViewport(const Area2& area)
 		mScissorRequiresBind = true;
 }
 
-void D3D12GpuCommandBuffer::ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+void D3D12GpuCommandBuffer::ClearRenderTarget(RenderSurfaceMask mask)
 {
 	EnsureValidThread();
 
-	ClearViewportArea(GetRenderPassArea(), mask, color, depth, stencil);
+	ClearViewportArea(GetRenderPassArea(), mask);
 }
 
-void D3D12GpuCommandBuffer::ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+void D3D12GpuCommandBuffer::ClearViewport(RenderSurfaceMask mask)
 {
 	EnsureValidThread();
 
-	ClearViewportArea(GetViewportArea(), mask, color, depth, stencil);
+	ClearViewportArea(GetViewportArea(), mask);
 }
 
-void D3D12GpuCommandBuffer::ClearViewportArea(const Area2I& area, RenderSurfaceMask mask, const Color& color, float depth, u16 stencil)
+void D3D12GpuCommandBuffer::ClearViewportArea(const Area2I& area, RenderSurfaceMask mask)
 {
-	if (!mFramebuffer)
+	if (!mFramebuffer || !mRenderTarget)
 		return;
+
+	const RenderTargetClearValues& clearValues = mRenderTarget->GetClearValues();
 
 	D3D12_RECT rect;
 	rect.left = area.X;
@@ -632,12 +631,15 @@ void D3D12GpuCommandBuffer::ClearViewportArea(const Area2I& area, RenderSurfaceM
 	{
 		const D3D12_CPU_DESCRIPTOR_HANDLE* rtvHandles = mFramebuffer->GetRenderTargetViews();
 		const u32 numRTVs = mFramebuffer->GetNumColorAttachments();
-		const float clearColor[4] = { color.R, color.G, color.B, color.A };
 
 		for (u32 i = 0; i < numRTVs; i++)
 		{
-			if (mask.IsSet((RenderSurfaceMaskBits)(RT_COLOR0 << i)))
-				mCommandList->ClearRenderTargetView(rtvHandles[i], clearColor, 1, &rect);
+			if (!mask.IsSet((RenderSurfaceMaskBits)(RT_COLOR0 << i)))
+				continue;
+
+			const Color& color = clearValues.Colors[i];
+			const float clearColor[4] = { color.R, color.G, color.B, color.A };
+			mCommandList->ClearRenderTargetView(rtvHandles[i], clearColor, 1, &rect);
 		}
 	}
 
@@ -651,7 +653,7 @@ void D3D12GpuCommandBuffer::ClearViewportArea(const Area2I& area, RenderSurfaceM
 		if (mask.IsSet(RT_STENCIL))
 			clearFlags |= D3D12_CLEAR_FLAG_STENCIL;
 
-		mCommandList->ClearDepthStencilView(*dsvHandle, clearFlags, depth, (UINT8)stencil, 1, &rect);
+		mCommandList->ClearDepthStencilView(*dsvHandle, clearFlags, clearValues.Depth, clearValues.Stencil, 1, &rect);
 	}
 }
 

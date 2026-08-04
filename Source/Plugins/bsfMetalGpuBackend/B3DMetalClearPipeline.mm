@@ -35,7 +35,7 @@ namespace b3d
 					"\n"
 					"struct B3DClearParameters\n"
 					"{\n"
-					"\tfloat4 Color;\n"
+					"\tfloat4 Color[" << B3D_MAXIMUM_RENDER_TARGET_COUNT << "];\n"
 					"\tfloat Depth;\n"
 					"};\n"
 					"\n"
@@ -77,7 +77,7 @@ namespace b3d
 							<< "(constant B3DClearParameters& parameters [[buffer(" << kMetalClearParametersBufferSlot << ")]])\n{\n"
 							<< "\tB3DClearOutput" << suffix << " output;\n";
 						for (u32 attachmentIndex = 0; attachmentIndex < colorCount; attachmentIndex++)
-							source << "\toutput.Color" << attachmentIndex << " = parameters.Color;\n";
+							source << "\toutput.Color" << attachmentIndex << " = parameters.Color[" << attachmentIndex << "];\n";
 						if (writesDepth)
 							source << "\toutput.Depth = parameters.Depth;\n";
 						source << "\treturn output;\n}\n";

@@ -21,9 +21,7 @@ namespace b3d
 	private:
 		B3D_RTTI_BEGIN_MEMBERS
 			B3D_RTTI_MEMBER(mNormArea, 0)
-			B3D_RTTI_MEMBER(mClearColorValue, 1)
-			B3D_RTTI_MEMBER(mClearDepthValue, 2)
-			B3D_RTTI_MEMBER(mClearStencilValue, 3)
+			B3D_RTTI_MEMBER(mBackgroundColor, 1)
 			B3D_RTTI_MEMBER(mClearFlags, 4)
 		B3D_RTTI_END_MEMBERS
 	public:

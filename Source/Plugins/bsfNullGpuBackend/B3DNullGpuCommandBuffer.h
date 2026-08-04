@@ -45,8 +45,8 @@ namespace b3d
 			void EndRenderPass() override {}
 			bool IsInRenderPass() const override { return false; }
 			void SetViewport(const Area2& area) override {}
-			void ClearRenderTarget(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override {}
-			void ClearViewport(RenderSurfaceMask mask, const Color& color, float depth, u16 stencil) override {}
+			void ClearRenderTarget(RenderSurfaceMask mask) override {}
+			void ClearViewport(RenderSurfaceMask mask) override {}
 			void EnableScissorTest(u32 left, u32 top, u32 right, u32 bottom) override {}
 			void DisableScissorTest() override {}
 			void SetStencilReferenceValue(u32 value) override {}

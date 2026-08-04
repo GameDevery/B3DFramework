@@ -1445,7 +1445,6 @@ void BokehDOFMaterial::Execute(GpuCommandBuffer& commandBuffer, const TShared<Te
 
 	RenderPassCreateInformation info(output, mGpuParameterSet, RT_DEPTH_STENCIL, RT_DEPTH_STENCIL);
 	info.ClearMask = RT_COLOR_ALL;
-	info.ClearColor = Color::kZero;
 
 	commandBuffer.BeginRenderPass(info);
 	commandBuffer.SetVertexDescription(mTileVertexDescription);
@@ -2209,7 +2208,6 @@ void SSRTraceMaterial::Execute(GpuCommandBuffer& commandBuffer, const TShared<Re
 
 	RenderPassCreateInformation info(destination, mGpuParameterSet, RT_DEPTH_STENCIL, RT_DEPTH_STENCIL);
 	info.ClearMask = RT_COLOR_ALL;
-	info.ClearColor = Color::kZero;
 
 	commandBuffer.BeginRenderPass(info);
 
