@@ -115,7 +115,6 @@ namespace b3d::render
 			mSurface.mVSyncInterval, mSurface.mRefreshRate });
 		mCurrentDrawable = nil;
 		mCurrentDrawableWasRenderedInto = false;
-		NotifyBound();
 	}
 
 	void MetalSwapChain::Present(u32 imageIndex, GpuQueue& queue, GpuQueueMask syncMask)
@@ -141,10 +140,7 @@ namespace b3d::render
 		}
 
 		if (claimedDrawable.Drawable == nil)
-		{
-			NotifyUnbound();
 			return;
-		}
 
 		auto& metalQueue = static_cast<MetalGpuQueue&>(queue);
 		id<MTLCommandQueue> commandQueue = metalQueue.GetMetalQueue();
@@ -153,7 +149,6 @@ namespace b3d::render
 		{
 			B3D_LOG(Error, LogRenderBackend, "Failed to allocate the Metal presentation command buffer.");
 			ReleaseDrawable(claimedDrawable.Drawable);
-			NotifyUnbound();
 			return;
 		}
 
@@ -192,7 +187,6 @@ namespace b3d::render
 		[commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedBuffer)
 		{
 			LogPresentCommandBufferError(completedBuffer);
-			NotifyUnbound();
 			ownerCompletion->NotifyDone();
 		}];
 

@@ -345,10 +345,57 @@ void GpuBackendTestSuite::TestSubmissionTransitionPlanning()
 	SubmissionTestBuffer readOnlyBuffer;
 	ResolveTestSubmission(readOnlyBuffer, firstReaderQueue, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
 	BeginTestRead(readOnlyBuffer, firstReaderQueue);
+
+	// A late-bound point that resolves to NOP must leave the ordinary read/read submission state untouched.
+	const SubmissionTestResult parallelNopRead = ResolveTestSubmission(readOnlyBuffer, secondReaderQueue,
+		GpuStageFlag::Transfer, GpuAccessFlag::Read);
+	B3D_TEST_ASSERT(parallelNopRead.ParallelAccessWaitMask.IsEmpty())
+	B3D_TEST_ASSERT(parallelNopRead.ExclusiveAccessWaitMask == GpuQueueMask(firstReaderQueue))
+	BeginTestRead(readOnlyBuffer, secondReaderQueue);
+
+	// A selected metadata rewrite is modelled with this same synthetic write hazard. It must drain a prior reader on
+	// its own queue and wait for readers on other queues, while never trying to wait on its own fence.
 	const SubmissionTestResult sameQueueWrite = ResolveTestSubmission(readOnlyBuffer, firstReaderQueue, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write);
-	B3D_TEST_ASSERT(sameQueueWrite.ParallelAccessWaitMask.IsEmpty())
+	B3D_TEST_ASSERT(sameQueueWrite.ParallelAccessWaitMask == GpuQueueMask(secondReaderQueue))
+	B3D_TEST_ASSERT(sameQueueWrite.ExclusiveAccessWaitMask == GpuQueueMask(secondReaderQueue))
+	B3D_TEST_ASSERT(!sameQueueWrite.ExclusiveAccessWaitMask.IsSet(firstReaderQueue))
 	B3D_TEST_ASSERT(sameQueueWrite.ExecutionBarrier.IsValid())
 	B3D_TEST_ASSERT(sameQueueWrite.ExecutionBarrier.SourceAccess == GpuAccessFlag::Read)
 	B3D_TEST_ASSERT(!sameQueueWrite.MemoryBarrier.IsValid())
+
+	// Publishing the selected rewrite as the latest writer makes a later reader acquire it even though the recording
+	// that selected the rewrite may otherwise have contained only reads.
+	const SubmissionTestResult readAfterSyntheticWrite = ResolveTestSubmission(readOnlyBuffer, secondReaderQueue,
+		GpuStageFlag::Transfer, GpuAccessFlag::Read);
+	B3D_TEST_ASSERT(readAfterSyntheticWrite.ParallelAccessWaitMask == GpuQueueMask(firstReaderQueue))
+
 	EndTestRead(readOnlyBuffer, firstReaderQueue);
+	EndTestRead(readOnlyBuffer, secondReaderQueue);
+
+	// Reads after a synthetic writer remain visible as a reader branch. A later write on another queue must therefore
+	// wait for the queue that performed both the metadata rewrite and the following ordinary read.
+	SubmissionTestBuffer rewriteThenReadBuffer;
+	ResolveTestSubmission(rewriteThenReadBuffer, firstReaderQueue, GpuStageFlag::Transfer, GpuAccessFlag::Write);
+	ResolveTestSubmission(rewriteThenReadBuffer, firstReaderQueue, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read);
+	BeginTestRead(rewriteThenReadBuffer, firstReaderQueue);
+	const SubmissionTestResult writeAfterSyntheticWriterAndReader = ResolveTestSubmission(rewriteThenReadBuffer,
+		secondReaderQueue, GpuStageFlag::Transfer, GpuAccessFlag::Write);
+	B3D_TEST_ASSERT(writeAfterSyntheticWriterAndReader.ParallelAccessWaitMask == GpuQueueMask(firstReaderQueue))
+	B3D_TEST_ASSERT(writeAfterSyntheticWriterAndReader.ExclusiveAccessWaitMask == GpuQueueMask(firstReaderQueue))
+	EndTestRead(rewriteThenReadBuffer, firstReaderQueue);
+
+	// Reusing the ordinary write transition also preserves both halves of a prior same-queue write epoch: RAW/WAW
+	// memory ordering for the writer and WAR execution ordering for its subsequent readers.
+	SubmissionTestBuffer writerAndReaderBuffer;
+	ResolveTestSubmission(writerAndReaderBuffer, writerQueue, GpuStageFlag::ColorAttachment, GpuAccessFlag::Write);
+	ResolveTestSubmission(writerAndReaderBuffer, writerQueue, GpuStageFlag::VertexShaderNonUniform, GpuAccessFlag::Read);
+	BeginTestRead(writerAndReaderBuffer, writerQueue);
+	const SubmissionTestResult rewriteAfterWriterAndReader = ResolveTestSubmission(writerAndReaderBuffer, writerQueue,
+		GpuStageFlag::Transfer, GpuAccessFlag::Write);
+	B3D_TEST_ASSERT(rewriteAfterWriterAndReader.ParallelAccessWaitMask.IsEmpty())
+	B3D_TEST_ASSERT(rewriteAfterWriterAndReader.MemoryBarrier.SourceStages == GpuStageFlag::ColorAttachment)
+	B3D_TEST_ASSERT(rewriteAfterWriterAndReader.MemoryBarrier.SourceAccess == GpuAccessFlag::Write)
+	B3D_TEST_ASSERT(rewriteAfterWriterAndReader.ExecutionBarrier.SourceStages == GpuStageFlag::VertexShaderNonUniform)
+	B3D_TEST_ASSERT(rewriteAfterWriterAndReader.ExecutionBarrier.SourceAccess == GpuAccessFlag::Read)
+	EndTestRead(writerAndReaderBuffer, writerQueue);
 }

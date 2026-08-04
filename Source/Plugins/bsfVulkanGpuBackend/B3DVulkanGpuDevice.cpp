@@ -86,6 +86,9 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 	vkGetPhysicalDeviceFeatures(device, &mDeviceFeatures);
 	vkGetPhysicalDeviceMemoryProperties(device, &mMemoryProperties);
 
+	if(mDeviceProperties.apiVersion < VK_API_VERSION_1_2)
+		B3D_LOG(Fatal, LogRenderBackend, "The selected GPU does not support Vulkan 1.2. Update the graphics driver, select another GPU, or use a different backend.");
+
 	uint32_t numQueueFamilies;
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &numQueueFamilies, nullptr);
 
@@ -165,8 +168,8 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 	if(transferQueueFamilyIndex != ~0u)
 		fnPopulateQueueInfo(GQT_TRANSFER, transferQueueFamilyIndex);
 
-	// Set up extensions. Required: swapchain, maintenance1, maintenance2, maintenance4, timeline_semaphore
-	// (availability verified below). Plus optional ones discovered below (shader_viewport_index_layer).
+	// Set up extensions. Required: swapchain, maintenance1, maintenance2, maintenance4. Plus optional ones discovered
+	// below (shader_viewport_index_layer).
 	const char* extensions[12];
 	uint32_t extensionCount = 0;
 
@@ -194,11 +197,6 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 				{
 					extensions[extensionCount++] = VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME;
 				}
-				else if(strcmp(entry.extensionName, VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME) == 0)
-				{
-					extensions[extensionCount++] = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME;
-					mSupportsTimelineSemaphore = true;
-				}
 #if B3D_BUILD_TYPE_DEVELOPMENT
 				else if(strcmp(entry.extensionName, VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME) == 0)
 				{
@@ -210,38 +208,27 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 		}
 	}
 
-#if !B3D_PLATFORM_MACOS
-	if(mSupportsTimelineSemaphore)
-	{
-		VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timelineFeatureProbe = {};
-		timelineFeatureProbe.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
+	VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatureProbe = {};
+	timelineFeatureProbe.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
 
-		VkPhysicalDeviceFeatures2 features2 = {};
-		features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		features2.pNext = &timelineFeatureProbe;
+	VkPhysicalDeviceFeatures2 features2 = {};
+	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features2.pNext = &timelineFeatureProbe;
 
-		vkGetPhysicalDeviceFeatures2(device, &features2);
+	vkGetPhysicalDeviceFeatures2(device, &features2);
 
-		if(timelineFeatureProbe.timelineSemaphore != VK_TRUE)
-			mSupportsTimelineSemaphore = false;
-	}
-#endif
-
-	if(!mSupportsTimelineSemaphore)
-		B3D_LOG(Fatal, LogRenderBackend, "The Vulkan device does not support timeline semaphores (VK_KHR_timeline_semaphore, core in Vulkan 1.2). The Vulkan backend requires them for queue synchronization; update the graphics driver or use a different backend.");
+	if(timelineFeatureProbe.timelineSemaphore != VK_TRUE)
+		B3D_LOG(Fatal, LogRenderBackend, "The Vulkan device does not support the Vulkan 1.2 timelineSemaphore feature required for queue synchronization. Update the graphics driver or use a different backend.");
 
 	// Build the enabled-feature pNext chain. Maintenance4 is required and enabled unconditionally; if the
 	// physical device lacks the extension/feature, the vkCreateDevice below fails its assert.
 	void* featureChain = nullptr;
 
-	VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timelineFeatures = {};
-	if(mSupportsTimelineSemaphore)
-	{
-		timelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR;
-		timelineFeatures.pNext = featureChain;
-		timelineFeatures.timelineSemaphore = VK_TRUE;
-		featureChain = &timelineFeatures;
-	}
+	VkPhysicalDeviceTimelineSemaphoreFeatures timelineFeatures = {};
+	timelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+	timelineFeatures.pNext = featureChain;
+	timelineFeatures.timelineSemaphore = VK_TRUE;
+	featureChain = &timelineFeatures;
 
 	VkPhysicalDeviceMaintenance4FeaturesKHR maintenance4Features = {};
 	maintenance4Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR;
@@ -275,11 +262,8 @@ VulkanGpuDevice::VulkanGpuDevice(VkPhysicalDevice device)
 	VkResult result = vkCreateDevice(device, &deviceInfo, gVulkanAllocator, &mLogicalDevice);
 	B3D_ASSERT(result == VK_SUCCESS);
 
-	if(mSupportsTimelineSemaphore)
-	{
-		GET_DEVICE_PROC_ADDR(mLogicalDevice, GetSemaphoreCounterValueKHR)
-		GET_DEVICE_PROC_ADDR(mLogicalDevice, WaitSemaphoresKHR)
-	}
+	GET_DEVICE_PROC_ADDR(mLogicalDevice, GetSemaphoreCounterValue)
+	GET_DEVICE_PROC_ADDR(mLogicalDevice, WaitSemaphores)
 
 	GET_DEVICE_PROC_ADDR(mLogicalDevice, GetDeviceBufferMemoryRequirementsKHR)
 	B3D_ASSERT(vkGetDeviceBufferMemoryRequirementsKHR != nullptr && "VK_KHR_maintenance4 is required.");
@@ -528,9 +512,9 @@ void VulkanGpuDevice::ExecuteSubmit(GpuQueue& queue, const TShared<GpuCommandBuf
 	vulkanQueue.ExecuteSubmitOnSubmitThread(submitInformation, syncMask, signalFences);
 }
 
-void VulkanGpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty, u32 lastSubmitIndex)
+void VulkanGpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, u32 lastSubmitIndex)
 {
-	static_cast<VulkanGpuQueue&>(queue).RefreshCompletionState(forceWait, queueEmpty, lastSubmitIndex);
+	static_cast<VulkanGpuQueue&>(queue).RefreshCompletionState(forceWait, lastSubmitIndex);
 }
 
 u32 VulkanGpuDevice::GetLastSubmitIndex(const GpuQueue& queue) const

@@ -236,9 +236,6 @@ namespace b3d
 
 			/** @} */
 
-			/** Returns true if timeline semaphores are available on this device. */
-			bool SupportsTimelineSemaphores() const { return mSupportsTimelineSemaphore; }
-
 			/** Returns the device heap backend. */
 			VulkanHeapBackend& GetHeapBackend() const { return *mHeapBackend; }
 
@@ -254,7 +251,7 @@ namespace b3d
 
 			void NotifyWillQueueForSubmit(GpuCommandBuffer& commandBuffer) override;
 			void ExecuteSubmit(GpuQueue& queue, const TShared<GpuCommandBuffer>& commandBuffer, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences) override;
-			void RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty, u32 lastSubmitIndex) override;
+			void RefreshCompletionState(GpuQueue& queue, bool forceWait, u32 lastSubmitIndex) override;
 			u32 GetLastSubmitIndex(const GpuQueue& queue) const override;
 			void ExecuteWaitUntilIdle() override;
 			void ExecuteWaitUntilIdle(GpuQueue& queue) override;
@@ -342,7 +339,6 @@ namespace b3d
 			GpuDeviceCapabilities mCapabilities;
 			TShared<VideoModeInfo> mVideoModeInfo;
 
-			bool mSupportsTimelineSemaphore = false;
 			TUnique<VulkanHeapBackend> mHeapBackend;
 
 			/** Per-memory-type TLSF allocator pool. Slots are lazily populated on first allocation. */

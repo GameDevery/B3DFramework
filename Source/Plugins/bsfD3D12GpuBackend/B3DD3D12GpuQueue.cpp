@@ -199,7 +199,7 @@ void D3D12GpuQueue::ExecuteSubmitOnSubmitThread(const D3D12GpuCommandBufferSubmi
 	mLastSubmittedCommandBuffer = commandBuffer;
 }
 
-void D3D12GpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 lastSubmitIndex)
+void D3D12GpuQueue::RefreshCompletionState(bool forceWait, u32 lastSubmitIndex)
 {
 	AssertIfNotSubmitThread();
 
@@ -209,12 +209,6 @@ void D3D12GpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 
 	while (it != mActiveSubmissions.end())
 	{
 		const TShared<D3D12GpuCommandBuffer> commandBuffer = it->CommandBuffer;
-		if (commandBuffer == nullptr)
-		{
-			++it;
-			continue;
-		}
-
 		if (lastSubmitIndex != ~0u && it->SubmitIndex > lastSubmitIndex)
 			break;
 
@@ -228,9 +222,6 @@ void D3D12GpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 
 		++it;
 	}
 
-	if (queueEmpty)
-		lastFinishedSubmission = mNextSubmitIndex - 1;
-
 	WaitGroup waitGroup;
 
 	{
@@ -242,56 +233,36 @@ void D3D12GpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 
 				break;
 
 			const TShared<D3D12GpuCommandBuffer> commandBuffer = it->CommandBuffer;
-			if (commandBuffer != nullptr)
+			SingleConsumerQueue& messageQueue = commandBuffer->GetPool().GetMessageQueue();
+
+			waitGroup.Increment();
+			messageQueue.PostCommand([commandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
 			{
-				SingleConsumerQueue& messageQueue = commandBuffer->GetPool().GetMessageQueue();
+				commandBuffer->mState = GpuCommandBufferState::Done;
+				commandBuffer->OnDidComplete();
+				commandBuffer->Reset();
 
-				waitGroup.Increment();
-				messageQueue.PostCommand([commandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
-				{
-					commandBuffer->mState = GpuCommandBufferState::Done;
-					commandBuffer->OnDidComplete();
-					commandBuffer->Reset();
+				if (waitGroup != nullptr)
+					waitGroup->NotifyDone();
+			}, "CommandBufferCompleteCallback");
 
-					if (waitGroup != nullptr)
-						waitGroup->NotifyDone();
-				}, "CommandBufferCompleteCallback");
+			if (mLastSubmittedCommandBuffer == commandBuffer)
+				mLastSubmittedCommandBuffer = nullptr;
 
-				if (mLastSubmittedCommandBuffer == commandBuffer)
-					mLastSubmittedCommandBuffer = nullptr;
-
-				const TShared<D3D12GpuCommandBuffer> transitionCommandBuffer = it->TransitionCommandBuffer;
-				if(transitionCommandBuffer != nullptr)
-				{
-					SingleConsumerQueue& transitionMessageQueue = transitionCommandBuffer->GetPool().GetMessageQueue();
-					waitGroup.Increment();
-					transitionMessageQueue.PostCommand([transitionCommandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
-					{
-						transitionCommandBuffer->mState = GpuCommandBufferState::Done;
-						transitionCommandBuffer->OnDidComplete();
-						transitionCommandBuffer->Reset();
-
-						if(waitGroup != nullptr)
-							waitGroup->NotifyDone();
-					}, "TransitionCommandBufferCompleteCallback");
-				}
-			}
-			else if (it->PresentSwapChain != nullptr)
+			const TShared<D3D12GpuCommandBuffer> transitionCommandBuffer = it->TransitionCommandBuffer;
+			if(transitionCommandBuffer != nullptr)
 			{
-				// Present entry: the swap chain image is no longer being used by the GPU. Post NotifyUnbound() back
-				// to the swap chain's message queue (processed on the render thread), matching the NotifyBound() that
-				// was issued when the present was queued.
-				D3D12SwapChain* const swapChain = it->PresentSwapChain;
-				SingleConsumerQueue& messageQueue = swapChain->GetMessageQueue();
-
+				SingleConsumerQueue& transitionMessageQueue = transitionCommandBuffer->GetPool().GetMessageQueue();
 				waitGroup.Increment();
-				messageQueue.PostCommand([swapChain, waitGroup = forceWait ? &waitGroup : nullptr]()
+				transitionMessageQueue.PostCommand([transitionCommandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
 				{
-					swapChain->NotifyUnbound();
+					transitionCommandBuffer->mState = GpuCommandBufferState::Done;
+					transitionCommandBuffer->OnDidComplete();
+					transitionCommandBuffer->Reset();
 
-					if (waitGroup != nullptr)
+					if(waitGroup != nullptr)
 						waitGroup->NotifyDone();
-				}, "SwapChainPresentCompleteCallback");
+				}, "TransitionCommandBufferCompleteCallback");
 			}
 
 			it = mActiveSubmissions.erase(it);
@@ -422,17 +393,9 @@ HRESULT D3D12GpuQueue::Present(D3D12SwapChain* swapChain, GpuQueueMask syncMask)
 		B3D_LOG(Error, LogRenderBackend, "Failed to present swap chain");
 	}
 
-	// Signal the queue submit fence so a later submission can detect the present has been ordered on the GPU, and
-	// register a present entry. The entry has a null command buffer; it stays in mActiveSubmissions until a
-	// following submission on this queue completes (or the queue is drained), at which point the swap chain's
-	// NotifyUnbound() is posted back on its message queue.
+	// Signal the queue submit fence so a later submission can detect that the present has been ordered on the GPU.
 	mLastSignaledFenceValue = mNextFenceValue++;
 	Signal(mFence.Get(), mLastSignaledFenceValue);
-
-	{
-		Lock lock(mMutex);
-		mActiveSubmissions.push_back(QueueSubmissionInformation(swapChain, mNextSubmitIndex++));
-	}
 
 	return hr;
 }

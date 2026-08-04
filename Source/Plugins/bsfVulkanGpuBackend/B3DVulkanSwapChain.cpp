@@ -151,6 +151,7 @@ VulkanSwapChain::VulkanSwapChain(VulkanResourceManager* owner, const TShared<Vul
 	{
 		mSurfaces[imageIndex].Acquired = false;
 		mSurfaces[imageIndex].NeedsWait = false;
+		mSurfaces[imageIndex].PresentBridgeSemaphore = owner->Create<VulkanSemaphore>("PresentReady");
 
 		// Purposefully not setting parent so these images don't participate in defragmentation
 		mSurfaces[imageIndex].Image = owner->Create<VulkanImage>(colorImageCreateInformation, images[imageIndex], VulkanAllocationResult{}, nullptr);
@@ -268,6 +269,9 @@ VulkanSwapChain::~VulkanSwapChain()
 
 			surface.Image->Destroy();
 			surface.Image = nullptr;
+
+			surface.PresentBridgeSemaphore->Destroy();
+			surface.PresentBridgeSemaphore = nullptr;
 		}
 
 		for(auto semaphore : mSemaphores)
@@ -337,12 +341,13 @@ void VulkanSwapChain::AcquireImage()
 		return;
 	}
 
-	mSurfaces[imageIndex].WaitSemaphore = mSemaphores[mLastAcquiredSemaphoreIndex];
+	SwapChainImage& surface = mSurfaces[imageIndex];
+	surface.AcquireImageWaitSemaphore = mSemaphores[mLastAcquiredSemaphoreIndex];
 	mLastAcquiredSemaphoreIndex = (mLastAcquiredSemaphoreIndex + 1) % mSemaphores.size();
 
-	B3D_ASSERT(!mSurfaces[imageIndex].Acquired && "Swap chain image being acquired twice.");
-	mSurfaces[imageIndex].Acquired = true;
-	mSurfaces[imageIndex].NeedsWait = true;
+	B3D_ASSERT(!surface.Acquired && "Swap chain image being acquired twice.");
+	surface.Acquired = true;
+	surface.NeedsWait = true;
 
 	output = ImageAcquireResult(result, imageIndex);
 	mAcquiredImageCountOnSubmitThread++;
@@ -464,8 +469,8 @@ bool VulkanSwapChain::AppendWaitSemaphoreIfRequired(u32 imageIndex, TInlineArray
 	if(!mSurfaces[imageIndex].NeedsWait)
 		return false;
 
-	if(B3D_ENSURE(mSurfaces[imageIndex].WaitSemaphore != nullptr))
-		outSemaphores.Add(mSurfaces[imageIndex].WaitSemaphore);
+	if(B3D_ENSURE(mSurfaces[imageIndex].AcquireImageWaitSemaphore != nullptr))
+		outSemaphores.Add(mSurfaces[imageIndex].AcquireImageWaitSemaphore);
 
 	mSurfaces[imageIndex].NeedsWait = false;
 
@@ -487,8 +492,6 @@ void VulkanSwapChain::NotifyWasImageAcquireQueued()
 		Lock lock(mImageAcquireMutex);
 		mQueuedImageAcquireOperationCount++;
 	}
-
-	NotifyBound();
 }
 
 void VulkanSwapChain::NotifyWasPresentQueued(u32 imageIndex)
@@ -498,6 +501,4 @@ void VulkanSwapChain::NotifyWasPresentQueued(u32 imageIndex)
 		mAcquiredImageIndicesOnRenderThread.erase(found);
 	else
 		B3D_ASSERT(false);
-
-	NotifyBound();
 }

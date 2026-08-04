@@ -61,8 +61,8 @@ PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR = nullptr;
 PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR = nullptr;
 PFN_vkQueuePresentKHR vkQueuePresentKHR = nullptr;
 
-PFN_vkGetSemaphoreCounterValueKHR vkGetSemaphoreCounterValueKHR = nullptr;
-PFN_vkWaitSemaphoresKHR vkWaitSemaphoresKHR = nullptr;
+PFN_vkGetSemaphoreCounterValue vkGetSemaphoreCounterValue = nullptr;
+PFN_vkWaitSemaphores vkWaitSemaphores = nullptr;
 
 PFN_vkGetDeviceBufferMemoryRequirementsKHR vkGetDeviceBufferMemoryRequirementsKHR = nullptr;
 
@@ -214,6 +214,11 @@ VkBool32 DebugUtilsMessageCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messag
 
 void VulkanGpuBackend::OnStartUp()
 {
+	u32 supportedApiVersion = VK_API_VERSION_1_0;
+	const VkResult versionResult = vkEnumerateInstanceVersion(&supportedApiVersion);
+	if(versionResult != VK_SUCCESS || supportedApiVersion < VK_API_VERSION_1_2)
+		B3D_LOG(Fatal, LogRenderBackend, "Vulkan 1.2 or newer is required. Update the graphics driver or use a different backend.");
+
 	// Create instance
 	VkApplicationInfo appInfo;
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -222,7 +227,7 @@ void VulkanGpuBackend::OnStartUp()
 	appInfo.applicationVersion = 1;
 	appInfo.pEngineName = "B3D Framework";
 	appInfo.engineVersion = (B3D_FRAMEWORK_VERSION_MAJOR << 24) | (B3D_FRAMEWORK_VERSION_MINOR << 16) | B3D_FRAMEWORK_VERSION_PATCH;
-	appInfo.apiVersion = VK_API_VERSION_1_1;
+	appInfo.apiVersion = VK_API_VERSION_1_2;
 
 	// Check supported extensions
 	bool isDebugUtilsExtensionSupported = false;

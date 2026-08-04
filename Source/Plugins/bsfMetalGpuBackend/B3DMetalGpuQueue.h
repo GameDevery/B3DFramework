@@ -143,14 +143,12 @@ namespace b3d
 			 * @param	forceWait		If true, blocks until every submission up to @p lastSubmitIndex has
 			 *							finished executing, and waits until the finished buffers' owner-side
 			 *							completion and cleanup callbacks have executed.
-			 * @param	queueEmpty		If true, the caller guarantees the queue will be empty (e.g. on
-			 *							shutdown); all submission records are dropped.
 			 * @param	lastSubmitIndex	Index of the last submission to check. If ~0u, all submissions are
 			 *							checked.
 			 *
 			 * @note	Submit thread only.
 			 */
-			void RefreshCompletionState(bool forceWait, bool queueEmpty = false, u32 lastSubmitIndex = ~0u);
+			void RefreshCompletionState(bool forceWait, u32 lastSubmitIndex = ~0u);
 
 			/**
 			 * Returns the submit index of the most recently committed submission on this queue, or 0 if

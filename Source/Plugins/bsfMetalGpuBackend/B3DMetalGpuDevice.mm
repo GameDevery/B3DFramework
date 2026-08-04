@@ -1026,9 +1026,9 @@ namespace b3d
 			metalCommandBuffer.CommitInternal(metalQueue, syncMask, signalFences);
 		}
 
-		void MetalGpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty, u32 lastSubmitIndex)
+		void MetalGpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, u32 lastSubmitIndex)
 		{
-			static_cast<MetalGpuQueue&>(queue).RefreshCompletionState(forceWait, queueEmpty, lastSubmitIndex);
+			static_cast<MetalGpuQueue&>(queue).RefreshCompletionState(forceWait, lastSubmitIndex);
 		}
 
 		u32 MetalGpuDevice::GetLastSubmitIndex(const GpuQueue& queue) const

@@ -12,7 +12,6 @@
 #include "B3DIVulkanRenderWindowSurface.h"
 #include "Allocators/B3DPoolAlloc.h"
 #include "Math/B3DArea2.h"
-#include "Math/B3DArea2.h"
 #include "GpuBackend/B3DGpuDeviceCapabilities.h"
 #include "Utility/B3DDenseMap.h"
 #include "Utility/B3DVulkanBarrierHelper.h"

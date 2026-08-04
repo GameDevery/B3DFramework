@@ -70,8 +70,8 @@ namespace b3d
 	extern PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
 	extern PFN_vkQueuePresentKHR vkQueuePresentKHR;
 
-	extern PFN_vkGetSemaphoreCounterValueKHR vkGetSemaphoreCounterValueKHR;
-	extern PFN_vkWaitSemaphoresKHR vkWaitSemaphoresKHR;
+	extern PFN_vkGetSemaphoreCounterValue vkGetSemaphoreCounterValue;
+	extern PFN_vkWaitSemaphores vkWaitSemaphores;
 
 	extern PFN_vkGetDeviceBufferMemoryRequirementsKHR vkGetDeviceBufferMemoryRequirementsKHR;
 

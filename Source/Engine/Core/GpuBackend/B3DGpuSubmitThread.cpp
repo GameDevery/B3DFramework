@@ -107,8 +107,10 @@ void GpuSubmitThread::QueuePresent(GpuQueue& queue, GpuSwapChain& swapChain, Gpu
 	auto fnCommand = [acquiredImageIndex, &queue, &swapChain, syncMask]
 	{
 		swapChain.Present(acquiredImageIndex, queue, syncMask);
+		swapChain.GetMessageQueue().PostCommand([&swapChain] { swapChain.NotifyUnbound(); });
 	};
 
+	swapChain.NotifyBound();
 	swapChain.NotifyWasPresentQueued(acquiredImageIndex);
 	RunSubmitThreadCommand(mCommandQueue, std::move(fnCommand), "Swap chain present");
 }
@@ -124,6 +126,7 @@ void GpuSubmitThread::QueueImageAcquire(GpuSwapChain& swapChain)
 
 	B3D_ASSERT(!swapChain.IsRetired());
 
+	swapChain.NotifyBound();
 	swapChain.NotifyWasImageAcquireQueued();
 	RunSubmitThreadCommand(mCommandQueue, std::move(fnCommand), "Acquire swap chain image");
 }
@@ -140,25 +143,22 @@ void GpuSubmitThread::QueueEndFrameAndWaitForPreviousFrame()
 
 	auto fnCommand = [this, frameIndex, nextFrameIndex]
 	{
-		// Snapshot the last submit index on every queue, marking the boundary of all work issued during this frame. By the
-		// time this runs all of the frame's submissions have already executed (the command queue is processed in order), so
-		// each queue's most recent submit index covers the whole frame.
+		// Snapshot the last submit index on every queue, marking the boundary of tracked command-buffer work issued
+		// during this frame. By the time this runs all of the frame's submit commands have already executed because the
+		// command queue is processed in order.
 		FrameCompletionMarker& currentMarker = mFrameMarkers[frameIndex];
 		mGpuDevice.DoForEachQueue([this, &currentMarker](GpuQueue& queue)
 		{
 			currentMarker.LastSubmitIndices[queue.GetId().Id] = mBackend.GetLastSubmitIndex(queue);
 		});
 
-		// Wait for all of the previous frame's work to finish on every queue, up to the submit index captured at that frame's
-		// boundary. We must wait on the whole frame rather than just its last command buffer: the intra-queue semaphore chain
-		// is intentionally broken across present, so a trailing post-present command buffer can complete while earlier (heavier)
-		// command buffers from the same frame are still executing. Reusing their command buffer pools or resources before they
-		// finish would lead to GPU faults and device loss.
+		// Wait for all tracked command buffers from the previous frame, up to the submit index captured at that frame's
+		// boundary. Checking the full range ensures every command buffer pool and its resources are safe to reuse.
 		const FrameCompletionMarker& previousMarker = mFrameMarkers[nextFrameIndex];
 		mGpuDevice.DoForEachQueue([this, &previousMarker](GpuQueue& queue)
 		{
 			const u32 lastSubmitIndex = previousMarker.LastSubmitIndices[queue.GetId().Id];
-			mBackend.RefreshCompletionState(queue, true, false, lastSubmitIndex);
+			mBackend.RefreshCompletionState(queue, true, lastSubmitIndex);
 		});
 
 		// TODO: This could be signalled earlier. In case the frame's work finishes earlier the submit thread could set the signal
@@ -181,9 +181,9 @@ void GpuSubmitThread::WaitUntilIdle(bool performCleanupForShutdown)
 		auto fnWait = [this] { mBackend.ExecuteWaitUntilIdle(); };
 		gRenderEnableSubmitThread ? RunBlockingCallAsYieldable(fnWait) : fnWait();
 
-		mGpuDevice.DoForEachQueue([this, performCleanupForShutdown](GpuQueue& queue)
+		mGpuDevice.DoForEachQueue([this](GpuQueue& queue)
 		{
-			mBackend.RefreshCompletionState(queue, true, performCleanupForShutdown);
+			mBackend.RefreshCompletionState(queue, true);
 		});
 
 		if (performCleanupForShutdown)

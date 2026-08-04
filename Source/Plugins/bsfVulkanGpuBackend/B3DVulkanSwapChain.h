@@ -19,8 +19,9 @@ namespace b3d
 		/** Description of a single swap chain surface. */
 		struct SwapChainImage
 		{
-			VulkanImage* Image = VK_NULL_HANDLE;
-			VulkanSemaphore* WaitSemaphore = VK_NULL_HANDLE; /**< Semaphore to wait on, only valid for acquired images. */
+			VulkanImage* Image = nullptr;
+			VulkanSemaphore* AcquireImageWaitSemaphore = nullptr; /**< Semaphore that will signal when the image becomes available for rendering. */
+			VulkanSemaphore* PresentBridgeSemaphore = nullptr; /**< Semaphore signaled by the present bridge command buffer, waited on by present. */
 			bool Acquired = false;
 			bool NeedsWait = false;
 
@@ -160,6 +161,11 @@ namespace b3d
 			/** Notifies the swap chain that the specified image has been queued for present. This prevents it from being returned by GetFirstAcquiredImageIndex(). */
 			void NotifyWasPresentQueued(u32 imageIndex) override;
 		private:
+			friend class VulkanGpuQueue;
+
+			/** Returns the semaphore signalled by the present bridge command buffer, to be waited on by the present operation. Submit thread only. */
+			VulkanSemaphore* GetPresentBridgeSemaphore(u32 imageIndex) const { return mSurfaces[imageIndex].PresentBridgeSemaphore; }
+
 			VkDevice mDevice = VK_NULL_HANDLE;
 			VkSwapchainKHR mSwapChain = VK_NULL_HANDLE;
 			TShared<VulkanSurface> mSurface;

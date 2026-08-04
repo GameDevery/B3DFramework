@@ -28,7 +28,7 @@ namespace b3d
 
 		u64 GetCompletedValue() const final;
 
-		/** Returns the underlying timeline semaphore handle, or @c VK_NULL_HANDLE if unavailable. */
+		/** Returns the underlying timeline semaphore handle. */
 		VkSemaphore GetTimelineSemaphore() const { return mTimeline; }
 
 	protected:

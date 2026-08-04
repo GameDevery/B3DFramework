@@ -71,17 +71,15 @@ namespace b3d::render
 		 *
 		 * @param	queue			Queue whose completion state to refresh.
 		 * @param	forceWait		If true, waits until the relevant command buffers finish executing.
-		 * @param	queueEmpty		If true, the caller guarantees the queue will be empty (e.g. on shutdown),
-		 *							allowing all needed resources to be freed.
 		 * @param	lastSubmitIndex	Index of the last submitted command buffer to check. If ~0u, all submitted
 		 *							command buffers are checked.
 		 */
-		virtual void RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty = false, u32 lastSubmitIndex = ~0u) = 0;
+		virtual void RefreshCompletionState(GpuQueue& queue, bool forceWait, u32 lastSubmitIndex = ~0u) = 0;
 
 		/**
-		 * Returns the submit index of the most recently submitted work (command buffer or present) on the
-		 * provided queue, or 0 if nothing has been submitted yet. Captured at a frame boundary and passed to
-		 * RefreshCompletionState() to wait for all of that frame's work to complete.
+		 * Returns the submit index of the most recently tracked submission on the provided queue, or 0 if nothing
+		 * has been submitted yet. Captured at a frame boundary and passed to RefreshCompletionState() to wait for
+		 * the command-buffer work associated with that frame.
 		 */
 		virtual u32 GetLastSubmitIndex(const GpuQueue& queue) const = 0;
 
@@ -105,9 +103,9 @@ namespace b3d::render
 		struct FrameCompletionMarker
 		{
 			/**
-			 * Submit index of the last submission on each queue (indexed by GpuQueueId) as of this frame's boundary. Waiting on
-			 * every queue up to its captured index guarantees all of the frame's GPU work has completed, not just its last
-			 * command buffer.
+			 * Submit index of the last tracked submission on each queue (indexed by GpuQueueId) as of this frame's
+			 * boundary. Waiting on every queue up to its captured index guarantees all tracked command buffers from
+			 * the frame have completed.
 			 */
 			Array<u32, B3D_MAX_UNIQUE_QUEUES> LastSubmitIndices = {};
 

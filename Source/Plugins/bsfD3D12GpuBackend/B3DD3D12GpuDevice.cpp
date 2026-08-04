@@ -383,9 +383,9 @@ void D3D12GpuDevice::ExecuteSubmit(GpuQueue& queue, const TShared<GpuCommandBuff
 	static_cast<D3D12GpuQueue&>(queue).ExecuteSubmitOnSubmitThread(submitInformation, syncMask, signalFences);
 }
 
-void D3D12GpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty, u32 lastSubmitIndex)
+void D3D12GpuDevice::RefreshCompletionState(GpuQueue& queue, bool forceWait, u32 lastSubmitIndex)
 {
-	static_cast<D3D12GpuQueue&>(queue).RefreshCompletionState(forceWait, queueEmpty, lastSubmitIndex);
+	static_cast<D3D12GpuQueue&>(queue).RefreshCompletionState(forceWait, lastSubmitIndex);
 }
 
 u32 D3D12GpuDevice::GetLastSubmitIndex(const GpuQueue& queue) const

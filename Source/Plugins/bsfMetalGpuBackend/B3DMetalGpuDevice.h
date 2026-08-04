@@ -237,7 +237,7 @@ namespace b3d
 
 			void NotifyWillQueueForSubmit(GpuCommandBuffer& commandBuffer) override;
 			void ExecuteSubmit(GpuQueue& queue, const TShared<GpuCommandBuffer>& commandBuffer, GpuQueueMask syncMask, TArrayView<const GpuTimelineFenceAndValue> signalFences) override;
-			void RefreshCompletionState(GpuQueue& queue, bool forceWait, bool queueEmpty, u32 lastSubmitIndex) override;
+			void RefreshCompletionState(GpuQueue& queue, bool forceWait, u32 lastSubmitIndex) override;
 			u32 GetLastSubmitIndex(const GpuQueue& queue) const override;
 			void ExecuteWaitUntilIdle() override;
 			void ExecuteWaitUntilIdle(GpuQueue& queue) override;

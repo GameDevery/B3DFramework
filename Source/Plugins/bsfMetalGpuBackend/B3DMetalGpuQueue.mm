@@ -266,7 +266,7 @@ namespace b3d
 			FenceCompletionHandlers();
 		}
 
-		void MetalGpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 lastSubmitIndex)
+		void MetalGpuQueue::RefreshCompletionState(bool forceWait, u32 lastSubmitIndex)
 		{
 			AssertIfNotSubmitThread();
 
@@ -302,12 +302,6 @@ namespace b3d
 			}
 
 			Lock lock(mImpl->SubmissionMutex);
-			if (queueEmpty)
-			{
-				mImpl->ActiveSubmissions.clear();
-				return;
-			}
-
 			// Do not prune from a poll-only refresh: a terminal MTLCommandBuffer status is observable
 			// before its completion handler returns. Forced frame/idle refreshes are the retirement point.
 			if (forceWait)

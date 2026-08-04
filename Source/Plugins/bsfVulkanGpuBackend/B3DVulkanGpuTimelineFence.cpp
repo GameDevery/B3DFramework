@@ -10,12 +10,9 @@ using namespace b3d::render;
 VulkanGpuTimelineFence::VulkanGpuTimelineFence(VulkanGpuDevice& device)
 	: mDevice(&device) , mLogicalDevice(device.GetLogical())
 {
-	if (!device.SupportsTimelineSemaphores())
-		return;
-
-	VkSemaphoreTypeCreateInfoKHR timelineCreateInfo = {};
-	timelineCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR;
-	timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+	VkSemaphoreTypeCreateInfo timelineCreateInfo = {};
+	timelineCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
 	timelineCreateInfo.initialValue = 0;
 
 	VkSemaphoreCreateInfo semaphoreCreateInfo = {};
@@ -34,11 +31,8 @@ VulkanGpuTimelineFence::~VulkanGpuTimelineFence()
 
 u64 VulkanGpuTimelineFence::GetCompletedValue() const
 {
-	if (mTimeline == VK_NULL_HANDLE)
-		return 0;
-
 	u64 current = 0;
-	const VkResult result = vkGetSemaphoreCounterValueKHR(mLogicalDevice, mTimeline, &current);
+	const VkResult result = vkGetSemaphoreCounterValue(mLogicalDevice, mTimeline, &current);
 	B3D_ASSERT(result == VK_SUCCESS);
 
 	return current;
@@ -46,15 +40,12 @@ u64 VulkanGpuTimelineFence::GetCompletedValue() const
 
 void VulkanGpuTimelineFence::WaitInternal(u64 value)
 {
-	if (mTimeline == VK_NULL_HANDLE)
-		return;
-
-	VkSemaphoreWaitInfoKHR waitInfo = {};
-	waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR;
+	VkSemaphoreWaitInfo waitInfo = {};
+	waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO;
 	waitInfo.semaphoreCount = 1;
 	waitInfo.pSemaphores = &mTimeline;
 	waitInfo.pValues = &value;
 
-	const VkResult result = vkWaitSemaphoresKHR(mLogicalDevice, &waitInfo, UINT64_MAX);
+	const VkResult result = vkWaitSemaphores(mLogicalDevice, &waitInfo, UINT64_MAX);
 	B3D_ASSERT(result == VK_SUCCESS);
 }

@@ -44,13 +44,12 @@ namespace b3d
 			 * accordingly (completion notifications are posted back to the command buffers' owning threads).
 			 *
 			 * @param	forceWait		Set to true if the system should wait until all command buffers finish executing.
-			 * @param	queueEmpty		Set to true if the caller guarantees the queue will be empty (e.g. on shutdown).
 			 * @param	lastSubmitIndex	Index of the last submitted command buffer which should be checked. If ~0u is
 			 *							provided, all submitted command buffers will be checked.
 			 *
 			 * @note	Submit thread only.
 			 */
-			void RefreshCompletionState(bool forceWait, bool queueEmpty = false, u32 lastSubmitIndex = ~0u);
+			void RefreshCompletionState(bool forceWait, u32 lastSubmitIndex = ~0u);
 
 			/**
 			 * Returns the submit index of the most recently submitted work on this queue, or 0 if nothing has been
@@ -110,10 +109,8 @@ namespace b3d
 			void Wait(ID3D12Fence* fence, u64 value);
 
 			/**
-			 * Presents the back buffer of the provided swap chain and registers a present entry on the queue so the
-			 * swap chain is notified (via NotifyUnbound) once a later submission on this queue completes. Waits on any
-			 * outstanding work on the queues in @p syncMask before presenting. The present uses the swap chain's own
-			 * vsync interval.
+			 * Presents the back buffer of the provided swap chain after waiting on any outstanding work on the queues
+			 * in @p syncMask. The present uses the swap chain's own vsync interval.
 			 *
 			 * @param swapChain		Swap chain whose back buffer to present.
 			 * @param syncMask		Mask that controls which other queues the present depends upon (if any).
@@ -132,20 +129,15 @@ namespace b3d
 			void WaitUntilIdleNative();
 
 		private:
-			/** Information about a single submission on the queue - either a command buffer or a swap chain present. */
+			/** Information about a command buffer submission on the queue. */
 			struct QueueSubmissionInformation
 			{
 				QueueSubmissionInformation(const TShared<D3D12GpuCommandBuffer>& commandBuffer, const TShared<D3D12GpuCommandBuffer>& transitionCommandBuffer, u32 submitIndex)
 					: CommandBuffer(commandBuffer), TransitionCommandBuffer(transitionCommandBuffer), SubmitIndex(submitIndex)
 				{}
 
-				QueueSubmissionInformation(D3D12SwapChain* swapChain, u32 submitIndex)
-					: PresentSwapChain(swapChain), SubmitIndex(submitIndex)
-				{}
-
-				TShared<D3D12GpuCommandBuffer> CommandBuffer; /**< Submitted command buffer, or null if this is a present entry. */
+				TShared<D3D12GpuCommandBuffer> CommandBuffer;
 				TShared<D3D12GpuCommandBuffer> TransitionCommandBuffer; /**< Internal prologue retained until CommandBuffer completes. */
-				D3D12SwapChain* PresentSwapChain = nullptr; /**< Swap chain in case this submission is a present operation. */
 				u32 SubmitIndex;
 			};
 

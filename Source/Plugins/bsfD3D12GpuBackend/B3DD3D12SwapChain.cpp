@@ -134,8 +134,8 @@ void D3D12SwapChain::Initialize()
 
 void D3D12SwapChain::Destroy()
 {
-	// Process any pending messages, most importantly present-completion NotifyUnbound notifies, so the resource can be
-	// destroyed immediately when its bound count reaches zero (important for shutdown / rebuild).
+	// Process pending queued-operation unbind notifications so the resource can be destroyed immediately when its
+	// bound count reaches zero (important for shutdown / rebuild).
 	mMessageQueue.RunUntilIdle();
 
 	Super::Destroy();
@@ -584,8 +584,7 @@ void D3D12SwapChain::Present(u32 imageIndex, GpuQueue& queue, GpuQueueMask syncM
 	B3D_ASSERT(imageIndex == GetCurrentBackBufferIndex() && "Presenting an image other than the current DXGI back buffer.");
 	(void)imageIndex;
 
-	// Register the present entry on the queue; this issues the DXGI present and records a present entry so the
-	// swap chain's NotifyUnbound() is posted back once a later submission on this queue completes.
+	// Issue the DXGI present on the selected queue after its cross-queue dependencies.
 	d3d12Queue.Present(this, syncMask);
 }
 
@@ -612,8 +611,6 @@ void D3D12SwapChain::NotifyWasImageAcquireQueued()
 		Lock lock(mAcquireMutex);
 		mPendingAcquireCount++;
 	}
-
-	NotifyBound();
 }
 
 void D3D12SwapChain::NotifyWasPresentQueued(u32 imageIndex)
@@ -630,8 +627,6 @@ void D3D12SwapChain::NotifyWasPresentQueued(u32 imageIndex)
 
 	// Remember the image holding the last rendered frame, for screen captures that run after the present.
 	mLastPresentedImageIndex = (i32)imageIndex;
-
-	NotifyBound();
 }
 
 void D3D12SwapChain::CreateFramebuffers()

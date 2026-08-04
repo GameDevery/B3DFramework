@@ -37,9 +37,9 @@ void VulkanGpuQueue::SubmitWorkBuffer::Clear()
 VulkanGpuQueue::VulkanGpuQueue(VulkanGpuDevice& device, GpuQueueType type, u32 index, VkQueue vulkanQueue)
 	: GpuQueue(device, type, index), mQueue(vulkanQueue)
 {
-	VkSemaphoreTypeCreateInfoKHR timelineCreateInformation = {};
-	timelineCreateInformation.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR;
-	timelineCreateInformation.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR;
+	VkSemaphoreTypeCreateInfo timelineCreateInformation = {};
+	timelineCreateInformation.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	timelineCreateInformation.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
 	timelineCreateInformation.initialValue = 0;
 
 	VkSemaphoreCreateInfo semaphoreCreateInformation = {};
@@ -152,7 +152,7 @@ VkSubmitInfo VulkanGpuQueue::BuildVkSubmitInfo(SubmitWorkBuffer& outWorkBuffer) 
 
 	// Binary semaphores ignore their entries in the value arrays, so the timeline structure is chained unconditionally
 	outWorkBuffer.TimelineSubmitInfo = {};
-	outWorkBuffer.TimelineSubmitInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR;
+	outWorkBuffer.TimelineSubmitInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
 	outWorkBuffer.TimelineSubmitInfo.waitSemaphoreValueCount = waitCount;
 	outWorkBuffer.TimelineSubmitInfo.pWaitSemaphoreValues = waitCount > 0 ? outWorkBuffer.WaitValues.Data() : nullptr;
 	outWorkBuffer.TimelineSubmitInfo.signalSemaphoreValueCount = signalCount;
@@ -283,9 +283,8 @@ VkResult VulkanGpuQueue::Present(VulkanSwapChain* swapChain, u32 swapChainImageI
 	AssertIfNotSubmitThread();
 
 	// vkQueuePresentKHR can only wait on binary semaphores, so all present dependencies (acquire semaphores and
-	// inter-queue timeline waits) are routed through an empty bridge submission that signals a single binary
-	// semaphore. The bridge's fence also makes those dependencies CPU-waitable through regular submission retirement.
-	VulkanSemaphore* presentSemaphore = GetDevice().GetResourceManager().Create<VulkanSemaphore>("PresentReady");
+	// inter-queue timeline waits) are routed through an empty bridge submission.
+	VulkanSemaphore* const presentSemaphore = swapChain->GetPresentBridgeSemaphore(swapChainImageIndex);
 
 	GpuCommandBufferPool& commandBufferPool = GetDevice().GetSubmitThread().GetCommandBufferPool(GetType());
 	const TShared<VulkanGpuCommandBuffer> bridgeCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(commandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Present synchronization")));
@@ -297,10 +296,6 @@ VkResult VulkanGpuQueue::Present(VulkanSwapChain* swapChain, u32 swapChainImageI
 	bridgeSubmitInformation.SignalSemaphores.Add(presentSemaphore);
 
 	ExecuteSubmitOnSubmitThread(bridgeSubmitInformation, syncMask, {});
-
-	SubmissionRecord record;
-	record.PresentSwapChain = swapChain;
-	RetainSemaphores(record, TArrayView<VulkanSemaphore* const>(&presentSemaphore, 1));
 
 	SubmitWorkBuffer& workBuffer = mSubmitWorkBuffers[0];
 	workBuffer.Clear();
@@ -321,14 +316,10 @@ VkResult VulkanGpuQueue::Present(VulkanSwapChain* swapChain, u32 swapChainImageI
 	const VkResult result = vkQueuePresentKHR(mQueue, &presentInfo);
 	B3D_ASSERT(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR);
 
-	record.SubmitIndex = mNextSubmitIndex++;
-	mActiveSubmissions.push_back(std::move(record));
-
-	presentSemaphore->Destroy(); // Deferred until the present retires and releases its use
 	return result;
 }
 
-void VulkanGpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32 lastSubmitIndex)
+void VulkanGpuQueue::RefreshCompletionState(bool forceWait, u32 lastSubmitIndex)
 {
 	AssertIfNotSubmitThread();
 
@@ -337,10 +328,6 @@ void VulkanGpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32
 	{
 		if(lastSubmitIndex != ~0u && record.SubmitIndex > lastSubmitIndex)
 			break;
-
-		// Present operations carry no fence; they retire alongside a later command buffer, or via queueEmpty
-		if(record.CommandBuffers.Empty())
-			continue;
 
 		if(!record.CommandBuffers.Back()->UpdateExecutionStatus(forceWait))
 		{
@@ -351,12 +338,6 @@ void VulkanGpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32
 		lastFinishedSubmission = record.SubmitIndex;
 	}
 
-	// If last submission was a Present() call, it won't be freed until a command buffer after it is done. However on
-	// shutdown there might not be a CB following it. So we instead check this special flag and free everything when its
-	// true.
-	if(queueEmpty)
-		lastFinishedSubmission = mNextSubmitIndex - 1;
-
 	WaitGroup waitGroup;
 
 	while(!mActiveSubmissions.empty())
@@ -365,8 +346,7 @@ void VulkanGpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32
 		if(record.SubmitIndex > lastFinishedSubmission)
 			break;
 
-		const bool isPresentOperation = record.PresentSwapChain != nullptr;
-		SingleConsumerQueue& messageBackQueue = isPresentOperation ? record.PresentSwapChain->GetMessageQueue() : record.CommandBuffers.Front()->GetPool().GetMessageQueue();
+		SingleConsumerQueue& messageBackQueue = record.CommandBuffers.Front()->GetPool().GetMessageQueue();
 
 		if(!record.RetainedSemaphores.Empty())
 		{
@@ -377,32 +357,18 @@ void VulkanGpuQueue::RefreshCompletionState(bool forceWait, bool queueEmpty, u32
 			});
 		}
 
-		if(isPresentOperation)
+		for(const TShared<VulkanGpuCommandBuffer>& commandBuffer : record.CommandBuffers)
 		{
 			waitGroup.Increment();
-			messageBackQueue.PostCommand([swapChain = record.PresentSwapChain, waitGroup = forceWait ? &waitGroup : nullptr]
+			commandBuffer->GetPool().GetMessageQueue().PostCommand([commandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
 			{
-				swapChain->NotifyUnbound();
+				commandBuffer->mState = GpuCommandBufferState::Done;
+				commandBuffer->OnDidComplete();
+				commandBuffer->Reset();
 
 				if(waitGroup != nullptr)
 					waitGroup->NotifyDone();
 			}, "CommandBufferCompleteCallback");
-		}
-		else
-		{
-			for(const TShared<VulkanGpuCommandBuffer>& commandBuffer : record.CommandBuffers)
-			{
-				waitGroup.Increment();
-				commandBuffer->GetPool().GetMessageQueue().PostCommand([commandBuffer, waitGroup = forceWait ? &waitGroup : nullptr]()
-				{
-					commandBuffer->mState = GpuCommandBufferState::Done;
-					commandBuffer->OnDidComplete();
-					commandBuffer->Reset();
-
-					if(waitGroup != nullptr)
-						waitGroup->NotifyDone();
-				}, "CommandBufferCompleteCallback");
-			}
 		}
 
 		mActiveSubmissions.pop_front();
