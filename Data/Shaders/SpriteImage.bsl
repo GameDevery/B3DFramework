@@ -37,7 +37,12 @@ shader SpriteImage
 		    #endif
 
 			const float4 color = gMainTexture.Sample(gMainTexSamp, inUV);
-			return color * gTint;
+
+			#if TRANSPARENCY == 0
+				return float4((color * gTint).rgb, 1.0f);
+			#else
+				return color * gTint;
+			#endif
 		}
 	};
 };
