@@ -96,6 +96,8 @@ FileSystemTestSuite::FileSystemTestSuite()
 	B3D_ADD_TEST(FileSystemTestSuite::TestGetLastModifiedTime);
 	B3D_ADD_TEST(FileSystemTestSuite::TestGetTempDirectoryPath);
 	B3D_ADD_TEST(FileSystemTestSuite::TestStreamWriteReadRoundtrip);
+	B3D_ADD_TEST(FileSystemTestSuite::TestMemoryStreamCustomDeleter);
+	B3D_ADD_TEST(FileSystemTestSuite::TestMemoryStreamDeleterFixedCapacity);
 	B3D_ADD_TEST(FileSystemTestSuite::TestOpenFileMissing);
 	B3D_ADD_TEST(FileSystemTestSuite::TestOpenFileAsyncRead);
 	B3D_ADD_TEST(FileSystemTestSuite::TestOpenFileAsyncUserMemory);
@@ -407,6 +409,93 @@ void FileSystemTestSuite::TestStreamWriteReadRoundtrip()
 	}
 
 	FileSystem::Remove(path);
+}
+
+void FileSystemTestSuite::TestMemoryStreamCustomDeleter()
+{
+	// The deleter must fire exactly once per owned buffer: on Close()/destruction of the owning stream, following the
+	// ownership through moves, and never for copies (which get their own default-allocated buffer)
+	u32 deleteCount = 0;
+	const auto countingDeleter = [&deleteCount](void* memory) { deleteCount++; B3DFree(memory); };
+
+	// Close() invokes the deleter; the destructor afterwards must not invoke it again
+	{
+		MemoryDataStream stream(B3DAllocate(16), 16, countingDeleter);
+		stream.Close();
+		B3D_TEST_ASSERT(deleteCount == 1);
+	}
+	B3D_TEST_ASSERT(deleteCount == 1);
+
+	// Destructor alone invokes the deleter
+	deleteCount = 0;
+	{
+		MemoryDataStream stream(B3DAllocate(16), 16, countingDeleter);
+	}
+	B3D_TEST_ASSERT(deleteCount == 1);
+
+	// Move transfers the deleter: it fires once when the move target dies, not when the moved-from stream dies
+	deleteCount = 0;
+	{
+		MemoryDataStream target;
+		{
+			MemoryDataStream source(B3DAllocate(16), 16, countingDeleter);
+			target = std::move(source);
+		}
+		B3D_TEST_ASSERT(deleteCount == 0);
+	}
+	B3D_TEST_ASSERT(deleteCount == 1);
+
+	// A copy gets its own default-allocated buffer and must not inherit the deleter
+	deleteCount = 0;
+	{
+		MemoryDataStream copy;
+		{
+			MemoryDataStream source(B3DAllocate(16), 16, countingDeleter);
+			source.Write("0123456789ABCDEF", 16);
+			source.Seek(0);
+			copy = source;
+		}
+		B3D_TEST_ASSERT(deleteCount == 1);
+
+		char buffer[17] = {};
+		B3D_TEST_ASSERT(copy.Read(buffer, 16) == 16);
+		B3D_TEST_ASSERT(String(buffer) == "0123456789ABCDEF");
+	}
+	B3D_TEST_ASSERT(deleteCount == 1);
+
+	// DisownMemory() discards the deleter along with ownership
+	deleteCount = 0;
+	void* disowned = nullptr;
+	{
+		MemoryDataStream stream(B3DAllocate(16), 16, countingDeleter);
+		disowned = stream.DisownMemory();
+	}
+	B3D_TEST_ASSERT(deleteCount == 0);
+	B3DFree(disowned);
+}
+
+void FileSystemTestSuite::TestMemoryStreamDeleterFixedCapacity()
+{
+	// A deleter-owned buffer can't be reallocated by the stream, so writes past the end must clamp (like a non-owning
+	// stream) rather than grow the buffer
+	u32 deleteCount = 0;
+	{
+		MemoryDataStream stream(B3DAllocate(8), 8, [&deleteCount](void* memory) { deleteCount++; B3DFree(memory); });
+
+		const size_t written = stream.Write("0123456789ABCDEF", 16);
+		B3D_TEST_ASSERT(written == 8);
+		B3D_TEST_ASSERT(stream.Size() == 8);
+		B3D_TEST_ASSERT(stream.Tell() == 8);
+
+		// Further writes at the end produce nothing
+		B3D_TEST_ASSERT(stream.Write("x", 1) == 0);
+
+		stream.Seek(0);
+		char buffer[9] = {};
+		B3D_TEST_ASSERT(stream.Read(buffer, 8) == 8);
+		B3D_TEST_ASSERT(String(buffer) == "01234567");
+	}
+	B3D_TEST_ASSERT(deleteCount == 1);
 }
 
 void FileSystemTestSuite::TestOpenFileMissing()

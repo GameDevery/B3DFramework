@@ -276,6 +276,17 @@ MemoryDataStream::MemoryDataStream(void* memory, size_t size, bool takeOwnership
 	mEnd = mData + mSize;
 }
 
+MemoryDataStream::MemoryDataStream(void* memory, size_t size, std::function<void(void*)> deleter)
+	: DataStream(), mOwnsMemory(true), mDeleter(std::move(deleter))
+{
+	B3D_ASSERT(mDeleter != nullptr);
+
+	mData = mCursor = static_cast<uint8_t*>(memory);
+	mSize = size;
+	mCapacity = size;
+	mEnd = mData + mSize;
+}
+
 MemoryDataStream::MemoryDataStream(const MemoryDataStream& sourceStream)
 	: DataStream()
 {
@@ -319,6 +330,8 @@ MemoryDataStream& MemoryDataStream::operator=(const MemoryDataStream& other)
 
 	this->mName = other.mName;
 
+	ReleaseBuffer();
+
 	if(!other.mOwnsMemory)
 	{
 		this->mSize = other.mSize;
@@ -330,18 +343,9 @@ MemoryDataStream& MemoryDataStream::operator=(const MemoryDataStream& other)
 	}
 	else
 	{
-		if(mData && mOwnsMemory)
-			B3DFree(mData);
-
-		mSize = 0;
-		mCapacity = 0;
-		mData = nullptr;
-		mCursor = nullptr;
-		mEnd = nullptr;
-
-		this->mOwnsMemory = true;
-
+		// The copy always gets its own default-allocated buffer, regardless of how the source memory was allocated
 		ReallocateBuffer(other.mSize);
+		mSize = other.mSize;
 		mEnd = mData + mSize;
 		mCursor = mData + (other.mCursor - other.mData);
 
@@ -357,8 +361,7 @@ MemoryDataStream& MemoryDataStream::operator=(MemoryDataStream&& other)
 	if(this == &other)
 		return *this;
 
-	if(mData && mOwnsMemory)
-		B3DFree(mData);
+	ReleaseBuffer();
 
 	this->mName = std::move(other.mName);
 	this->mCursor = std::exchange(other.mCursor, nullptr);
@@ -367,6 +370,7 @@ MemoryDataStream& MemoryDataStream::operator=(MemoryDataStream&& other)
 	this->mSize = std::exchange(other.mSize, 0);
 	this->mCapacity = std::exchange(other.mCapacity, 0);
 	this->mOwnsMemory = std::exchange(other.mOwnsMemory, false);
+	this->mDeleter = std::exchange(other.mDeleter, nullptr);
 
 	return *this;
 }
@@ -455,15 +459,25 @@ TShared<DataStream> MemoryDataStream::Clone(bool copyData) const
 
 bool MemoryDataStream::Close()
 {
-	if(mData != nullptr)
-	{
-		if(mOwnsMemory)
-			B3DFree(mData);
+	ReleaseBuffer();
+	return true;
+}
 
-		mData = nullptr;
+void MemoryDataStream::ReleaseBuffer()
+{
+	if(mData != nullptr && mOwnsMemory)
+	{
+		if(mDeleter)
+			mDeleter(mData);
+		else
+			B3DFree(mData);
 	}
 
-	return true;
+	mData = mCursor = mEnd = nullptr;
+	mSize = 0;
+	mCapacity = 0;
+	mOwnsMemory = true; // Back to the default-constructed state: an empty, growable stream
+	mDeleter = nullptr;
 }
 
 size_t MemoryDataStream::EnsureEnoughSpace(size_t size)
@@ -477,7 +491,9 @@ size_t MemoryDataStream::EnsureEnoughSpace(size_t size)
 		const size_t newOffset = currentOffset + size;
 		if(newOffset > mCapacity)
 		{
-			if(mOwnsMemory)
+			// Deleter-owned memory comes from a custom allocator the stream doesn't know how to reallocate from, so
+			// such streams have a fixed capacity, same as streams that don't own their memory
+			if(mOwnsMemory && mDeleter == nullptr)
 				ReallocateBuffer(mCapacity + std::max(mCapacity, size));
 			else
 				availableByteCount = mCapacity - currentOffset;

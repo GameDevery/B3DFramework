@@ -239,6 +239,31 @@ namespace b3d
 		MemoryDataStream(void* memory, size_t size, bool takeOwnership);
 
 		/**
+		 * Wrap an existing memory chunk in a stream, transferring ownership of the memory to the stream. The memory is
+		 * released by invoking @p deleter, allowing it to originate from a custom allocator (e.g. a memory pool).
+		 *
+		 * @param 	memory		Memory to wrap the data stream around.
+		 * @param	size		Size of the memory chunk in bytes.
+		 * @param	deleter		Callable invoked with @p memory when the stream is destroyed or closed. Must not be null.
+		 *
+		 * @note	Since the stream doesn't know how to reallocate deleter-owned memory, such a stream has a fixed
+		 *			capacity: writes past the end of the buffer are clamped, same as for streams that don't own their
+		 *			memory.
+		 */
+		MemoryDataStream(void* memory, size_t size, std::function<void(void*)> deleter);
+
+		/**
+		 * @copydoc	MemoryDataStream(void*, size_t, std::function<void(void*)>)
+		 *
+		 * @note	Convenience overload accepting any callable. Without it a plain function pointer would undergo a
+		 *			standard pointer-to-bool conversion and silently resolve to the @p takeOwnership overload instead.
+		 */
+		template <typename DeleterType, typename = std::enable_if_t<std::is_invocable_v<DeleterType, void*> && !std::is_same_v<std::decay_t<DeleterType>, std::function<void(void*)>>>>
+		MemoryDataStream(void* memory, size_t size, DeleterType&& deleter)
+			: MemoryDataStream(memory, size, std::function<void(void*)>(std::forward<DeleterType>(deleter)))
+		{ }
+
+		/**
 		 * Create a stream which pre-buffers the contents of another stream. Data from the other buffer will be entirely
 		 * read and stored in an internal buffer.
 		 */
@@ -281,12 +306,16 @@ namespace b3d
 		uint8_t* DisownMemory()
 		{
 			mOwnsMemory = false;
+			mDeleter = nullptr;
 			return mData;
 		}
 
 	protected:
 		/** Reallocates the internal buffer making enough room for @p byteCount. */
 		void ReallocateBuffer(size_t byteCount);
+
+		/** Detaches the stream from its current buffer, freeing it if owned, and resets the stream to its empty state. */
+		void ReleaseBuffer();
 
 		/**
 		 * Ensures the underlying buffer has enough space to store @p size bytes. This will be calculated starting from the current offset.
@@ -301,6 +330,9 @@ namespace b3d
 		size_t mCapacity = 0;
 
 		bool mOwnsMemory = true;
+
+		/** When set, releases the owned memory instead of the default allocator. Implies the buffer cannot be resized. */
+		std::function<void(void*)> mDeleter;
 	};
 
 	/** Controls how a file is opened by FileSystem::OpenFile(). */

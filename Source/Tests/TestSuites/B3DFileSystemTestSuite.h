@@ -36,6 +36,8 @@ namespace b3d
 		void TestGetLastModifiedTime();
 		void TestGetTempDirectoryPath();
 		void TestStreamWriteReadRoundtrip();
+		void TestMemoryStreamCustomDeleter();
+		void TestMemoryStreamDeleterFixedCapacity();
 		void TestOpenFileMissing();
 		void TestOpenFileAsyncRead();
 		void TestOpenFileAsyncUserMemory();
