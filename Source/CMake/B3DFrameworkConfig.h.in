@@ -39,7 +39,7 @@
 #define B3D_BUILD_TYPE_PROFILING (B3D_BUILD_TYPE == B3D_BUILD_TYPE_PROFILING_ID)
 
 // Testing support
-#cmakedefine01 B3D_ENABLE_TESTS
+#cmakedefine01 B3D_BUILD_TESTS
 
 // Monolithic build: non-importer plugins are statically linked into bsf
 #cmakedefine01 B3D_MONOLITHIC_BUILD

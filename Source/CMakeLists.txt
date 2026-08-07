@@ -110,9 +110,6 @@ else()
 	set(B3D_BUILD_TYPE_ID B3D_BUILD_TYPE_DEVELOPMENT_ID)
 endif()
 
-## Testing configuration
-set(B3D_ENABLE_TESTS ${B3D_BUILD_TESTS})
-
 ## Active platform (uppercased name maps to the matching B3D_PLATFORM_ID_* constant)
 string(TOUPPER ${B3D_PLATFORM} B3D_PLATFORM_UPPER)
 

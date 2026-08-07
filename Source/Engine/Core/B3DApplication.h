@@ -8,7 +8,7 @@
 #include "Utility/B3DEvent.h"
 #include "Utility/B3DModule.h"
 
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 #include "Testing/B3DSnapshotTestRunner.h"
 #endif
 
@@ -219,7 +219,7 @@ namespace b3d
 
 		volatile bool mRunMainLoop;
 
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 		TUnique<SnapshotTestRunner> mSnapshotTestRunner;
 #endif
 	};

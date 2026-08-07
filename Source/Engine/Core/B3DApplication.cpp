@@ -131,7 +131,7 @@ Application::Application(VideoMode videoMode, const String& title, bool fullscre
 
 Application::~Application()
 {
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 	// Must destroy before renderer library is unloaded
 	mSnapshotTestRunner.reset();
 #endif
@@ -269,7 +269,7 @@ void Application::OnStartUp()
 
 	mExitAfterNFrames = (u32)CommandLine::GetParameterValueAsInt("exit-after-n-frames", 0);
 
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 	const SnapshotTestConfiguration snapshotTestConfiguration = SnapshotTestConfiguration::ParseFromCommandLine();
 
 	if(snapshotTestConfiguration.Enabled)
@@ -421,7 +421,7 @@ void Application::BeginMainLoop()
 
 void Application::EndMainLoop()
 {
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 	// Finalize test runner before waiting for frame completion
 	if(mSnapshotTestRunner != nullptr)
 		mSnapshotTestRunner->Finalize();
@@ -484,7 +484,7 @@ void Application::RunMainLoopFrame()
 
 	PostUpdate();
 
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 	if(mSnapshotTestRunner != nullptr)
 		mSnapshotTestRunner->PrepareForScreenCapture();
 #endif
@@ -534,7 +534,7 @@ void Application::RunMainLoopFrame()
 
 	PROFILE_CALL(RendererManager::Instance().GetActive()->RenderAll(perFrameData), "Render");
 
-#if B3D_ENABLE_TESTS
+#if B3D_BUILD_TESTS
 	if(mSnapshotTestRunner != nullptr)
 		mSnapshotTestRunner->RequestScreenCapture();
 #endif
