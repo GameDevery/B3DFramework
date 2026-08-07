@@ -393,6 +393,11 @@ namespace b3d
 		GpuMapOptions mOptions;
 	};
 
+	extern template class TGpuBufferSuballocation<false>;
+	extern template class TGpuBufferSuballocation<true>;
+	extern template class TGpuBufferMappedScope<false>;
+	extern template class TGpuBufferMappedScope<true>;
+
 	using GpuBufferSuballocation = TGpuBufferSuballocation<false>;
 	using GpuBufferMappedScope = TGpuBufferMappedScope<false>;
 
