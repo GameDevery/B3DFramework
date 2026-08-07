@@ -102,6 +102,19 @@ namespace
 
 		return true;
 	}
+
+	/** Returns the payload object of the prebuilt store entry at @p path. */
+	TShared<IReflectable> DeserializePrebuiltObject(const Package& store, const Path& path)
+	{
+		const TShared<PrebuiltShader> prebuilt = B3DRTTICast<PrebuiltShader>(store.DeserializeResource(path));
+		if(prebuilt == nullptr)
+			return nullptr;
+
+		TShared<IReflectable> object = prebuilt->GetObject();
+		prebuilt->Destroy();
+
+		return object;
+	}
 }
 
 ShaderRegistry::ShaderRegistry() = default;
@@ -180,8 +193,7 @@ TShared<CoreVariantType<Shader, IsRenderProxy>> ShaderRegistry::GetOrCompileShad
 	//    high-level source being present. Each cooked shader is wrapped in a PrebuiltShader.
 	if(mPrebuiltStore != nullptr && mPrebuiltStore->Contains(shaderPathInCache))
 	{
-		const TShared<PrebuiltShader> prebuilt = B3DRTTICast<PrebuiltShader>(mPrebuiltStore->LoadResource(shaderPathInCache));
-		const TShared<IReflectable> prebuiltObject = prebuilt != nullptr ? prebuilt->GetObject() : nullptr;
+		const TShared<IReflectable> prebuiltObject = DeserializePrebuiltObject(*mPrebuiltStore, shaderPathInCache);
 		if(prebuiltObject != nullptr)
 		{
 			precompiledData = B3DRTTICast<PrecompiledShaderData>(prebuiltObject);
@@ -301,8 +313,7 @@ bool ShaderRegistry::GetOrCompileVariation(const TShared<CoreVariantType<Shader,
 	//    shader and include hashes), so a store entry is found only when it was cooked against the current source.
 	if(mPrebuiltStore != nullptr && mPrebuiltStore->Contains(variationPath))
 	{
-		const TShared<PrebuiltShader> prebuilt = B3DRTTICast<PrebuiltShader>(mPrebuiltStore->LoadResource(variationPath));
-		const TShared<IReflectable> prebuiltObject = prebuilt != nullptr ? prebuilt->GetObject() : nullptr;
+		const TShared<IReflectable> prebuiltObject = DeserializePrebuiltObject(*mPrebuiltStore, variationPath);
 		if(prebuiltObject != nullptr)
 		{
 			const TShared<PrecompiledVariationData> prebuiltData = B3DRTTICast<PrecompiledVariationData>(prebuiltObject);
