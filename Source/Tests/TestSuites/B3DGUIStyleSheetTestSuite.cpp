@@ -240,9 +240,10 @@ void GUIStyleSheetTestSuite::TestDisabledStateResolution()
 	B3D_TEST_ASSERT(fnResolveBackgroundColor(GUIElementState::Disabled | GUIElementState::Hover) == disabledRuleset->Rules.BackgroundColor)
 	B3D_TEST_ASSERT(fnResolveBackgroundColor(GUIElementState::Disabled | GUIElementState::Active | GUIElementState::Focus) == disabledRuleset->Rules.BackgroundColor)
 
-	// The checked state survives, as it describes what the element represents rather than an interaction in progress
-	const GUIElementStates normalizedState = GUIStyleSheetStateRulesets::NormalizeState(GUIElementState::Disabled | GUIElementState::Hover | GUIElementState::Active | GUIElementState::Focus | GUIElementState::Checked);
-	B3D_TEST_ASSERT(normalizedState == (GUIElementState::Disabled | GUIElementState::Checked))
+	// The checked state survives, as it describes what the element represents rather than an interaction in progress.
+	// State normalization is internal to BuildStateRuleset, so equal normalized states must yield the identical cached ruleset.
+	B3D_TEST_ASSERT(stateRulesets.BuildStateRuleset(GUIElementState::Disabled | GUIElementState::Hover | GUIElementState::Active | GUIElementState::Focus | GUIElementState::Checked) ==
+		stateRulesets.BuildStateRuleset(GUIElementState::Disabled | GUIElementState::Checked))
 }
 
 void GUIStyleSheetTestSuite::TestComments()
