@@ -35,6 +35,9 @@ TShared<RenderWindow> RenderWindowManager::CreateRenderWindow(const RenderWindow
 		renderWindow = B3DMakeShared<LinuxRenderWindow>(createInformation, id, parentWindow);
 #elif B3D_PLATFORM_MACOS
 		renderWindow = B3DMakeShared<MacOSRenderWindow>(createInformation, id, parentWindow);
+#else
+		B3D_LOG(Warning, LogRenderBackend, "No native render window implementation on this platform. Creating a headless window.");
+		renderWindow = B3DMakeShared<HeadlessRenderWindow>(createInformation, id, parentWindow);
 #endif
 	}
 
