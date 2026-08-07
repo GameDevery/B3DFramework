@@ -3,6 +3,7 @@
 #include "B3DNullRenderer.h"
 #include "CoreObject/B3DRenderThread.h"
 #include "Renderer/B3DRendererManager.h"
+#include "Renderer/B3DRendererUtility.h"
 
 using namespace b3d;
 
@@ -27,14 +28,23 @@ const StringID& render::NullRenderer::GetName() const
 
 void render::NullRenderer::Activate()
 {
-	GetRenderThread().PostCommand([this]() { ActivateOnRenderThread(); }, "NullRenderer::ActivateOnRenderThread");
+	GetRenderThread().PostCommand([this]()
+	{
+		ActivateOnRenderThread();
+
+		RendererUtility::StartUp();
+	}, "NullRenderer::ActivateOnRenderThread");
 }
 
 void render::NullRenderer::Destroy()
 {
 	Renderer::Destroy();
 
-	GetRenderThread().PostCommand([this]() { DestroyOnRenderThread(); }, "NullRenderer::DestroyOnRenderThread", true);
+	GetRenderThread().PostCommand([this]()
+	{
+		RendererUtility::ShutDown();
+		DestroyOnRenderThread();
+	}, "NullRenderer::DestroyOnRenderThread", true);
 }
 
 void render::NullRenderer::RenderAll(PerFrameData perFrameData)
