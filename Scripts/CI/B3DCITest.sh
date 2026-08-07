@@ -76,6 +76,29 @@ declare -A CATEGORY_TESTS=(
 	["Editor"]="Editor"
 )
 
+# ---------------------------------------------------------------------------
+# Platform overlays with proprietary SDKs (kept outside this repository) may
+# extend the test run. An overlay is sourced when present and may append to
+# SNAPSHOT_CATEGORIES/CATEGORY_TESTS, register a custom per-test runner
+# function in CATEGORY_RUNNERS (invoked as <runner> <category> <test-name> in
+# place of the local-executable path below), and append functions to
+# OVERLAY_UNIT_TEST_HOOKS to run additional unit test suites. Overlays are
+# expected to deactivate themselves when their SDK or binaries are missing.
+# ---------------------------------------------------------------------------
+declare -A CATEGORY_RUNNERS=()
+OVERLAY_UNIT_TEST_HOOKS=()
+
+for OVERLAY_SCRIPT in "$WORKSPACE"/Framework/Platform/*/Scripts/CI/B3DCITestOverlay.sh; do
+	if [ -f "$OVERLAY_SCRIPT" ]; then
+		echo "Loading test overlay: $OVERLAY_SCRIPT"
+		source "$OVERLAY_SCRIPT"
+	fi
+done
+
+for OVERLAY_HOOK in "${OVERLAY_UNIT_TEST_HOOKS[@]}"; do
+	"$OVERLAY_HOOK"
+done
+
 # Declare the categories to BansheeForge up-front (before running any test) so a
 # crashed/killed run still reports the full set of categories.
 for CATEGORY in "${SNAPSHOT_CATEGORIES[@]}"; do
@@ -124,6 +147,12 @@ for CATEGORY in "${SNAPSHOT_CATEGORIES[@]}"; do
 	echo "::phase::snapshot_tests_${CATEGORY,,}"
 
 	for TEST_NAME in ${CATEGORY_TESTS[$CATEGORY]}; do
+		# Categories provided by a platform overlay run through its registered runner
+		if [ -n "${CATEGORY_RUNNERS[$CATEGORY]:-}" ]; then
+			"${CATEGORY_RUNNERS[$CATEGORY]}" "$CATEGORY" "$TEST_NAME"
+			continue
+		fi
+
 		# The Editor snapshot runs the editor executable itself; all other tests are example exes
 		if [ "$TEST_NAME" = "Editor" ]; then
 			EXE="$BIN_DIR/Banshee3D.exe"
