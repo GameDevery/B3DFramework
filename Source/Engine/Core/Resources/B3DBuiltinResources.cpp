@@ -226,31 +226,54 @@ HShader BuiltinResources::GetShader(const Path& path) const
 	return GetOrCompileShader(fullShaderPath);
 }
 
-HFont BuiltinResources::GetFont(const String& font) const
+TOptional<Path> BuiltinResources::TryResolveFontPath(const String& font) const
 {
 	const Path& fontFolderVirtualPath = Path::Combine(kVirtualPathPrefix, kFontsFolder);
 	Path fontVirtualFilePath = Path::Combine(fontFolderVirtualPath, font);
 
 	const PackageManager& packageManager = GetPackageManager();
-	if(!packageManager.TryResolveVirtualResourcePath(fontVirtualFilePath).has_value())
-	{
+	if(packageManager.TryResolveVirtualResourcePath(fontVirtualFilePath).has_value())
+		return fontVirtualFilePath;
+
 		fontVirtualFilePath.SetFilename(font + ".ttf");
+	if(packageManager.TryResolveVirtualResourcePath(fontVirtualFilePath).has_value())
+		return fontVirtualFilePath;
 
-		if(!packageManager.TryResolveVirtualResourcePath(fontVirtualFilePath).has_value())
 			fontVirtualFilePath.SetFilename(font + ".otf");
+	if(packageManager.TryResolveVirtualResourcePath(fontVirtualFilePath).has_value())
+		return fontVirtualFilePath;
 
-		if(!packageManager.TryResolveVirtualResourcePath(fontVirtualFilePath).has_value())
-		{
-			B3D_LOG(Warning, LogGUI, "Cannot find the requested font: {0}. Using default font instead.", font);
-			return GetDefaultFont();
-		}
-	}
+	return {};
+}
 
+HFont BuiltinResources::GetFont(const String& font) const
+{
 	// TODO: This needs to perform a lookup in the project library. Likely need to enumerate all fonts from data packages on start-up, and register them in FontManager for lookup.
 	// - Other alternative is to integrate ProjectLibrary into the framework, but in my mind that should remain editor only functionality. We can perhaps pull some generic
 	// package manipulation in a helper library, for use in the framework.
 
-	return GetResources().Load<Font>(fontVirtualFilePath, ResourceLoadOptions(false));
+	const TOptional<Path> fontVirtualFilePath = TryResolveFontPath(font);
+	if(!fontVirtualFilePath.has_value())
+		{
+			B3D_LOG(Warning, LogGUI, "Cannot find the requested font: {0}. Using default font instead.", font);
+			return GetDefaultFont();
+		}
+
+	return GetResources().Load<Font>(*fontVirtualFilePath, ResourceLoadOptions(false));
+	}
+
+HFont BuiltinResources::GetBoldFont(const String& font) const
+{
+	static const char* const kBoldFaceSuffixes[] = { "Bold", "SemiBold", "-Bold", "-SemiBold" };
+
+	for(const char* suffix : kBoldFaceSuffixes)
+	{
+		const TOptional<Path> fontVirtualFilePath = TryResolveFontPath(font + suffix);
+		if(fontVirtualFilePath.has_value())
+			return GetResources().Load<Font>(*fontVirtualFilePath, ResourceLoadOptions(false));
+	}
+
+	return nullptr;
 }
 
 HShader BuiltinResources::GetOrCompileShader(const Path& path) const

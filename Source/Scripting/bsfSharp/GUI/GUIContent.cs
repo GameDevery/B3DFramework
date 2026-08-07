@@ -15,27 +15,19 @@ namespace b3d
         /// </summary>
         public SpriteImage GetImage(GUIElementState state = GUIElementState.Normal)
         {
-            switch (state)
-            {
-            case GUIElementState.Normal:
-                return Images.Normal;
-            case GUIElementState.Hover:
-                return Images.Hover;
-            case GUIElementState.Active:
-                return Images.Active;
-            case GUIElementState.Focused:
-                return Images.Focused;
-            case GUIElementState.NormalOn:
-                return Images.NormalOn;
-            case GUIElementState.HoverOn:
-                return Images.HoverOn;
-            case GUIElementState.ActiveOn:
-                return Images.ActiveOn;
-            case GUIElementState.FocusedOn:
-                return Images.FocusedOn;
-            default:
-                return Images.Normal;
-            }
+            // Interaction states are more specific than the checked state, so they are matched first
+            bool isChecked = (state & GUIElementState.Checked) != 0;
+
+            if ((state & GUIElementState.Active) != 0)
+                return isChecked ? Images.ActiveOn : Images.Active;
+
+            if ((state & GUIElementState.Hover) != 0)
+                return isChecked ? Images.HoverOn : Images.Hover;
+
+            if ((state & GUIElementState.Focus) != 0)
+                return isChecked ? Images.FocusedOn : Images.Focused;
+
+            return isChecked ? Images.NormalOn : Images.Normal;
         }
 
         /// <summary>

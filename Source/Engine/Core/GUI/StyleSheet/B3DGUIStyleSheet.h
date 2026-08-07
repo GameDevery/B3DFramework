@@ -49,6 +49,13 @@ namespace b3d
 		Hidden
 	};
 
+	/** Determines which face of a font family is used for rendering text. */
+	enum class GUIFontWeight
+	{
+		Normal,
+		Bold
+	};
+
 	/** All possible properties in a GUI style sheet. See GUIStyleSheetStateStyle for their descriptions. */
 	enum class GUIStyleSheetPropertyType
 	{
@@ -83,6 +90,9 @@ namespace b3d
 		VerticalAlign,
 		FontFamily,
 		FontSize,
+		FontWeight,
+		LineHeight,
+		LetterSpacing,
 		WordWrap,
 
 		Border,
@@ -144,7 +154,7 @@ namespace b3d
 	};
 
 	/** Determines to which GUI elements a particular style will be applied to. */
-	struct GUIStyleSheetSelector
+	struct B3D_EXPORT GUIStyleSheetSelector
 	{
 		GUIStyleSheetSelector() = default;
 		GUIStyleSheetSelector(const String& name, GUIStyleSheetSelectorType selectorType, GUIStyleSheetCombinatorType combinatorType)
@@ -163,7 +173,7 @@ namespace b3d
 	};
 
 	/** List of all selectors on a particular GUI style sheet. */
-	struct GUIStyleSheetSelectorList
+	struct B3D_EXPORT GUIStyleSheetSelectorList
 	{
 		TInlineArray<GUIStyleSheetSelector, 4> Selectors;
 
@@ -212,11 +222,22 @@ namespace b3d
 		u32 BorderBottomLeftRadius = 0; /**< Radius of the bottom left border corner, if rounded corners are desired. In logical pixel units. */
 		u32 BorderBottomRightRadius = 0; /**< Radius of the bottom right border corner, if rounded corners are desired. In logical pixel units. */
 
-		HFont Font; /**< Font family to render the text contents of the GUI element with. */
+		HFont Font; /**< Regular face of the font family to render the text contents of the GUI element with. */
+		// TODO - To be removed with the font family refactor
+		HFont BoldFont; /**< Bold face of the same font family as @p Font. Null if the family has no bold face. */
+		GUIFontWeight FontWeight = GUIFontWeight::Normal; /**< Determines which face of the font family the text is rendered with. */
 		float FontSize = 8.0f; /**< Font size to render the text contents of the GUI element with, in logical point units. */
+		float LineHeight = 1.0f; /**< Multiplier applied to the line height reported by the font. */
+		float LetterSpacing = 0.0f; /**< Extra space inserted after every character, in logical pixel units. Negative values tighten the text. */
 		GUIHorizontalTextAlignment HorizontalTextAlignment = GUIHorizontalTextAlignment::Left; /**< Determines horizontal alignment of text within the GUI element. */
 		GUIVerticalTextAlignment VerticalTextAlignment = GUIVerticalTextAlignment::Middle; /**< Determines vertical alignment of text within the GUI element. */
 		GUIWordWrapMode WordWrap = GUIWordWrapMode::None; /**< Determines if text wraps when it doesn't fit in a single line. */
+
+		/** Returns the font face the text should be rendered with, accounting for the requested font weight. */
+		B3D_NO_RREF const HFont& GetWeightedFont() const { return FontWeight == GUIFontWeight::Bold && BoldFont != nullptr ? BoldFont : Font; }
+
+		/** Returns the typographic controls to apply on top of the font's own metrics, scaled from logical to physical units by @p scale. */
+		TextMetrics GetTextMetrics(float scale = 1.0f) const { return TextMetrics{ LineHeight, LetterSpacing * scale }; }
 
 		static constexpr u32 kPropertyDWordCount = Math::DivideAndRoundUp((u32)GUIStyleSheetPropertyType::Count, (u32)sizeof(u32) * 8);
 		TBitfield<InlineContainerAllocator<kPropertyDWordCount>> OverridenProperties; /**< Bit for each property that is different than the default will be set. Used for determining which properties to override from parent rule. */
@@ -282,7 +303,7 @@ namespace b3d
 		 * @param	inheritedRules		Optional rules to inherit the initial set of values from.
 		 * @return						Build ruleset, or one returned from the internal cache.
 		 */
-		TShared<const GUIStyleSheetRuleset> BuildStateRuleset(GUIElementStateFlags state, const GUIStyleSheetRules* inheritedRules = nullptr) const;
+		TShared<const GUIStyleSheetRuleset> BuildStateRuleset(GUIElementStates state, const GUIStyleSheetRules* inheritedRules = nullptr) const;
 
 		TInlineArray<StyleSheetRulesetIndices, 4> StyleSheets;
 
@@ -293,11 +314,11 @@ namespace b3d
 		/** Key used for looking up cached rulesets. */
 		struct RulesetKey
 		{
-			RulesetKey(GUIElementStateFlags stateFlags = GUIElementStateFlag::Normal, u64 inheritedStateId = 0)
+			RulesetKey(GUIElementStates stateFlags = GUIElementState::Normal, u64 inheritedStateId = 0)
 				: StateFlags(stateFlags), InheritedStateId(inheritedStateId)
 			{ }
 
-			GUIElementStateFlags StateFlags;
+			GUIElementStates StateFlags;
 			u64 InheritedStateId;
 
 			bool operator==(const RulesetKey& other) const { return StateFlags == other.StateFlags && InheritedStateId == other.InheritedStateId; }

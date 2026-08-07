@@ -93,6 +93,11 @@ namespace b3d
 			B3D_RTTI_MEMBER(OverridenProperties, 23)
 
 			B3D_RTTI_MEMBER(PseudoClass, 24)
+
+			B3D_RTTI_MEMBER(BoldFont, 25)
+			B3D_RTTI_MEMBER(FontWeight, 26)
+			B3D_RTTI_MEMBER(LineHeight, 27)
+			B3D_RTTI_MEMBER(LetterSpacing, 28)
 		B3D_RTTI_END_MEMBERS
 	public:
 		const String& GetRttiName() override

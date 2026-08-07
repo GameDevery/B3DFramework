@@ -116,11 +116,11 @@ void GUIDropDownContent::SetRange(u32 start, u32 end)
 				visibleElement.Button = toggle;
 
 				visibleElement.UnderlayButton->OnHover.Connect([toggle]() {
-					toggle->AddStateFlags(GUIElementStateFlag::Hover);
+					toggle->AddStateFlags(GUIElementState::Hover);
 				});
 
 				visibleElement.UnderlayButton->OnOut.Connect([toggle]() {
-					toggle->RemoveStateFlags(GUIElementStateFlag::Hover);
+					toggle->RemoveStateFlags(GUIElementState::Hover);
 				});
 
 				visibleElement.UnderlayButton->OnClick.Connect([toggle]() {
@@ -270,18 +270,18 @@ void GUIDropDownContent::SetSelected(u32 index)
 	{
 		VisibleElement& previouslySelectedElement = mVisibleElements[mSelectedIdx];
 
-		previouslySelectedElement.UnderlayButton->RemoveStateFlags(GUIElementStateFlag::Hover);
+		previouslySelectedElement.UnderlayButton->RemoveStateFlags(GUIElementState::Hover);
 		if(previouslySelectedElement.Button != nullptr)
-			previouslySelectedElement.Button->RemoveStateFlags(GUIElementStateFlag::Hover);
+			previouslySelectedElement.Button->RemoveStateFlags(GUIElementState::Hover);
 	}
 
 	mSelectedIdx = index;
 
 	VisibleElement& newlySelectedElement = mVisibleElements[mSelectedIdx];
 
-	newlySelectedElement.UnderlayButton->AddStateFlags(GUIElementStateFlag::Hover);
+	newlySelectedElement.UnderlayButton->AddStateFlags(GUIElementState::Hover);
 	if(newlySelectedElement.Button != nullptr)
-		newlySelectedElement.Button->AddStateFlags(GUIElementStateFlag::Hover);
+		newlySelectedElement.Button->AddStateFlags(GUIElementState::Hover);
 
 	mParent->ElementSelected(mVisibleElements[mSelectedIdx].SequentialIndex);
 }

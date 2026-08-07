@@ -156,7 +156,6 @@ namespace b3d
 		bool mHasFocus = false;
 		u64 mFocusGainedFrame = (u64)-1;
 		bool mIsMouseOver = false;
-		GUIElementState mState = GUIElementState::Normal;
 
 		String mText;
 		u32 mCharCount = 0;

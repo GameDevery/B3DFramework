@@ -71,6 +71,7 @@ namespace b3d
 		u64 BatchId = 0; /**< ID that specifies if the sprite is allowed to be batched with other sprites. Only sprites with the same batch ID can be batched. */
 		float FontScale = 1.0f; /**< Scale to apply to font size. */
 		bool WordWrap = false; /**< If true, text will wrap to a new line if it exceeds the content area width. If false, the text will be clipped. */
+		GUIElementStates State = GUIElementState::Normal; /**< States the GUI element is in, determining which of the per-state content images is displayed. */
 
 		const GUIStyleSheetRules& Rules; /**< Style sheet rules that determine how to style the sprites. */
 	};
@@ -127,13 +128,13 @@ namespace b3d
 	{
 	public:
 		/** Builds sprite elements for GUIBackgroundSprites. */
-		static void BuildSpriteRenderElements(GUIInteractable& element, GUIElementState state, GUIBackgroundSprite& sprite, const Vector2I& offset = Vector2I::kZero, u32 depth = 1);
+		static void BuildSpriteRenderElements(GUIInteractable& element, GUIBackgroundSprite& sprite, const Vector2I& offset = Vector2I::kZero, u32 depth = 1);
 
 		/** Builds sprite elements for GUIContentSprites. */
-		static void BuildSpriteRenderElements(GUIInteractable& element, GUIElementState state, const GUIContent& content, GUIContentSprites& sprites, const Vector2I& offset = Vector2I::kZero, u32 depth = 0, bool wordWrap = false);
+		static void BuildSpriteRenderElements(GUIInteractable& element, const GUIContent& content, GUIContentSprites& sprites, const Vector2I& offset = Vector2I::kZero, u32 depth = 0, bool wordWrap = false);
 
 		/** Builds a struct used for initializing a TextSprite, required for rendering the provided contents from the provided GUI element. */
-		static TextSpriteInformation BuildTextSpriteInformation(const GUIInteractable& element, GUIElementState state, const String& text, float fontScale = 1.0f, bool wordWrap = false);
+		static TextSpriteInformation BuildTextSpriteInformation(const GUIInteractable& element, const String& text, float fontScale = 1.0f, bool wordWrap = false);
 	};
 
 	/** @} */

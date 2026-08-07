@@ -160,26 +160,50 @@ void GUIInteractable::SetFocus(bool enabled, bool clear)
 	GUIManager::Instance().SetFocus(this, enabled, clear);
 }
 
-void GUIInteractable::AddStateFlags(GUIElementStateFlags flags)
+void GUIInteractable::AddStateFlags(GUIElementStates flags)
 {
 	if(mStateFlags.IsSetAll(flags))
 		return;
 
-	mStateFlags |= flags;
+	GUIElementStates newStateFlags = mStateFlags;
+	newStateFlags |= flags;
 
-	NotifyStateFlagsChanged();
-	MarkContentAsDirty();
+	SetStateFlags(newStateFlags);
 }
 
-void GUIInteractable::RemoveStateFlags(GUIElementStateFlags flags)
+void GUIInteractable::RemoveStateFlags(GUIElementStates flags)
 {
 	if(!mStateFlags.IsSetAny(flags))
 		return;
 
-	mStateFlags &= ~flags;
+	GUIElementStates newStateFlags = mStateFlags;
+	newStateFlags &= ~flags;
 
+	SetStateFlags(newStateFlags);
+}
+
+void GUIInteractable::NotifyDisabledChanged()
+{
+	if(IsDisabled())
+		AddStateFlags(GUIElementState::Disabled);
+	else
+		RemoveStateFlags(GUIElementState::Disabled);
+}
+
+void GUIInteractable::SetStateFlags(GUIElementStates flags)
+{
+	// A state can bring in its own padding, border and font metrics, so the optimal size needs re-evaluating
+	const GUILogicalSize originalSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
+
+	mStateFlags = flags;
 	NotifyStateFlagsChanged();
-	MarkContentAsDirty();
+
+	const GUILogicalSize newSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
+
+	if(originalSize != newSize)
+		MarkLayoutAsDirty();
+	else
+		MarkContentAsDirty();
 }
 
 TShared<GUIContextMenu> GUIInteractable::GetContextMenu() const

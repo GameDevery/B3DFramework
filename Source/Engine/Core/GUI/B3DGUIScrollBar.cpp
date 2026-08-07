@@ -76,7 +76,7 @@ GUIScrollBar::~GUIScrollBar()
 void GUIScrollBar::UpdateRenderElements()
 {
 	mRenderElements.Clear();
-	GUISpriteHelper::BuildSpriteRenderElements(*this, GUIElementState::Normal, mBackgroundSprite, Vector2I::kZero, 2); // Depth 2 because child buttons use depth 1
+	GUISpriteHelper::BuildSpriteRenderElements(*this, mBackgroundSprite, Vector2I::kZero, 2); // Depth 2 because child buttons use depth 1
 
 	GUIInteractable::UpdateRenderElements();
 }

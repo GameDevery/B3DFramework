@@ -8,6 +8,21 @@ namespace b3d
 {
 	struct CharacterInformation;
 
+	/** @addtogroup Text
+	 *  @{
+	 */
+
+	/** Typographic controls applied on top of the metrics reported by the font itself. */
+	struct TextMetrics
+	{
+		float LineHeight = 1.0f; /**< Multiplier applied to the line height reported by the font. */
+		float LetterSpacing = 0.0f; /**< Extra space inserted after every character, in pixels. Negative values tighten the text. */
+
+		bool operator==(const TextMetrics& other) const { return LineHeight == other.LineHeight && LetterSpacing == other.LetterSpacing; }
+	};
+
+	/** @} */
+
 	/** @addtogroup Text-Internal
 	 *  @{
 	 */
@@ -46,9 +61,10 @@ namespace b3d
 			 *
 			 * @param	characterIndex			Sequential index of the character in the original string.
 			 * @param	characterInformation	Character description from the font.
+			 * @param	letterSpacing			Extra space inserted after the character, in pixels.
 			 * @return							How many pixels did the added character expand the word by.
 			 */
-			float AddCharacter(u32 characterIndex, const CharacterInformation& characterInformation);
+			float AddCharacter(u32 characterIndex, const CharacterInformation& characterInformation, float letterSpacing);
 
 			/** Adds a space to the word. Word must have previously have been declared as a "spacer". */
 			void AddSpace(float spaceWidth);
@@ -63,9 +79,10 @@ namespace b3d
 			 * Calculates new width of the word if we were to add the provided character, without actually adding it.
 			 *
 			 * @param	characterInformation	Character description from the font.
+			 * @param	letterSpacing			Extra space inserted after the character, in pixels.
 			 * @return							Width of the word in pixels with the character appended to it.
 			 */
-			float CalculateWidthWithCharacter(const CharacterInformation& characterInformation) const;
+			float CalculateWidthWithCharacter(const CharacterInformation& characterInformation, float letterSpacing) const;
 
 			/**
 			 * Returns true if word is a spacer. Spacers contain just a space of a certain length with no actual characters.
@@ -86,9 +103,10 @@ namespace b3d
 			 *
 			 * @param	previousCharacter	Descriptor of the character preceding the one we need the width for. Can be null.
 			 * @param	currentCharacter	Character description from the font.
+			 * @param	letterSpacing		Extra space inserted after the character, in pixels.
 			 * @return 						How many pixels would the added character expand the word by.
 			 */
-			static float CalculateCharacterWidth(const CharacterInformation* previousCharacter, const CharacterInformation& currentCharacter);
+			static float CalculateCharacterWidth(const CharacterInformation* previousCharacter, const CharacterInformation& currentCharacter, float letterSpacing);
 
 		private:
 			u32 mCharacterStartIndex = 0;
@@ -217,7 +235,7 @@ namespace b3d
 		 *
 		 * After this object is constructed you may call various getter methods to get needed information.
 		 */
-		B3D_EXPORT TextGeometry(const U32String& text, const HFont& font, float fontSize, u32 width = 0, u32 height = 0, bool wordWrap = false, bool wordBreak = true);
+		B3D_EXPORT TextGeometry(const U32String& text, const HFont& font, float fontSize, u32 width = 0, u32 height = 0, bool wordWrap = false, bool wordBreak = true, const TextMetrics& metrics = TextMetrics());
 		B3D_EXPORT virtual ~TextGeometry() = default;
 
 		/**	Returns the number of lines that were generated. */
@@ -226,8 +244,11 @@ namespace b3d
 		/**	Returns the number of font pages references by the used characters. */
 		B3D_EXPORT u32 GetPageCount() const { return mPageCount; }
 
-		/**	Returns the height of a line in pixels. */
+		/**	Returns the height of a line in pixels, including the line height multiplier from the text metrics. */
 		B3D_EXPORT float GetLineHeight() const;
+
+		/**	Returns the typographic controls the geometry was generated with. */
+		B3D_EXPORT const TextMetrics& GetMetrics() const { return mMetrics; }
 
 		/**	Gets information describing a single line at the specified index. */
 		B3D_EXPORT const Line& GetLine(u32 idx) const { return mLines[idx]; }
@@ -265,7 +286,7 @@ namespace b3d
 		/**	Returns Y offset that determines the line on which the characters are placed. In pixels. */
 		float GetBaselineOffset() const;
 
-		/**	Returns the width of a single space in pixels. */
+		/**	Returns the width of a single space in pixels, including the letter spacing from the text metrics. */
 		float GetSpaceWidth() const;
 
 		/** Gets a description of a single character referenced by its sequential index based on the original string. */
@@ -289,6 +310,7 @@ namespace b3d
 
 		HFont mFont;
 		TShared<const FontBitmapInformation> mFontBitmapInformation;
+		TextMetrics mMetrics;
 
 		// Static buffers used to reduce runtime memory allocation
 	protected:
@@ -349,8 +371,8 @@ namespace b3d
 	class TTextGeometry : public TextGeometry
 	{
 	public:
-		TTextGeometry(const U32String& text, const HFont& font, float fontSize, u32 width = 0, u32 height = 0, bool wordWrap = false, bool wordBreak = true)
-			: TextGeometry(text, font, fontSize, width, height, wordWrap, wordBreak), mData(nullptr)
+		TTextGeometry(const U32String& text, const HFont& font, float fontSize, u32 width = 0, u32 height = 0, bool wordWrap = false, bool wordBreak = true, const TextMetrics& metrics = TextMetrics())
+			: TextGeometry(text, font, fontSize, width, height, wordWrap, wordBreak, metrics), mData(nullptr)
 		{
 			u32 totalBufferSize = 0;
 			GeneratePersistentData(text, nullptr, totalBufferSize);

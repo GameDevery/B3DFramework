@@ -43,7 +43,14 @@ GUIStyleSheetLexer::GUIStyleSheetLexer()
 	mPropertyKeywords["vertical-align"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["font-family"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["font-size"] = GUIStyleSheetTokenTypes::Property;
+	mPropertyKeywords["font-weight"] = GUIStyleSheetTokenTypes::Property;
+	mPropertyKeywords["line-height"] = GUIStyleSheetTokenTypes::Property;
+	mPropertyKeywords["letter-spacing"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["b3d-word-wrap"] = GUIStyleSheetTokenTypes::Property;
+
+	// Font weights
+	mPropertyKeywords["normal"] = GUIStyleSheetTokenTypes::FontWeight;
+	mPropertyKeywords["bold"] = GUIStyleSheetTokenTypes::FontWeight;
 
 	// Border properties
 	mPropertyKeywords["border"] = GUIStyleSheetTokenTypes::Property;
@@ -120,6 +127,7 @@ bool GUIStyleSheetLexer::StartScanning(const TShared<SourceCode>& sourceCode)
 		return false;
 
 	mSourceCode = sourceCode;
+	mPeekedCharacter.reset();
 	GetCurrentCharacterAndAdvance();
 
 	return true;
@@ -145,9 +153,33 @@ bool GUIStyleSheetLexer::GetCurrentCharacterAndAdvance(char expected, char& outC
 char GUIStyleSheetLexer::GetCurrentCharacterAndAdvance()
 {
 	const char previousCharacter = mCurrentCharacter;
-	mCurrentCharacter = mSourceCode->GetNextCharacter();
+
+	if(mPeekedCharacter.has_value())
+	{
+		mCurrentCharacter = *mPeekedCharacter;
+		mPeekedCharacter.reset();
+	}
+	else
+		mCurrentCharacter = mSourceCode->GetNextCharacter();
 
 	return previousCharacter;
+}
+
+char GUIStyleSheetLexer::PeekNextCharacter()
+{
+	if(!mPeekedCharacter.has_value())
+		mPeekedCharacter = mSourceCode->GetNextCharacter();
+
+	return *mPeekedCharacter;
+}
+
+bool GUIStyleSheetLexer::IsCurrentCharacterCommentStart()
+{
+	if(!IsCurrentCharacter('/'))
+		return false;
+
+	const char nextCharacter = PeekNextCharacter();
+	return nextCharacter == '/' || nextCharacter == '*';
 }
 
 GUIStyleSheetToken GUIStyleSheetLexer::CreateToken(const TokenType& type, bool takeCharacter)
@@ -181,8 +213,20 @@ GUIStyleSheetToken GUIStyleSheetLexer::CreateToken(const TokenType& type, String
 
 TOptional<GUIStyleSheetLexer::Token> GUIStyleSheetLexer::ScanNextToken(bool skipWhitespace)
 {
-	if(skipWhitespace)
-		SkipWhiteSpaces();
+	bool skippedComment = false;
+	while(true)
+	{
+		if(skipWhitespace)
+			SkipWhiteSpaces();
+
+		if(!IsCurrentCharacterCommentStart())
+			break;
+
+		if(!SkipComment())
+			return {};
+
+		skippedComment = true;
+	}
 
 	// Check for end-of-file
 	if(IsCurrentCharacter(0))
@@ -191,9 +235,55 @@ TOptional<GUIStyleSheetLexer::Token> GUIStyleSheetLexer::ScanNextToken(bool skip
 		return CreateToken(TokenType::EndOfStream);
 	}
 
-	// Scan next token
 	SaveCurrentSourcePosition();
+
+	// A comment separates tokens the same way whitespace does, which matters when the caller keeps whitespace (e.g. descendant selectors)
+	if(skippedComment && !skipWhitespace)
+		return CreateToken(TokenType::Space);
+
+	// Scan next token
 	return ScanToken();
+}
+
+bool GUIStyleSheetLexer::SkipComment()
+{
+	SaveCurrentSourcePosition();
+
+	char character;
+	if(!GetCurrentCharacterAndAdvance('/', character))
+		return false;
+
+	if(IsCurrentCharacter('/'))
+	{
+		GetCurrentCharacterAndAdvance();
+
+		while(!IsCurrentCharacter(0) && !IsCurrentCharacterNewLine())
+			GetCurrentCharacterAndAdvance();
+
+		return true;
+	}
+
+	if(!GetCurrentCharacterAndAdvance('*', character))
+		return false;
+
+	while(true)
+	{
+		if(IsCurrentCharacter(0))
+		{
+			Error("Unterminated block comment.");
+			return false;
+		}
+
+		if(IsCurrentCharacter('*') && PeekNextCharacter() == '/')
+		{
+			GetCurrentCharacterAndAdvance();
+			GetCurrentCharacterAndAdvance();
+
+			return true;
+		}
+
+		GetCurrentCharacterAndAdvance();
+	}
 }
 
 void GUIStyleSheetLexer::SkipMatching(const Function<bool(char)>& predicate)
@@ -215,6 +305,10 @@ TOptional<GUIStyleSheetLexer::Token> GUIStyleSheetLexer::ScanToken()
 
 	if(IsCurrentCharacterNewLine())
 		return CreateToken(TokenType::Newline, true);
+
+	// A '-' starts an identifier unless it is the sign of a number
+	if(IsCurrentCharacter('-') && (std::isdigit(PeekNextCharacter()) || PeekNextCharacter() == '.'))
+		return ScanNumber(false);
 
 	if(std::isalpha(GetCurrentCharacter()) || IsCurrentCharacter('_') || IsCurrentCharacter('-'))
 		return ScanIdentifier(false);
@@ -380,6 +474,9 @@ TOptional<GUIStyleSheetLexer::Token> GUIStyleSheetLexer::ScanNumber(bool isStart
 {
 	String spelling;
 
+	if(!isStartingWithDot && IsCurrentCharacter('-'))
+		spelling += GetCurrentCharacterAndAdvance();
+
 	auto fnScanDigitSequence = [this](String& spelling)
 	{
 		const bool result = (std::isdigit(GetCurrentCharacter()) != 0);
@@ -398,6 +495,21 @@ TOptional<GUIStyleSheetLexer::Token> GUIStyleSheetLexer::ScanNumber(bool isStart
 		isStartingWithDot = true;
 	}
 
+	auto fnScanPixelSuffix = [this](TokenType& inOutType) -> bool
+	{
+		if(!IsCurrentCharacter('p') && !IsCurrentCharacter('P'))
+			return true;
+
+		GetCurrentCharacterAndAdvance();
+		if(!IsCurrentCharacter('x') && !IsCurrentCharacter('X'))
+			return false;
+
+		GetCurrentCharacterAndAdvance();
+		inOutType = GUIStyleSheetTokenTypes::PixelsLiteral;
+
+		return true;
+	};
+
 	TokenType type = GUIStyleSheetTokenTypes::Undefined;
 	if(isStartingWithDot)
 	{
@@ -413,22 +525,15 @@ TOptional<GUIStyleSheetLexer::Token> GUIStyleSheetLexer::ScanNumber(bool isStart
 			GetCurrentCharacterAndAdvance();
 			type = GUIStyleSheetTokenTypes::PercentLiteral;
 		}
+		else if(!fnScanPixelSuffix(type))
+			return ErrorUnexpected();
 	}
 	else
 	{
 		type = GUIStyleSheetTokenTypes::IntegerLiteral;
 
-		if(IsCurrentCharacter('p') || IsCurrentCharacter('P'))
-		{
-			GetCurrentCharacterAndAdvance();
-			if(IsCurrentCharacter('x') || IsCurrentCharacter('X'))
-			{
-				GetCurrentCharacterAndAdvance();
-				type = GUIStyleSheetTokenTypes::PixelsLiteral;
-			}
-			else
-				return ErrorUnexpected();
-		}
+		if(!fnScanPixelSuffix(type))
+			return ErrorUnexpected();
 	}
 
 	return CreateToken(type, spelling);

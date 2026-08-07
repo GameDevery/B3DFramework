@@ -26,7 +26,7 @@ GUILogicalSize GUIUtility::CalculateOptimalContentSizeWithPaddingAndBorder(const
 {
 	GUILogicalSize contentBounds = CalculateOptimalContentSizeWithPaddingAndBorder((const String&)content.Text, styleSheetRule, wordWrapWidth);
 
-	const HSpriteImage& image = content.GetImage(GUIElementState::Normal);
+	const HSpriteImage& image = content.GetImage();
 	if(image.IsLoaded())
 	{
 		const GUILogicalUnit paddingHeight = styleSheetRule.Padding.Top + styleSheetRule.Padding.Bottom;
@@ -47,16 +47,17 @@ GUILogicalSize GUIUtility::CalculateOptimalContentSizeWithPaddingAndBorder(const
 	if(styleSheetRule.WordWrap != GUIWordWrapMode::WrapWord)
 		wordWrapWidth = 0;
 
-	const HFont font = styleSheetRule.Font;
+	const HFont font = styleSheetRule.GetWeightedFont();
 	if(font != nullptr && !text.empty())
 	{
 		FrameAllocatorScope frameScope;
 
 		const U32String utf32text = UTF8::ToUtF32(text);
-		TTextGeometry<FrameAllocatorTag> textData(utf32text, font, styleSheetRule.FontSize, (u32)wordWrapWidth, 0, styleSheetRule.WordWrap == GUIWordWrapMode::WrapWord);
+		TTextGeometry<FrameAllocatorTag> textData(utf32text, font, styleSheetRule.FontSize, (u32)wordWrapWidth, 0, styleSheetRule.WordWrap == GUIWordWrapMode::WrapWord, true, styleSheetRule.GetTextMetrics());
 
-		contentSize.Width += Math::RoundToI32(textData.GetWidth());
-		contentSize.Height += Math::RoundToI32((float)textData.GetLineCount() * textData.GetLineHeight());
+		// Rounded up, as rounding a fractional advance down would leave the text a fraction of a pixel short of fitting, wrapping or clipping the last word
+		contentSize.Width += Math::CeilToInt(textData.GetWidth());
+		contentSize.Height += Math::CeilToInt((float)textData.GetLineCount() * textData.GetLineHeight());
 	}
 
 	return CalculateSizeWithPaddingAndBorder(contentSize, styleSheetRule);
@@ -93,8 +94,8 @@ Size2I GUIUtility::CalculateTextBounds(const String& text, const HFont& font, fl
 		const U32String utf32text = UTF8::ToUtF32(text);
 		TTextGeometry<FrameAllocatorTag> textData(utf32text, font, fontSize, 0, 0, false);
 
-		size.Width = Math::RoundToI32(textData.GetWidth());
-		size.Height = Math::RoundToI32((float)textData.GetLineCount() * textData.GetLineHeight());
+		size.Width = Math::CeilToInt(textData.GetWidth());
+		size.Height = Math::CeilToInt((float)textData.GetLineCount() * textData.GetLineHeight());
 	}
 
 	return size;

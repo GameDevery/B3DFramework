@@ -178,14 +178,14 @@ bool GUISlider::DoOnCommandEvent(const GUICommandEvent& ev)
 
 	if(ev.GetType() == GUICommandEventType::FocusGained)
 	{
-		AddStateFlags(GUIElementStateFlag::Focus);
+		AddStateFlags(GUIElementState::Focus);
 		mHasFocus = true;
 
 		return true;
 	}
 	else if(ev.GetType() == GUICommandEventType::FocusLost)
 	{
-		RemoveStateFlags(GUIElementStateFlag::Focus);
+		RemoveStateFlags(GUIElementState::Focus);
 		mHasFocus = false;
 
 		return true;

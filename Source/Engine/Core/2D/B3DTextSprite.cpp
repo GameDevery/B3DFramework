@@ -8,10 +8,11 @@
 
 using namespace b3d;
 
-void TextSpriteInformation::InitializeFromStyleSheetRules(const GUIStyleSheetRules& rules)
+void TextSpriteInformation::InitializeFromStyleSheetRules(const GUIStyleSheetRules& rules, float scale)
 {
-	Font = rules.Font;
-	FontSize = rules.FontSize;
+	Font = rules.GetWeightedFont();
+	FontSize = rules.FontSize * scale;
+	Metrics = rules.GetTextMetrics(scale);
 	WordWrap = rules.WordWrap == GUIWordWrapMode::WrapWord;
 	HorzAlign = rules.HorizontalTextAlignment;
 	VertAlign = rules.VerticalTextAlignment;
@@ -29,7 +30,7 @@ void TextSprite::Update(const TextSpriteInformation& information, u64 groupId)
 	B3DMarkAllocatorFrame();
 	{
 		const U32String utf32Text = UTF8::ToUtF32(information.Text);
-		TTextGeometry<FrameAllocatorTag> textGeometry(utf32Text, information.Font, information.FontSize, (u32)information.Size.Width, (u32)information.Size.Height, information.WordWrap, information.WordBreak);
+		TTextGeometry<FrameAllocatorTag> textGeometry(utf32Text, information.Font, information.FontSize, (u32)information.Size.Width, (u32)information.Size.Height, information.WordWrap, information.WordBreak, information.Metrics);
 
 		const u32 pageCount = textGeometry.GetPageCount();
 

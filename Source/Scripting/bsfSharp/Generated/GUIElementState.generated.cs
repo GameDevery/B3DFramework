@@ -10,29 +10,24 @@ namespace b3d
 	 *  @{
 	 */
 
-	/// <summary>Type of GUI element states.</summary>
+	/// <summary>
+	/// States a GUI element may be in. Multiple states can be active at the same time (e.g. an element can be hovered and
+	/// checked), which is why they are combined into GUIElementStates rather than used individually.
+	/// </summary>
 	public enum GUIElementState
 	{
-		/// <summary>Same as Active, if the element is also in the &quot;on&quot; state.</summary>
-		ActiveOn = 260,
-		/// <summary>State when the element has input focus and pointer is not hovering over the element.</summary>
-		Focused = 8,
-		/// <summary>Normal state when element is not being interacted with.</summary>
-		Normal = 1,
-		/// <summary>State when pointer is hovering over the element.</summary>
-		Hover = 2,
-		/// <summary>State when element is being clicked.</summary>
-		Active = 4,
-		/// <summary>State when the element has input focus and pointer is hovering over the element.</summary>
-		FocusedHover = 16,
-		/// <summary>Same as Normal, if the element is also in the &quot;on&quot; state.</summary>
-		NormalOn = 257,
-		/// <summary>Same as Hover, if the element is also in the &quot;on&quot; state.</summary>
-		HoverOn = 258,
-		/// <summary>Same as Focused, if the element is also in the &quot;on&quot; state.</summary>
-		FocusedOn = 264,
-		/// <summary>Same as FocusedHover, if the element is also in the &quot;on&quot; state.</summary>
-		FocusedHoverOn = 272
+		/// <summary>No state is active, meaning the element is not being interacted with.</summary>
+		Normal = 0,
+		/// <summary>Pointer is hovering over the element.</summary>
+		Hover = 1,
+		/// <summary>Element is being pressed.</summary>
+		Active = 2,
+		/// <summary>Element has keyboard/gamepad input focus.</summary>
+		Focus = 4,
+		/// <summary>Element is disabled and does not react to input.</summary>
+		Disabled = 8,
+		/// <summary>Element is toggled on.</summary>
+		Checked = 16
 	}
 
 	/** @} */

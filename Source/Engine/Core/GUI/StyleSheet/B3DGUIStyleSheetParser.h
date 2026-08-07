@@ -50,6 +50,7 @@ namespace b3d
 			TextAlign,
 			VerticalAlign,
 			WordWrap,
+			FontWeight,
 			Visibility,
 			None,
 			Multiple
@@ -105,8 +106,8 @@ namespace b3d
 			{
 				B3D_ASSERT(Type == ValueType::Integer || Type == ValueType::Pixel || Type == ValueType::String || Type == ValueType::URL || Type == ValueType::Decimal);
 
-				if(Type == ValueType::Decimal)
-					outValue = (u32)Float;
+				if(Type == ValueType::Decimal || Type == ValueType::Pixel)
+					outValue = (u32)Math::Max(0.0f, Math::Round(Float));
 				else
 					outValue = UnsignedInteger;
 			}
@@ -115,15 +116,15 @@ namespace b3d
 			{
 				B3D_ASSERT(Type == ValueType::Integer || Type == ValueType::Pixel || Type == ValueType::String || Type == ValueType::URL || Type == ValueType::Decimal);
 
-				if(Type == ValueType::Decimal)
-					outValue = (i32)Float;
+				if(Type == ValueType::Decimal || Type == ValueType::Pixel)
+					outValue = Math::RoundToI32(Float);
 				else
 					outValue = SignedInteger;
 			}
 
 			void GetValue(float& outValue) const
 			{
-				B3D_ASSERT(Type == ValueType::Decimal || Type == ValueType::Percent || Type == ValueType::Integer);
+				B3D_ASSERT(Type == ValueType::Decimal || Type == ValueType::Percent || Type == ValueType::Integer || Type == ValueType::Pixel);
 
 				if(Type == ValueType::Integer)
 					outValue = (float)SignedInteger;
@@ -180,6 +181,12 @@ namespace b3d
 				B3D_ASSERT(Type == ValueType::Visibility);
 				outValue = (GUIElementVisibility)UnsignedInteger;
 			}
+
+			void GetValue(GUIFontWeight& outValue)
+			{
+				B3D_ASSERT(Type == ValueType::FontWeight);
+				outValue = (GUIFontWeight)UnsignedInteger;
+			}
 		};
 
 		/** Stores a set of variables defined in a particular scope. */
@@ -209,11 +216,14 @@ namespace b3d
 		/** Attempts to parse the next token as an integer literal. Integer literal is detected as a set of digits with no decimal point or suffix. If successful, returns true and outputs the parsed value. */
 		bool TryParseIntegerLiteral(u32& outValue);
 
-		/** Attempts to parse the next token as a pixel literal. Pixel literal is detected as a set of digits with no decimal point with 'px' suffix. If successful, returns true and outputs the parsed value. */
+		/** Attempts to parse the next token as a pixel literal. Pixel literal is detected as a number with a 'px' suffix. If successful, returns true and outputs the parsed value, rounded to the nearest whole pixel. */
 		bool TryParsePixelLiteral(i32& outValue);
 
-		/** Attempts to parse the next token as a pixel literal. Pixel literal is detected as a set of digits with no decimal point with 'px' suffix. If successful, returns true and outputs the parsed value. */
+		/** Attempts to parse the next token as a pixel literal. Pixel literal is detected as a number with a 'px' suffix. If successful, returns true and outputs the parsed value, rounded to the nearest whole non-negative pixel. */
 		bool TryParsePixelLiteral(u32& outValue);
+
+		/** Attempts to parse the next token as a pixel literal. Pixel literal is detected as a number with a 'px' suffix. If successful, returns true and outputs the parsed value with its fractional part preserved. */
+		bool TryParsePixelLiteral(float& outValue);
 
 		/** Attempts to parse the next token as a decimal literal. Decimal literal is detected as a set of digits with an optional decimal point. If successful, returns true and outputs the parsed value. */
 		bool TryParseDecimalLiteral(float& outValue);
@@ -258,8 +268,14 @@ namespace b3d
 		/** Attempts to parse the next token as an image based on provided path or icon name. If successful, returns true and outputs the parsed value. */
 		bool TryParseImage(HSpriteImage& outValue);
 
-		/** Attempts to parse the next token as an image loaded from the resource system based on provided font name. If successful, returns true and outputs the parsed value. */
-		bool TryParseFont(HFont& outValue);
+		/**
+		 * Attempts to parse the next token as a font family name or a path to a font file. If successful, returns true and outputs the regular face of the family,
+		 * as well as its bold face if the family provides one.
+		 */
+		bool TryParseFontFamily(HFont& outRegularFace, HFont& outBoldFace);
+
+		/** Attempts to parse the next token as a font weight. Token must be one of the supported font weight identifiers. If successful, returns true and outputs the parsed value. */
+		bool TryParseFontWeight(GUIFontWeight& outValue);
 
 		/**
 		 * Attempts to parse the next set of 1 to 4 pixel values and assigns them to the rectangle offset sides. If successful, returns true and outputs the parsed value.
@@ -383,8 +399,8 @@ namespace b3d
 		/** @copydoc TryParseAndLookupVariableValue(ValueType, T&) */
 		bool TryParseAndLookupVariableValue(ValueType expectedType, HSpriteImage& outValue);
 
-		/** @copydoc TryParseAndLookupVariableValue(ValueType, T&) */
-		bool TryParseAndLookupVariableValue(ValueType expectedType, HFont& outValue);
+		/** Looks up a variable holding a font family name or a font file path, and resolves it into the family's regular and bold faces. */
+		bool TryParseAndLookupFontFamilyVariableValue(HFont& outRegularFace, HFont& outBoldFace);
 
 		/** Attempts to parse an integer from the provided string. Returns true if successful, and outputs the parsed integer. */
 		bool TryParseInteger(const StringView& toParse, i32& outValue) const;
@@ -430,6 +446,9 @@ namespace b3d
 		 * @name Error handling
 		 * @{
 		 */
+
+		/** Returns the position a diagnostic should be reported at. Falls back to the scanner position when no token is available. */
+		const SourceCodePosition& GetDiagnosticPosition() const;
 
 		/** Records a warning message. */
 		void Warning(const String& message);

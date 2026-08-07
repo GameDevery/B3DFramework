@@ -18,24 +18,25 @@ namespace b3d
 		Right
 	};
 
-	/**	Type of GUI element states. */
-	enum class B3D_SCRIPT_EXPORT(ExportAsStruct(true), DocumentationGroup(GUI)) GUIElementState // TODO - Replace this with bitmask, add disabled state, handle focused+active, hover+active, etc.
+	/**
+	 * States a GUI element may be in. Multiple states can be active at the same time (e.g. an element can be hovered and
+	 * checked), which is why they are combined into GUIElementStates rather than used individually.
+	 */
+	enum class B3D_SCRIPT_EXPORT(DocumentationGroup(GUI)) GUIElementState
 	{
-		Normal = 0x01, /**< Normal state when element is not being interacted with. */
-		Hover = 0x02, /**< State when pointer is hovering over the element. */
-		Active = 0x04, /**< State when element is being clicked. */
-		Focused = 0x08, /**< State when the element has input focus and pointer is not hovering over the element. */
-		FocusedHover = 0x10, /**< State when the element has input focus and pointer is hovering over the element. */
-		NormalOn = 0x101, /**< Same as Normal, if the element is also in the "on" state. */
-		HoverOn = 0x102, /**< Same as Hover, if the element is also in the "on" state. */
-		ActiveOn = 0x104, /**< Same as Active, if the element is also in the "on" state. */
-		FocusedOn = 0x108, /**< Same as Focused, if the element is also in the "on" state. */
-		FocusedHoverOn = 0x110, /**< Same as FocusedHover, if the element is also in the "on" state. */
-
-		// Helpers
-		TypeMask B3D_SCRIPT_EXPORT(Exclude(true)) = 0xFF, /**< Mask for determining the state type (ignoring the on state). */
-		OnFlag B3D_SCRIPT_EXPORT(Exclude(true)) = 0x100 /**< Flag that differentiates between on and off states. */
+		Normal = 0, /**< No state is active, meaning the element is not being interacted with. */
+		Hover = 1 << 0, /**< Pointer is hovering over the element. */
+		Active = 1 << 1, /**< Element is being pressed. */
+		Focus = 1 << 2, /**< Element has keyboard/gamepad input focus. */
+		Disabled = 1 << 3, /**< Element is disabled and does not react to input. */
+		Checked = 1 << 4, /**< Element is toggled on. */
 	};
+
+	using GUIElementStates = Flags<GUIElementState>;
+	B3D_FLAGS_OPERATORS(GUIElementState)
+
+	/** States that only describe an interaction that is in progress, and that therefore cannot apply to a disabled element. */
+	constexpr GUIElementState kGUIInteractionStates = (GUIElementState)((u32)GUIElementState::Hover | (u32)GUIElementState::Active | (u32)GUIElementState::Focus);
 
 	/**	Contains separate GUI content images for every possible GUI element state. */
 	struct B3D_EXPORT B3D_SCRIPT_EXPORT(ExportAsStruct(true), DocumentationGroup(GUI)) GUIContentImages
@@ -96,8 +97,8 @@ namespace b3d
 			: Text(text), Images(image), Tooltip(tooltip)
 		{}
 
-		/**	Returns image content (if any). */
-		const HSpriteImage& GetImage(GUIElementState state = GUIElementState::Normal) const;
+		/**	Returns image content (if any) for the provided combination of element states. */
+		B3D_NO_RREF const HSpriteImage& GetImage(GUIElementStates state = GUIElementState::Normal) const;
 
 		/**	Determines the spacing between text and image content in pixels. */
 		static const GUILogicalUnit kImageTextSpacing;

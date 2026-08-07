@@ -151,7 +151,6 @@ namespace b3d
 		DragState mDragState = DragState::Normal;
 		bool mMouseOverHandle = false;
 		bool mHandleDragged = false;
-		GUIElementState mState = GUIElementState::Normal;
 	};
 
 	/** @} */

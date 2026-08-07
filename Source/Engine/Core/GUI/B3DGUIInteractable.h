@@ -135,6 +135,7 @@ namespace b3d
 		virtual bool DoOnVirtualButtonEvent(const GUIVirtualButtonEvent& event);
 
 		void ChangeParentWidget(GUIWidget* widget) override;
+		void NotifyDisabledChanged() override;
 
 		/** Notifies the system the state flag was added or removed. */
 		virtual void NotifyStateFlagsChanged();
@@ -143,10 +144,16 @@ namespace b3d
 		TShared<GUINavGroup> GetNavigationGroup() const;
 
 		/** Transitions the GUI element into a new state by adding state flags. */
-		void AddStateFlags(GUIElementStateFlags flags);
+		void AddStateFlags(GUIElementStates flags);
 
 		/** Transitions the GUI element into a new state by removing state flags. */
-		void RemoveStateFlags(GUIElementStateFlags flags);
+		void RemoveStateFlags(GUIElementStates flags);
+
+		/** Transitions the GUI element into the provided set of states, replacing the states it is currently in. */
+		void SetStateFlags(GUIElementStates flags);
+
+		/** Returns the set of states the GUI element is currently in. */
+		GUIElementStates GetStateFlags() const { return mStateFlags; }
 
 		/**	Checks if the GUI element has a custom cursor and outputs the cursor type if it does. */
 		virtual bool HasCustomCursor(const GUIPhysicalPoint& position, CursorType& type) const { return false; }

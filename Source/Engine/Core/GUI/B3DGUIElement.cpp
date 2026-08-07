@@ -502,13 +502,13 @@ void GUIElement::SetDisabledRecursive(bool disabled)
 	if(!disabled)
 	{
 		bool disabledSelf = mFlags.IsSet(GUIElementInternalStateFlag::DisabledSelf);
-		if(!disabledSelf)
-		{
-			mFlags.Unset(GUIElementInternalStateFlag::Disabled);
+		if(disabledSelf)
+			return;
 
-			for(auto& child : mChildren)
-				child->SetDisabledRecursive(false);
-		}
+		mFlags.Unset(GUIElementInternalStateFlag::Disabled);
+
+		for(auto& child : mChildren)
+			child->SetDisabledRecursive(false);
 	}
 	else
 	{
@@ -518,6 +518,7 @@ void GUIElement::SetDisabledRecursive(bool disabled)
 			child->SetDisabledRecursive(true);
 	}
 
+	NotifyDisabledChanged();
 	MarkContentAsDirty();
 }
 

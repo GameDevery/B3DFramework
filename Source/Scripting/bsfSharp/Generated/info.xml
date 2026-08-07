@@ -8748,36 +8748,24 @@ Optionally if the parameter is an array you may provide an array index you which
 		</enumentry>
 	</enum>
 	<enum native="GUIElementState" script="GUIElementState">
-		<doc>Type of GUI element states.</doc>
-		<enumentry native="ActiveOn" script="ActiveOn">
-			<doc>Same as Active, if the element is also in the &quot;on&quot; state.</doc>
-		</enumentry>
-		<enumentry native="Focused" script="Focused">
-			<doc>State when the element has input focus and pointer is not hovering over the element.</doc>
-		</enumentry>
+		<doc>States a GUI element may be in. Multiple states can be active at the same time (e.g. an element can be hovered and checked), which is why they are combined into GUIElementStates rather than used individually.</doc>
 		<enumentry native="Normal" script="Normal">
-			<doc>Normal state when element is not being interacted with.</doc>
+			<doc>No state is active, meaning the element is not being interacted with.</doc>
 		</enumentry>
 		<enumentry native="Hover" script="Hover">
-			<doc>State when pointer is hovering over the element.</doc>
+			<doc>Pointer is hovering over the element.</doc>
 		</enumentry>
 		<enumentry native="Active" script="Active">
-			<doc>State when element is being clicked.</doc>
+			<doc>Element is being pressed.</doc>
 		</enumentry>
-		<enumentry native="FocusedHover" script="FocusedHover">
-			<doc>State when the element has input focus and pointer is hovering over the element.</doc>
+		<enumentry native="Focus" script="Focus">
+			<doc>Element has keyboard/gamepad input focus.</doc>
 		</enumentry>
-		<enumentry native="NormalOn" script="NormalOn">
-			<doc>Same as Normal, if the element is also in the &quot;on&quot; state.</doc>
+		<enumentry native="Disabled" script="Disabled">
+			<doc>Element is disabled and does not react to input.</doc>
 		</enumentry>
-		<enumentry native="HoverOn" script="HoverOn">
-			<doc>Same as Hover, if the element is also in the &quot;on&quot; state.</doc>
-		</enumentry>
-		<enumentry native="FocusedOn" script="FocusedOn">
-			<doc>Same as Focused, if the element is also in the &quot;on&quot; state.</doc>
-		</enumentry>
-		<enumentry native="FocusedHoverOn" script="FocusedHoverOn">
-			<doc>Same as FocusedHover, if the element is also in the &quot;on&quot; state.</doc>
+		<enumentry native="Checked" script="Checked">
+			<doc>Element is toggled on.</doc>
 		</enumentry>
 	</enum>
 	<struct native="GUIScrollAreaContent" script="GUIScrollAreaContent">

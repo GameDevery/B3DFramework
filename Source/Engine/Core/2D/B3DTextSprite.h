@@ -33,14 +33,20 @@ namespace b3d
 	{
 		TextSpriteInformation() = default;
 
-		/** Initializes the sprite information from data provided by the style sheet. */
-		void InitializeFromStyleSheetRules(const GUIStyleSheetRules& rules);
+		/**
+		 * Initializes the sprite information from data provided by the style sheet.
+		 *
+		 * @param	rules	Resolved style sheet rules to read the text properties from.
+		 * @param	scale	Scale to convert the logical units used by the style sheet into physical pixels.
+		 */
+		void InitializeFromStyleSheetRules(const GUIStyleSheetRules& rules, float scale = 1.0f);
 
 		SpriteAnchor Anchor = SA_TopLeft; /**< Determines how to anchor the text within the bounds. */
 
 		String Text; /**< UTF-8 encoded text to generate geometry for. */
 		HFont Font; /**< Font containing the data about character glyphs. */
 		float FontSize = 0.0f; /**< Size of the font to use when displaying the text, in points. */
+		TextMetrics Metrics; /**< Typographic controls applied on top of the metrics reported by the font. */
 		GUIHorizontalTextAlignment HorzAlign = GUIHorizontalTextAlignment::Left; /**< Specifies how is text horizontally aligned within its bounds. */
 		GUIVerticalTextAlignment VertAlign = GUIVerticalTextAlignment::Top; /**< Specifies how is text vertically aligned within its bounds. */
 		bool WordWrap = false; /**< If true the text will word wrap when it doesn't fit, otherwise it will overflow. */

@@ -30,7 +30,10 @@ namespace b3d
 
 		/** Returns errors that occurred during scanning, if any. */
 		const String& GetErrors() const { return mErrors; }
-		
+
+		/** Returns the position the scanner has reached. Remains valid after a failed scan, when no token is available to report a position. */
+		const SourceCodePosition& GetCurrentPosition() const { return mCurrentPosition; }
+
 	private:
 		/** Checks is the current character a newline character. */
 		bool IsCurrentCharacterNewLine() const { return (mCurrentCharacter == '\n' || mCurrentCharacter == '\r'); }
@@ -40,6 +43,12 @@ namespace b3d
 
 		/** Returns the current character. */
 		char GetCurrentCharacter() const { return mCurrentCharacter; }
+
+		/** Returns the character following the current one, without advancing the stream. */
+		char PeekNextCharacter();
+
+		/** Returns true if the current and the following character open a line ('//') or a block ('/*') comment. */
+		bool IsCurrentCharacterCommentStart();
 
 		/** Returns the current character and advances to the next character. */
 		char GetCurrentCharacterAndAdvance();
@@ -113,6 +122,9 @@ namespace b3d
 		/** Tries to scan the next token as a number. Returns null if the scanning failed. */
 		TOptional<Token> ScanNumber(bool isStartingWithDot);
 
+		/** Advances the stream past a line or a block comment. Returns false if a block comment is left unterminated. */
+		bool SkipComment();
+
 		/** Records an error message and returns null. */
 		TOptional<Token> Error(const String& message);
 
@@ -124,6 +136,7 @@ namespace b3d
 
 		TShared<SourceCode> mSourceCode;
 		char mCurrentCharacter = 0;
+		TOptional<char> mPeekedCharacter;
 		SourceCodePosition mCurrentPosition;
 		String mErrors;
 

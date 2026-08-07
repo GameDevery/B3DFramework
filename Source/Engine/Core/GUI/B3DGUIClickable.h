@@ -58,9 +58,6 @@ namespace b3d
 		 */
 		bool IsOnInternal() const;
 
-		/**	Change the internal button state, changing the button look depending on set style. */
-		void SetStateInternal(GUIElementState state);
-
 		GUILogicalSize CalculateUnconstrainedOptimalSize() const override;
 		u32 GetRenderElementDepthRange() const override;
 		const char* GetStyleSheetElement() const override { return kElementType; }
@@ -75,17 +72,16 @@ namespace b3d
 		bool DoOnCommandEvent(const GUICommandEvent& event) override;
 		String GetTooltip() const override;
 		void NotifyStyleChanged() override;
+		void NotifyStateFlagsChanged() override;
 
-		/**	Retrieves internal button state. */
-		GUIElementState GetState() const { return mActiveState; }
+		/**	Retrieves the set of states the button is currently in. */
+		GUIElementStates GetState() const { return mStateFlags; }
 
 	protected:
 		GUIBackgroundSprite mBackgroundSprite;
 		GUIContentSprites mContentSprites;
-		GUIElementState mActiveState = GUIElementState::Normal;
 
 		GUIContent mContent;
-		bool mHasFocus = false;
 	};
 
 	/** @} */

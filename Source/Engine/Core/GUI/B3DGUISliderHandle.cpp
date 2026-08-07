@@ -97,8 +97,7 @@ bool GUISliderHandle::DoOnMouseEvent(const GUIMouseEvent& ev)
 				{
 					mMouseOverHandle = false;
 
-					mState = GUIElementState::Normal;
-					RemoveStateFlags(GUIElementStateFlag::Hover);
+					RemoveStateFlags(GUIElementState::Hover);
 					MarkLayoutAsDirty();
 
 					return true;
@@ -110,8 +109,7 @@ bool GUISliderHandle::DoOnMouseEvent(const GUIMouseEvent& ev)
 				{
 					mMouseOverHandle = true;
 
-					mState = GUIElementState::Hover;
-					AddStateFlags(GUIElementStateFlag::Hover);
+					AddStateFlags(GUIElementState::Hover);
 					MarkLayoutAsDirty();
 
 					return true;
@@ -125,8 +123,7 @@ bool GUISliderHandle::DoOnMouseEvent(const GUIMouseEvent& ev)
 	{
 		if(!IsDisabled())
 		{
-			mState = GUIElementState::Active;
-			AddStateFlags(GUIElementStateFlag::Active);
+			AddStateFlags(GUIElementState::Active);
 			MarkLayoutAsDirty();
 
 			if(jumpOnClick)
@@ -268,13 +265,10 @@ bool GUISliderHandle::DoOnMouseEvent(const GUIMouseEvent& ev)
 		if(!IsDisabled())
 		{
 			mMouseOverHandle = false;
-			RemoveStateFlags(GUIElementStateFlag::Hover);
+			RemoveStateFlags(GUIElementState::Hover);
 
 			if(!mHandleDragged)
-			{
-				mState = GUIElementState::Normal;
 				MarkLayoutAsDirty();
-			}
 		}
 
 		return true;
@@ -284,12 +278,7 @@ bool GUISliderHandle::DoOnMouseEvent(const GUIMouseEvent& ev)
 	{
 		if(!IsDisabled())
 		{
-			if(mMouseOverHandle)
-				mState = GUIElementState::Hover;
-			else
-				mState = GUIElementState::Normal;
-
-			RemoveStateFlags(GUIElementStateFlag::Active);
+			RemoveStateFlags(GUIElementState::Active);
 			if(!mHandleDragged)
 			{
 				// If we clicked above or below the scroll handle, scroll by one page
@@ -331,12 +320,7 @@ bool GUISliderHandle::DoOnMouseEvent(const GUIMouseEvent& ev)
 		if(!IsDisabled())
 		{
 			mHandleDragged = false;
-			if(mMouseOverHandle)
-				mState = GUIElementState::Hover;
-			else
-				mState = GUIElementState::Normal;
-
-			RemoveStateFlags(GUIElementStateFlag::Active);
+			RemoveStateFlags(GUIElementState::Active);
 			MarkLayoutAsDirty();
 		}
 

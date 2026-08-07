@@ -19,6 +19,7 @@
 #include "TestSuites/B3DSceneObjectTransformTestSuite.h"
 #include "TestSuites/B3DRenderableTestSuite.h"
 #include "TestSuites/B3DImporterTestSuite.h"
+#include "TestSuites/B3DGUIStyleSheetTestSuite.h"
 
 #include "Debug/B3DDebug.h"
 
@@ -54,6 +55,7 @@ namespace b3d
 			registry.RegisterSuite(TestSuite::Create<SceneObjectTransformTestSuite>());
 			registry.RegisterSuite(TestSuite::Create<RenderableTestSuite>());
 			registry.RegisterSuite(TestSuite::Create<ImporterTestSuite>());
+			registry.RegisterSuite(TestSuite::Create<GUIStyleSheetTestSuite>());
 		}
 		else if (layer == TestLayer::Plugins)
 		{

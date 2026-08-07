@@ -53,6 +53,9 @@ GUIStyleSheetParser::GUIStyleSheetParser()
 	mPropertyKeywords["vertical-align"] = { GUIStyleSheetPropertyType::VerticalAlign, ValueType::VerticalAlign };
 	mPropertyKeywords["font-family"] = { GUIStyleSheetPropertyType::FontFamily, ValueType::Multiple };
 	mPropertyKeywords["font-size"] = { GUIStyleSheetPropertyType::FontSize, ValueType::Decimal };
+	mPropertyKeywords["font-weight"] = { GUIStyleSheetPropertyType::FontWeight, ValueType::FontWeight };
+	mPropertyKeywords["line-height"] = { GUIStyleSheetPropertyType::LineHeight, ValueType::Decimal };
+	mPropertyKeywords["letter-spacing"] = { GUIStyleSheetPropertyType::LetterSpacing, ValueType::Pixel };
 	mPropertyKeywords["b3d-word-wrap"] = { GUIStyleSheetPropertyType::WordWrap, ValueType::WordWrap };
 
 	// Other properties
@@ -92,6 +95,10 @@ TShared<GUIStyleSheet> GUIStyleSheetParser::Parse(const TShared<SourceCode>& sou
 
 	// Grabs the first token
 	GetCurrentTokenAndAdvance();
+
+	// Scanning can fail before the first token is produced, in which case there is nothing to parse
+	if(!mCurrentToken.has_value())
+		return nullptr;
 
 	mGlobalVariableContext = VariableContext();
 	mParsedRulesets.clear();
@@ -142,6 +149,11 @@ bool GUIStyleSheetParser::TryParseRuleset()
 		{
 			if(!TryParseProperty(ruleset.Rules))
 				return false;
+		}
+		else
+		{
+			ErrorUnexpected();
+			return false;
 		}
 	}
 
@@ -280,11 +292,23 @@ bool GUIStyleSheetParser::TryParseProperty(GUIStyleSheetRules& inOutValue)
 			CASE_PARSE(Visibility, Visibility)
 
 			// Text
-			CASE_PARSE(FontFamily, Font)
 			CASE_PARSE(FontSize, FontSize)
+			CASE_PARSE(FontWeight, FontWeight)
+			CASE_PARSE(LineHeight, LineHeight)
+			CASE_PARSE(LetterSpacing, LetterSpacing)
 			CASE_PARSE(TextAlign, HorizontalTextAlignment)
 			CASE_PARSE(VerticalAlign, VerticalTextAlignment)
 			CASE_PARSE(WordWrap, WordWrap)
+
+				// TODO - To be refactored with native FontFamily support
+		case GUIStyleSheetPropertyType::FontFamily:
+			{
+				if(!TryParseFontFamily(inOutValue.Font, inOutValue.BoldFont))
+					return false;
+
+				inOutValue.OverridenProperties[(u32)GUIStyleSheetPropertyType::FontFamily] = true;
+				break;
+			}
 
 			// Border
 			CASE_PARSE(BorderLeftWidth, BorderLeft.Width)
@@ -558,7 +582,7 @@ bool GUIStyleSheetParser::TryParseVariable(VariableContext& inOutVariableContext
 	}
 	case GUIStyleSheetTokenTypes::PixelsLiteral:
 	{
-		if(!TryParsePixelLiteral(value.SignedInteger))
+		if(!TryParsePixelLiteral(value.Float))
 			return false;
 
 		value.Type = ValueType::Pixel;
@@ -629,6 +653,16 @@ bool GUIStyleSheetParser::TryParseVariable(VariableContext& inOutVariableContext
 
 		value.UnsignedInteger = (u32)parsedValue;
 		value.Type = ValueType::WordWrap;
+		break;
+	}
+	case GUIStyleSheetTokenTypes::FontWeight:
+	{
+		GUIFontWeight parsedValue;
+		if(!TryParseFontWeight(parsedValue))
+			return false;
+
+		value.UnsignedInteger = (u32)parsedValue;
+		value.Type = ValueType::FontWeight;
 		break;
 	}
 	default:
@@ -722,13 +756,23 @@ bool GUIStyleSheetParser::TryParseIntegerLiteral(u32& outValue)
 	return true;
 }
 
-bool GUIStyleSheetParser::TryParsePixelLiteral(i32& outValue)
+bool GUIStyleSheetParser::TryParsePixelLiteral(float& outValue)
 {
 	TOptional<GUIStyleSheetToken> token = GetCurrentTokenAndAdvance(GUIStyleSheetTokenTypes::PixelsLiteral);
 	if(!token)
 		return false;
 
-	return TryParseInteger(token->GetSpelling(), outValue);
+	return TryParseFloat(token->GetSpelling(), outValue);
+}
+
+bool GUIStyleSheetParser::TryParsePixelLiteral(i32& outValue)
+{
+	float floatValue;
+	if(!TryParsePixelLiteral(floatValue))
+		return false;
+
+	outValue = Math::RoundToI32(floatValue);
+	return true;
 }
 
 bool GUIStyleSheetParser::TryParsePixelLiteral(u32& outValue)
@@ -982,13 +1026,21 @@ bool GUIStyleSheetParser::TryParseImage(HSpriteImage& outValue)
 	return true;
 }
 
-bool GUIStyleSheetParser::TryParseFont(HFont& outValue)
+bool GUIStyleSheetParser::TryParseFontFamily(HFont& outRegularFace, HFont& outBoldFace)
 {
+	if(IsCurrentToken(GUIStyleSheetTokenTypes::Variable))
+		return TryParseAndLookupFontFamilyVariableValue(outRegularFace, outBoldFace);
+
 	const bool isURL = IsCurrentToken(GUIStyleSheetTokenTypes::URL);
 	const bool isStringLiteral = IsCurrentToken(GUIStyleSheetTokenTypes::StringLiteral);
 
 	if(!isURL && !isStringLiteral)
+	{
+		ErrorUnexpected();
 		return false;
+	}
+
+	outBoldFace = nullptr;
 
 	if(isStringLiteral)
 	{
@@ -996,9 +1048,10 @@ bool GUIStyleSheetParser::TryParseFont(HFont& outValue)
 		if(!TryParseStringLiteral(fontFamily))
 			return false;
 
-		outValue = GetBuiltinResources().GetFont(fontFamily);
+		outRegularFace = GetBuiltinResources().GetFont(fontFamily);
+		outBoldFace = GetBuiltinResources().GetBoldFont(fontFamily);
 
-		if(!outValue.IsLoaded(false))
+		if(!outRegularFace.IsLoaded(false))
 			Warning(StringUtility::Format("Unable to load font family \"{0}\".", fontFamily));
 	}
 	else
@@ -1009,13 +1062,33 @@ bool GUIStyleSheetParser::TryParseFont(HFont& outValue)
 		if(!TryParseURL(url))
 			return false;
 
-		outValue = GetResources().Load<Font>(url, ResourceLoadOptions(false));
+		outRegularFace = GetResources().Load<Font>(url, ResourceLoadOptions(false));
 
-		if(!outValue.IsLoaded(false))
+		if(!outRegularFace.IsLoaded(false))
 			Warning(StringUtility::Format("Unable to load font at path \"{0}\".", url));
 	}
 
 	return true;
+}
+
+bool GUIStyleSheetParser::TryParseFontWeight(GUIFontWeight& outValue)
+{
+	TOptional<GUIStyleSheetToken> token = GetCurrentTokenAndAdvance(GUIStyleSheetTokenTypes::FontWeight);
+	if(!token)
+		return false;
+
+	if(token->GetSpelling() == "normal")
+	{
+		outValue = GUIFontWeight::Normal;
+		return true;
+	}
+	if(token->GetSpelling() == "bold")
+	{
+		outValue = GUIFontWeight::Bold;
+		return true;
+	}
+
+	return false;
 }
 
 bool GUIStyleSheetParser::TryParseBorderStyle(GUIBorderElementStyle& outValue)
@@ -1255,6 +1328,8 @@ bool GUIStyleSheetParser::TryParsePropertyValue(ValueType valueType, T& outValue
 			return TryParseDecimalLiteral(outValue);
 		if(valueType == ValueType::Percent)
 			return TryParsePercentLiteral(outValue);
+		if(valueType == ValueType::Pixel)
+			return TryParsePixelLiteral(outValue);
 	}
 	else if constexpr(std::is_same_v<T, String>)
 		return TryParseStringLiteral(outValue);
@@ -1270,10 +1345,10 @@ bool GUIStyleSheetParser::TryParsePropertyValue(ValueType valueType, T& outValue
 		return TryParseWordWrapMode(outValue);
 	else if constexpr(std::is_same_v<T, GUIElementVisibility>)
 		return TryParseVisibility(outValue);
+	else if constexpr(std::is_same_v<T, GUIFontWeight>)
+		return TryParseFontWeight(outValue);
 	else if constexpr(std::is_same_v<T, HSpriteImage>)
 		return TryParseImage(outValue);
-	else if constexpr(std::is_same_v<T, HFont>)
-		return TryParseFont(outValue);
 
 	Error("Internal error.");
 	return false;
@@ -1381,11 +1456,13 @@ bool GUIStyleSheetParser::TryParseAndLookupVariableValue(ValueType expectedType,
 	return true;
 }
 
-bool GUIStyleSheetParser::TryParseAndLookupVariableValue(ValueType expectedType, HFont& outValue)
+bool GUIStyleSheetParser::TryParseAndLookupFontFamilyVariableValue(HFont& outRegularFace, HFont& outBoldFace)
 {
 	VariableValue value;
-	if(!TryParseAndLookupVariableValue(expectedType, value))
+	if(!TryParseAndLookupVariableValue(ValueType::Multiple, value))
 		return false;
+
+	outBoldFace = nullptr;
 
 	if(value.Type == ValueType::URL)
 	{
@@ -1393,9 +1470,9 @@ bool GUIStyleSheetParser::TryParseAndLookupVariableValue(ValueType expectedType,
 		value.GetValue(stringLiteralIndex);
 
 		const Path filePath = mStringLiterals[stringLiteralIndex];
-		outValue = GetResources().Load<Font>(filePath, ResourceLoadOptions(false));
+		outRegularFace = GetResources().Load<Font>(filePath, ResourceLoadOptions(false));
 
-		if(!outValue.IsLoaded(false))
+		if(!outRegularFace.IsLoaded(false))
 			Warning(StringUtility::Format("Unable to load font at path \"{0}\".", filePath));
 	}
 	else if(value.Type == ValueType::String)
@@ -1404,9 +1481,10 @@ bool GUIStyleSheetParser::TryParseAndLookupVariableValue(ValueType expectedType,
 		value.GetValue(stringLiteralIndex);
 
 		const String& fontFamily = mStringLiterals[stringLiteralIndex];
-		outValue = GetBuiltinResources().GetFont(fontFamily); // TODO - Add improved lookup of fonts by name
+		outRegularFace = GetBuiltinResources().GetFont(fontFamily); // TODO - Add improved lookup of fonts by name
+		outBoldFace = GetBuiltinResources().GetBoldFont(fontFamily);
 
-		if(!outValue.IsLoaded(false))
+		if(!outRegularFace.IsLoaded(false))
 			Warning(StringUtility::Format("Unable to load font family \"{0}\".", fontFamily));
 	}
 	else
@@ -1556,32 +1634,46 @@ void GUIStyleSheetParser::SkipToken(TokenType type)
 	GetCurrentTokenAndAdvance(type);
 }
 
+const SourceCodePosition& GUIStyleSheetParser::GetDiagnosticPosition() const
+{
+	return mCurrentToken.has_value() ? mCurrentToken->GetSourceCodePosition() : mLexer.GetCurrentPosition();
+}
+
 void GUIStyleSheetParser::Warning(const String& message)
 {
-	mWarnings << StringUtility::Format("Parser warning ({0}): {1}", mCurrentToken->GetSourceCodePosition().ToString(), message) << '\n';
+	mWarnings << StringUtility::Format("Parser warning ({0}): {1}", GetDiagnosticPosition().ToString(), message) << '\n';
 }
 
 TOptional<GUIStyleSheetParser::Token> GUIStyleSheetParser::Error(const String& message)
 {
-	mErrors = StringUtility::Format("Parser error ({0}): {1}", mCurrentToken->GetSourceCodePosition().ToString(), message);
+	mErrors = StringUtility::Format("Parser error ({0}): {1}", GetDiagnosticPosition().ToString(), message);
 	return {};
 }
 
 TOptional<GUIStyleSheetParser::Token> GUIStyleSheetParser::ErrorUnexpected()
 {
-	mErrors = StringUtility::Format("Parser error ({0}): Unexpected token '{1}'", mCurrentToken->GetSourceCodePosition().ToString(), Token::TypeToString(mCurrentToken->GetType()));
+	if(!mCurrentToken.has_value())
+		return Error("Unexpected end of input.");
+
+	mErrors = StringUtility::Format("Parser error ({0}): Unexpected token '{1}'", GetDiagnosticPosition().ToString(), Token::TypeToString(mCurrentToken->GetType()));
 	return {};
 }
 
 TOptional<GUIStyleSheetParser::Token> GUIStyleSheetParser::ErrorUnexpected(TokenType expectedTokenType)
 {
-	mErrors = StringUtility::Format("Parser error ({0}): Unexpected token '{1}', expected '{2}'", mCurrentToken->GetSourceCodePosition().ToString(), Token::TypeToString(mCurrentToken->GetType()), Token::TypeToString(expectedTokenType));
+	if(!mCurrentToken.has_value())
+		return Error(StringUtility::Format("Unexpected end of input, expected '{0}'.", Token::TypeToString(expectedTokenType)));
+
+	mErrors = StringUtility::Format("Parser error ({0}): Unexpected token '{1}', expected '{2}'", GetDiagnosticPosition().ToString(), Token::TypeToString(mCurrentToken->GetType()), Token::TypeToString(expectedTokenType));
 	return {};
 }
 
 TOptional<GUIStyleSheetParser::Token> GUIStyleSheetParser::ErrorUnexpected(const String& expectedTokenSpelling)
 {
-	mErrors = StringUtility::Format("Parser error ({0}): Unexpected spelling for token '{1}' ({2}), expected '{3}'", mCurrentToken->GetSourceCodePosition().ToString(), Token::TypeToString(mCurrentToken->GetType()), mCurrentToken->GetSpelling(), expectedTokenSpelling);
+	if(!mCurrentToken.has_value())
+		return Error(StringUtility::Format("Unexpected end of input, expected '{0}'.", expectedTokenSpelling));
+
+	mErrors = StringUtility::Format("Parser error ({0}): Unexpected spelling for token '{1}' ({2}), expected '{3}'", GetDiagnosticPosition().ToString(), Token::TypeToString(mCurrentToken->GetType()), mCurrentToken->GetSpelling(), expectedTokenSpelling);
 	return {};
 }
 
@@ -1603,6 +1695,7 @@ const char* GUIStyleSheetParser::ValueTypeToString(ValueType type)
 	case ValueType::TextAlign: return "TextAlign";
 	case ValueType::VerticalAlign: return "VerticalAlign";
 	case ValueType::WordWrap: return "WordWrap";
+	case ValueType::FontWeight: return "FontWeight";
 	case ValueType::Visibility: return "Visibility";
 	case ValueType::None: return "None";
 	}

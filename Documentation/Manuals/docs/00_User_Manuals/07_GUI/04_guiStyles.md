@@ -35,6 +35,8 @@ button
 }
 ~~~~~~~~~~~~~
 
+Both `/* … */` block comments and `//` line comments are supported anywhere whitespace is allowed.
+
 # Selectors
 
 Style sheets support several types of selectors to target specific GUI elements:
@@ -230,6 +232,9 @@ label
 {
     font-family: "Arial";
     font-size: 10;
+    font-weight: bold; /* or normal */
+    line-height: 1.2;
+    letter-spacing: -0.1px;
     text-align: center; /* left, center, right */
     vertical-align: middle; /* top, middle, bottom */
     word-wrap: wrap-word; /* or none */
@@ -239,9 +244,17 @@ label
 Properties:
 - `font-family` - Font name (must be imported)
 - `font-size` - Font size in points
+- `font-weight` - Selects the regular or the bold face of the font family
+- `line-height` - Multiplier applied to the line height reported by the font
+- `letter-spacing` - Extra space inserted after every character, in pixels. Negative values tighten the text
 - `text-align` - Horizontal text alignment
 - `vertical-align` - Vertical text alignment
 - `word-wrap` - Text wrapping behavior
+
+`font-weight: bold` looks for a bold face belonging to the same family as `font-family`, matched by
+name: for a family named `Inter` it picks up `InterBold`, `InterSemiBold`, `Inter-Bold` or
+`Inter-SemiBold`, whichever is imported first. If the family has no bold face the regular one is
+used, so weight never blanks out text.
 
 ## Border properties
 

@@ -37,26 +37,21 @@ void GUIClickable::SetContent(const GUIContent& content)
 void GUIClickable::SetOnInternal(bool on)
 {
 	if(on)
-		AddStateFlags(GUIElementStateFlag::Checked);
+		AddStateFlags(GUIElementState::Checked);
 	else
-		RemoveStateFlags(GUIElementStateFlag::Checked);
-
-	if(on)
-		SetStateInternal((GUIElementState)((i32)mActiveState | (i32)GUIElementState::OnFlag));
-	else
-		SetStateInternal((GUIElementState)((i32)mActiveState & ~(i32)GUIElementState::OnFlag));
+		RemoveStateFlags(GUIElementState::Checked);
 }
 
 bool GUIClickable::IsOnInternal() const
 {
-	return ((i32)mActiveState & (i32)GUIElementState::OnFlag) != 0;
+	return mStateFlags.IsSet(GUIElementState::Checked);
 }
 
 void GUIClickable::UpdateRenderElements()
 {
 	mRenderElements.clear();
-	GUISpriteHelper::BuildSpriteRenderElements(*this, mActiveState, mBackgroundSprite);
-	GUISpriteHelper::BuildSpriteRenderElements(*this, mActiveState, mContent, mContentSprites);
+	GUISpriteHelper::BuildSpriteRenderElements(*this, mBackgroundSprite);
+	GUISpriteHelper::BuildSpriteRenderElements(*this, mContent, mContentSprites);
 
 	GUIInteractable::UpdateRenderElements();
 }
@@ -84,13 +79,7 @@ bool GUIClickable::DoOnMouseEvent(const GUIMouseEvent& event)
 	{
 		if(!IsDisabled())
 		{
-			AddStateFlags(GUIElementStateFlag::Hover);
-
-			if(mHasFocus)
-				SetStateInternal(IsOnInternal() ? GUIElementState::FocusedHoverOn : GUIElementState::FocusedHover);
-			else
-				SetStateInternal(IsOnInternal() ? GUIElementState::HoverOn : GUIElementState::Hover);
-
+			AddStateFlags(GUIElementState::Hover);
 			OnHover();
 		}
 
@@ -100,13 +89,7 @@ bool GUIClickable::DoOnMouseEvent(const GUIMouseEvent& event)
 	{
 		if(!IsDisabled())
 		{
-			RemoveStateFlags(GUIElementStateFlag::Hover | GUIElementStateFlag::Active);
-
-			if(mHasFocus)
-				SetStateInternal(IsOnInternal() ? GUIElementState::FocusedOn : GUIElementState::Focused);
-			else
-				SetStateInternal(IsOnInternal() ? GUIElementState::NormalOn : GUIElementState::Normal);
-
+			RemoveStateFlags(GUIElementState::Hover | GUIElementState::Active);
 			OnOut();
 		}
 
@@ -115,10 +98,7 @@ bool GUIClickable::DoOnMouseEvent(const GUIMouseEvent& event)
 	else if(event.GetType() == GUIMouseEventType::MouseDown)
 	{
 		if(!IsDisabled())
-		{
-			AddStateFlags(GUIElementStateFlag::Active);
-			SetStateInternal(IsOnInternal() ? GUIElementState::ActiveOn : GUIElementState::Active);
-		}
+			AddStateFlags(GUIElementState::Active);
 
 		return !mOptionFlags.IsSet(GUIElementOption::ClickThrough);
 	}
@@ -126,13 +106,7 @@ bool GUIClickable::DoOnMouseEvent(const GUIMouseEvent& event)
 	{
 		if(!IsDisabled())
 		{
-			RemoveStateFlags(GUIElementStateFlag::Active);
-
-			if(mHasFocus)
-				SetStateInternal(IsOnInternal() ? GUIElementState::FocusedHoverOn : GUIElementState::FocusedHover);
-			else
-				SetStateInternal(IsOnInternal() ? GUIElementState::HoverOn : GUIElementState::Hover);
-
+			RemoveStateFlags(GUIElementState::Active);
 			OnClick();
 		}
 
@@ -153,33 +127,16 @@ bool GUIClickable::DoOnCommandEvent(const GUICommandEvent& event)
 {
 	const bool baseReturnValue = GUIInteractable::DoOnCommandEvent(event);
 
-	GUIElementState state = (GUIElementState)((u32)mActiveState & (u32)GUIElementState::TypeMask);
 	if(event.GetType() == GUICommandEventType::FocusGained)
 	{
-		mHasFocus = true;
-
 		if(!IsDisabled())
-		{
-			AddStateFlags(GUIElementStateFlag::Focus);
-
-			if(state == GUIElementState::Normal)
-				SetStateInternal(IsOnInternal() ? GUIElementState::FocusedOn : GUIElementState::Focused);
-			else if(state == GUIElementState::Hover)
-				SetStateInternal(IsOnInternal() ? GUIElementState::FocusedHoverOn : GUIElementState::FocusedHover);
-		}
+			AddStateFlags(GUIElementState::Focus);
 
 		return true;
 	}
 	else if(event.GetType() == GUICommandEventType::FocusLost)
 	{
-		mHasFocus = false;
-		RemoveStateFlags(GUIElementStateFlag::Focus);
-
-		if(state == GUIElementState::Focused)
-			SetStateInternal(IsOnInternal() ? GUIElementState::NormalOn : GUIElementState::Normal);
-		else if(state == GUIElementState::FocusedHover)
-			SetStateInternal(IsOnInternal() ? GUIElementState::HoverOn : GUIElementState::Hover);
-
+		RemoveStateFlags(GUIElementState::Focus);
 		return true;
 	}
 
@@ -196,19 +153,9 @@ void GUIClickable::NotifyStyleChanged()
 	mBackgroundSprite.SetAnimationStartTime(GetTime().GetRealTimeInSeconds());
 }
 
-void GUIClickable::SetStateInternal(GUIElementState state)
+void GUIClickable::NotifyStateFlagsChanged()
 {
-	GUILogicalSize originalSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
+	GUIInteractable::NotifyStateFlagsChanged();
 
-	if(mActiveState != state)
-		mBackgroundSprite.SetAnimationStartTime(GetTime().GetRealTimeInSeconds());
-
-	mActiveState = state;
-
-	GUILogicalSize newSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-
-	if(originalSize != newSize)
-		MarkLayoutAsDirty();
-	else
-		MarkContentAsDirty();
+	mBackgroundSprite.SetAnimationStartTime(GetTime().GetRealTimeInSeconds());
 }

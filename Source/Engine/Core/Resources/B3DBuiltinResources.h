@@ -145,6 +145,15 @@ namespace b3d
 		B3D_NO_RREF HFont GetFont(const String& font) const; // TODO: This needs to perform a lookup in the project library. See method implementation for more information.
 
 		/**
+		 * Attempts to return the bold face belonging to the given font family. Faces are matched by name, by appending one of the
+		 * recognized bold suffixes (e.g. "Inter" resolves to "InterSemiBold"). Returns null if the family provides no bold face.
+		 */
+		B3D_NO_RREF HFont GetBoldFont(const String& font) const; // TODO - To be replaced with FontFamily system
+
+		/** Returns the virtual path of the font file with the provided name, or nothing if no such font is available. */
+		TOptional<Path> TryResolveFontPath(const String& font) const;
+
+		/**
 		 * Loads the shader with the specified name from the cache if available, or compiles the shader from source if not available.
 		 *
 		 * @param	path		Absolute path to the shader source file.

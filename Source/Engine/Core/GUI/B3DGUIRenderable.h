@@ -3,6 +3,7 @@
 #pragma once
 
 #include "B3DPrerequisites.h"
+#include "GUI/B3DGUIContent.h"
 #include "GUI/B3DGUIElement.h"
 #include "2D/B3DSprite.h"
 #include "Math/B3DArea2.h"
@@ -15,21 +16,6 @@ namespace b3d
 	/** @addtogroup GUI-Internal
 	 *  @{
 	 */
-
-	/** Flags that determine the state that a GUI element may be in. */
-	enum class GUIElementStateFlag
-	{
-		Normal = 0,
-		Hover = 1 << 0,
-		Active = 1 << 1,
-		Focus = 1 << 2,
-		Disabled = 1 << 3,
-		Checked = 1 << 4,
-		Count = 5
-	};
-
-	using GUIElementStateFlags = Flags<GUIElementStateFlag>;
-	B3D_FLAGS_OPERATORS(GUIElementStateFlag)
 
 	/** Contains information about a single renderable element within a GUIElement. */
 	struct GUIRenderElement : SpriteRenderElement
@@ -245,7 +231,7 @@ namespace b3d
 		static const Color kDisabledColor;
 
 		TInlineArray<GUIRenderElement, 4> mRenderElements;
-		GUIElementStateFlags mStateFlags = GUIElementStateFlag::Normal;
+		GUIElementStates mStateFlags = GUIElementState::Normal;
 
 		Color mColor;
 

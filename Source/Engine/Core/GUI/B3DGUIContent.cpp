@@ -6,29 +6,19 @@ using namespace b3d;
 
 const GUILogicalUnit GUIContent::kImageTextSpacing = 3;
 
-const HSpriteImage& GUIContent::GetImage(GUIElementState state) const
+const HSpriteImage& GUIContent::GetImage(GUIElementStates state) const
 {
-	switch(state)
-	{
-	case GUIElementState::Normal:
-		return Images.Normal;
-	case GUIElementState::Hover:
-		return Images.Hover;
-	case GUIElementState::Active:
-		return Images.Active;
-	case GUIElementState::Focused:
-	case GUIElementState::FocusedHover:
-		return Images.Focused;
-	case GUIElementState::NormalOn:
-		return Images.NormalOn;
-	case GUIElementState::HoverOn:
-		return Images.HoverOn;
-	case GUIElementState::ActiveOn:
-		return Images.ActiveOn;
-	case GUIElementState::FocusedOn:
-	case GUIElementState::FocusedHoverOn:
-		return Images.FocusedOn;
-	default:
-		return Images.Normal;
-	}
+	// Interaction states are more specific than the checked state, so they are matched first
+	const bool isChecked = state.IsSet(GUIElementState::Checked);
+
+	if(state.IsSet(GUIElementState::Active))
+		return isChecked ? Images.ActiveOn : Images.Active;
+
+	if(state.IsSet(GUIElementState::Hover))
+		return isChecked ? Images.HoverOn : Images.Hover;
+
+	if(state.IsSet(GUIElementState::Focus))
+		return isChecked ? Images.FocusedOn : Images.Focused;
+
+	return isChecked ? Images.NormalOn : Images.Normal;
 }

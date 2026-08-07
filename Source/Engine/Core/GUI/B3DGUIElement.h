@@ -396,6 +396,9 @@ namespace b3d
 		 */
 		void SetDisabledRecursive(bool disabled);
 
+		/** Triggered when the element becomes disabled or enabled, either directly or inherited from a parent. */
+		virtual void NotifyDisabledChanged() {}
+
 		/** Marks the object and all children as culled. */
 		void SetCulled(bool culled);
 

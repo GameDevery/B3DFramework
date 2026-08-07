@@ -102,7 +102,7 @@ void GUIContentSprites::BuildRenderElements(const GUIContentSpriteCreateInformat
 		mContentTextSprite.Update(mContentTextSpriteInformation, createInformation.BatchId);
 	}
 
-	HSpriteImage contentImage = createInformation.Content.GetImage(GUIElementState::Normal);
+	HSpriteImage contentImage = createInformation.Content.GetImage(createInformation.State);
 	const bool isContentImageAvailable = contentImage.IsLoaded(false);
 	if(isContentImageAvailable)
 	{
@@ -147,10 +147,9 @@ TextSpriteInformation GUIContentSprites::BuildTextSpriteInformation(const Area2I
 	textSpriteInformation.Size = Size2I((i32)contentArea.Width, (i32)contentArea.Height);
 	textSpriteInformation.WordWrap = wordWrap;
 
-	textSpriteInformation.InitializeFromStyleSheetRules(rules);
+	textSpriteInformation.InitializeFromStyleSheetRules(rules, fontScale);
 	textSpriteInformation.Color *= tint;
-	textSpriteInformation.FontSize *= fontScale;
-	
+
 	return textSpriteInformation;
 }
 
@@ -239,7 +238,7 @@ void GUIContentSprites::CalculateContentBounds(const Area2I& contentArea, const 
 	}
 }
 
-void GUISpriteHelper::BuildSpriteRenderElements(GUIInteractable& element, GUIElementState state, GUIBackgroundSprite& sprite, const Vector2I& offset, u32 depth)
+void GUISpriteHelper::BuildSpriteRenderElements(GUIInteractable& element, GUIBackgroundSprite& sprite, const Vector2I& offset, u32 depth)
 {
 	const Size2UI size = element.mAbsoluteSize.To<u32>();
 	const u64 batchId = (u64)element.GetParentWidget();
@@ -257,7 +256,7 @@ void GUISpriteHelper::BuildSpriteRenderElements(GUIInteractable& element, GUIEle
 	sprite.BuildRenderElements(backgroundSpriteCreateInformation, element.mRenderElements);
 }
 
-void GUISpriteHelper::BuildSpriteRenderElements(GUIInteractable& element, GUIElementState state, const GUIContent& content, GUIContentSprites& sprites, const Vector2I& offset, u32 depth, bool wordWrap)
+void GUISpriteHelper::BuildSpriteRenderElements(GUIInteractable& element, const GUIContent& content, GUIContentSprites& sprites, const Vector2I& offset, u32 depth, bool wordWrap)
 {
 	const GUILogicalSize& logicalSize = element.GetLayoutData().Size;
 	const Size2UI physicalSize = element.mAbsoluteSize.To<u32>();
@@ -275,11 +274,12 @@ void GUISpriteHelper::BuildSpriteRenderElements(GUIInteractable& element, GUIEle
 	contentSpriteCreateInformation.Depth = depth;
 	contentSpriteCreateInformation.Offset = offset;
 	contentSpriteCreateInformation.ContentArea = physicalContentArea.To<i32, u32>();
+	contentSpriteCreateInformation.State = element.mStateFlags;
 
 	sprites.BuildRenderElements(contentSpriteCreateInformation, element.mRenderElements);
 }
 
-TextSpriteInformation GUISpriteHelper::BuildTextSpriteInformation(const GUIInteractable& element, GUIElementState state, const String& text, float fontScale, bool wordWrap)
+TextSpriteInformation GUISpriteHelper::BuildTextSpriteInformation(const GUIInteractable& element, const String& text, float fontScale, bool wordWrap)
 {
 	const GUILogicalSize& logicalSize = element.GetLayoutData().Size;
 	const Color& tint = element.GetTint();

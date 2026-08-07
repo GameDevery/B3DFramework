@@ -22,9 +22,9 @@ void TextGeometry::Word::Initialize(bool isSpacer)
 }
 
 // Assumes characterIndex is an index right after last char in the list (if any). All chars need to be sequential.
-float TextGeometry::Word::AddCharacter(u32 characterIndex, const CharacterInformation& characterInformation)
+float TextGeometry::Word::AddCharacter(u32 characterIndex, const CharacterInformation& characterInformation, float letterSpacing)
 {
-	const float charWidth = CalculateCharacterWidth(mLastCharacter, characterInformation);
+	const float charWidth = CalculateCharacterWidth(mLastCharacter, characterInformation, letterSpacing);
 
 	mWidth += charWidth;
 	mHeight = std::max(mHeight, characterInformation.Height);
@@ -39,14 +39,14 @@ float TextGeometry::Word::AddCharacter(u32 characterIndex, const CharacterInform
 	return charWidth;
 }
 
-float TextGeometry::Word::CalculateWidthWithCharacter(const CharacterInformation& characterInformation) const
+float TextGeometry::Word::CalculateWidthWithCharacter(const CharacterInformation& characterInformation, float letterSpacing) const
 {
-	return mWidth + CalculateCharacterWidth(mLastCharacter, characterInformation);
+	return mWidth + CalculateCharacterWidth(mLastCharacter, characterInformation, letterSpacing);
 }
 
-float TextGeometry::Word::CalculateCharacterWidth(const CharacterInformation* previousCharacter, const CharacterInformation& currentCharacter)
+float TextGeometry::Word::CalculateCharacterWidth(const CharacterInformation* previousCharacter, const CharacterInformation& currentCharacter, float letterSpacing)
 {
-	float characterWidth = currentCharacter.XAdvance;
+	float characterWidth = currentCharacter.XAdvance + letterSpacing;
 	if(previousCharacter != nullptr)
 	{
 		float kerning = 0.0f;
@@ -102,7 +102,7 @@ void TextGeometry::Line::Add(u32 characterIndex, const CharacterInformation& cha
 	}
 
 	Word& lastWord = PerThreadTemporaryBuffer->WordBuffer[mWordEndIndex];
-	characterWidth = lastWord.AddCharacter(characterIndex, characterInformation);
+	characterWidth = lastWord.AddCharacter(characterIndex, characterInformation, mTextData->GetMetrics().LetterSpacing);
 
 	mWidth += characterWidth;
 	mHeight = std::max(mHeight, lastWord.GetHeight());
@@ -161,19 +161,20 @@ u32 TextGeometry::Line::RemoveLastWord()
 
 float TextGeometry::Line::CalculateWidthWithChararacter(const CharacterInformation& characterInformation) const
 {
-	float characterWidth = 0.0f;
+	const float letterSpacing = mTextData->GetMetrics().LetterSpacing;
 
+	float characterWidth = 0.0f;
 	if(!mIsEmpty)
 	{
 		Word& lastWord = PerThreadTemporaryBuffer->WordBuffer[mWordEndIndex];
 		if(lastWord.IsSpacer())
-			characterWidth = Word::CalculateCharacterWidth(nullptr, characterInformation);
+			characterWidth = Word::CalculateCharacterWidth(nullptr, characterInformation, letterSpacing);
 		else
-			characterWidth = lastWord.CalculateWidthWithCharacter(characterInformation) - lastWord.GetWidth();
+			characterWidth = lastWord.CalculateWidthWithCharacter(characterInformation, letterSpacing) - lastWord.GetWidth();
 	}
 	else
 	{
-		characterWidth = Word::CalculateCharacterWidth(nullptr, characterInformation);
+		characterWidth = Word::CalculateCharacterWidth(nullptr, characterInformation, letterSpacing);
 	}
 
 	return mWidth + characterWidth;
@@ -244,6 +245,8 @@ u32 TextGeometry::Line::FillBuffer(u32 page, Vector2* outVertices, Vector2* outU
 		}
 		else
 		{
+			const float letterSpacing = mTextData->GetMetrics().LetterSpacing;
+
 			float kerning = 0.0f;
 			for(u32 characterIndex = word.GetStartCharacterIndex(); characterIndex <= word.GetEndCharacterIndex(); characterIndex++)
 			{
@@ -252,7 +255,7 @@ u32 TextGeometry::Line::FillBuffer(u32 page, Vector2* outVertices, Vector2* outU
 				float curX = penX + currentCharacterInformation.XOffset;
 				float curY = mTextData->GetBaselineOffset() - currentCharacterInformation.YOffset;
 
-				penX += currentCharacterInformation.XAdvance + kerning;
+				penX += currentCharacterInformation.XAdvance + kerning + letterSpacing;
 
 				kerning = 0.0f;
 				if((characterIndex + 1) <= word.GetEndCharacterIndex())
@@ -345,8 +348,8 @@ void TextGeometry::Line::CalculateBounds()
 	}
 }
 
-TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontSize, u32 width, u32 height, bool wordWrap, bool wordBreak)
-	: mCharacters(nullptr), mCharacterCount(0), mWords(nullptr), mWordCount(0), mLines(nullptr), mLineCount(0), mPageInfos(nullptr), mPageCount(0), mFont(font), mFontBitmapInformation(nullptr)
+TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontSize, u32 width, u32 height, bool wordWrap, bool wordBreak, const TextMetrics& metrics)
+	: mCharacters(nullptr), mCharacterCount(0), mWords(nullptr), mWordCount(0), mLines(nullptr), mLineCount(0), mPageInfos(nullptr), mPageCount(0), mFont(font), mFontBitmapInformation(nullptr), mMetrics(metrics)
 {
 	// In order to reduce number of memory allocations algorithm first calculates data into temporary buffers and then copies the results
 	EnsurePerThreadTemporaryBufferIsInitialized();
@@ -417,7 +420,7 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 					u32 lastWordIdx = curLine->RemoveLastWord();
 					Word& lastWord = PerThreadTemporaryBuffer->WordBuffer[lastWordIdx];
 
-					bool wordFits = lastWord.CalculateWidthWithCharacter(charDesc) <= (float)width;
+					bool wordFits = lastWord.CalculateWidthWithCharacter(charDesc, mMetrics.LetterSpacing) <= (float)width;
 					if(wordFits && !curLine->IsEmpty())
 					{
 						curLine->Finalize(false);
@@ -550,12 +553,12 @@ float TextGeometry::GetBaselineOffset() const
 
 float TextGeometry::GetLineHeight() const
 {
-	return mFontBitmapInformation->LineHeight;
+	return mFontBitmapInformation->LineHeight * mMetrics.LineHeight;
 }
 
 float TextGeometry::GetSpaceWidth() const
 {
-	return mFontBitmapInformation->SpaceWidth;
+	return mFontBitmapInformation->SpaceWidth + mMetrics.LetterSpacing;
 }
 
 void TextGeometry::EnsurePerThreadTemporaryBufferIsInitialized()

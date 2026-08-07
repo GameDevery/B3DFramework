@@ -254,7 +254,7 @@ void GUIToggleable::UpdateRenderElements()
 	}
 
 	mRenderElements.clear();
-	GUISpriteHelper::BuildSpriteRenderElements(*this, mActiveState, mBackgroundSprite);
+	GUISpriteHelper::BuildSpriteRenderElements(*this, mBackgroundSprite);
 
 	const u64 batchId = (u64)GetParentWidget();
 	const Color& tint = GetTint();

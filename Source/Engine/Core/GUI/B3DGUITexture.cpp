@@ -65,7 +65,7 @@ void GUITexture::SetImage(const HSpriteImage& image)
 void GUITexture::UpdateRenderElements()
 {
 	mRenderElements.clear();
-	GUISpriteHelper::BuildSpriteRenderElements(*this, GUIElementState::Normal, mBackgroundSprite);
+	GUISpriteHelper::BuildSpriteRenderElements(*this, mBackgroundSprite);
 
 	Size2I textureSize(kZeroTag);
 	if(mActiveImage.IsLoaded())

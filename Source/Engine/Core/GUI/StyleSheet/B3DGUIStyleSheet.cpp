@@ -2,6 +2,7 @@
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 #include "GUI/StyleSheet/B3DGUIStyleSheet.h"
 #include "B3DGUIStyleSheetParser.h"
+#include "Debug/B3DDebug.h"
 #include "FileSystem/B3DFileSystem.h"
 #include "FileSystem/B3DDataStream.h"
 #include "RTTI/B3DGUIStyleSheetRTTI.h"
@@ -217,7 +218,11 @@ void GUIStyleSheetRules::Override(const GUIStyleSheetRules& other)
 	OVERRIDE_PROPERTY(TextAlign, HorizontalTextAlignment)
 	OVERRIDE_PROPERTY(VerticalAlign, VerticalTextAlignment)
 	OVERRIDE_PROPERTY(FontFamily, Font)
+	OVERRIDE_PROPERTY(FontFamily, BoldFont)
 	OVERRIDE_PROPERTY(FontSize, FontSize)
+	OVERRIDE_PROPERTY(FontWeight, FontWeight)
+	OVERRIDE_PROPERTY(LineHeight, LineHeight)
+	OVERRIDE_PROPERTY(LetterSpacing, LetterSpacing)
 	OVERRIDE_PROPERTY(WordWrap, WordWrap)
 
 	OVERRIDE_PROPERTY(BorderTopStyle, BorderTop.Style)
@@ -323,8 +328,12 @@ u64 GUIStyleSheetStateRulesets::GenerateHash() const
 	return hash;
 }
 
-TShared<const GUIStyleSheetRuleset> GUIStyleSheetStateRulesets::BuildStateRuleset(GUIElementStateFlags state, const GUIStyleSheetRules* inheritedRules) const
+TShared<const GUIStyleSheetRuleset> GUIStyleSheetStateRulesets::BuildStateRuleset(GUIElementStates state, const GUIStyleSheetRules* inheritedRules) const
 {
+	// A disabled element cannot be interacted with, so any lingering interaction state must not contribute to its look
+	if(state.IsSet(GUIElementState::Disabled))
+		state &= ~kGUIInteractionStates;
+
 	RulesetKey key(state, (u64)inheritedRules);
 
 	auto found = mCachedRulesets.find(key);
@@ -354,7 +363,7 @@ TShared<const GUIStyleSheetRuleset> GUIStyleSheetStateRulesets::BuildStateRulese
 					continue;
 
 				bool foundMatchingPseudoClass = false;
-	#define B3D_MATCH_SELECTOR(EnumValue, SelectorName) if(state.IsSet(GUIElementStateFlag::EnumValue)) \
+	#define B3D_MATCH_SELECTOR(EnumValue, SelectorName) if(state.IsSet(GUIElementState::EnumValue)) \
 				{\
 					if(selector.Name == #SelectorName)\
 					{\
@@ -446,6 +455,16 @@ HGUIStyleSheet GUIStyleSheet::Parse(const Path& file)
 
 	GUIStyleSheetParser parser;
 	TShared<GUIStyleSheet> styleSheet = parser.Parse(B3DMakeShared<SourceCode>(fileStream->GetAsString()));
+
+	const String warnings = parser.GetWarnings();
+	if(!warnings.empty())
+		B3D_LOG(Warning, LogGUI, "Style sheet \"{0}\":\n{1}", file.ToString(), warnings);
+
+	if(styleSheet == nullptr)
+	{
+		B3D_LOG(Error, LogGUI, "Failed parsing style sheet \"{0}\": {1}", file.ToString(), parser.GetErrors());
+		return nullptr;
+	}
 
 	return B3DStaticResourceCast<GUIStyleSheet>(GetResources().CreateResourceHandle(styleSheet));
 }

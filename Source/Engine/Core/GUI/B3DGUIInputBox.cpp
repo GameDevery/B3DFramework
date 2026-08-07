@@ -84,10 +84,10 @@ void GUIInputBox::UpdateRenderElements()
 {
 	mRenderElements.clear();
 
-	GUISpriteHelper::BuildSpriteRenderElements(*this, mState, mBackgroundSprite, Vector2I::kZero, 3);
+	GUISpriteHelper::BuildSpriteRenderElements(*this, mBackgroundSprite, Vector2I::kZero, 3);
 
 	GUIContent textContent = GUIContent(HString(mText));
-	GUISpriteHelper::BuildSpriteRenderElements(*this, mState, textContent, mTextSprite, mTextOffset.To<i32>(), 1, mIsMultiline);
+	GUISpriteHelper::BuildSpriteRenderElements(*this, textContent, mTextSprite, mTextOffset.To<i32>(), 1, mIsMultiline);
 
 	GUIInputCaret* const caret = GetGUIManager().GetInputCaretTool();
 	GUIInputSelection* const selection = GetGUIManager().GetInputSelectionTool();
@@ -191,18 +191,7 @@ bool GUIInputBox::DoOnMouseEvent(const GUIMouseEvent& ev)
 		if(!IsDisabled())
 		{
 			if(!mHasFocus)
-			{
-				AddStateFlags(GUIElementStateFlag::Hover);
-
-				const GUILogicalSize originalSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-				mState = GUIElementState::Hover;
-				const GUILogicalSize newSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-
-				if(originalSize != newSize)
-					MarkLayoutAsDirty();
-				else
-					MarkContentAsDirty();
-			}
+				AddStateFlags(GUIElementState::Hover);
 
 			mIsMouseOver = true;
 		}
@@ -213,19 +202,7 @@ bool GUIInputBox::DoOnMouseEvent(const GUIMouseEvent& ev)
 	{
 		if(!IsDisabled())
 		{
-			RemoveStateFlags(GUIElementStateFlag::Hover);
-
-			if(!mHasFocus)
-			{
-				const GUILogicalSize originalSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-				mState = GUIElementState::Normal;
-				const GUILogicalSize newSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-
-				if(originalSize != newSize)
-					MarkLayoutAsDirty();
-				else
-					MarkContentAsDirty();
-			}
+			RemoveStateFlags(GUIElementState::Hover);
 
 			mIsMouseOver = false;
 		}
@@ -390,10 +367,7 @@ bool GUIInputBox::DoOnCommandEvent(const GUICommandEvent& ev)
 
 	if(ev.GetType() == GUICommandEventType::FocusGained)
 	{
-		AddStateFlags(GUIElementStateFlag::Focus);
-
-		const GUILogicalSize originalSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-		mState = GUIElementState::Focused;
+		AddStateFlags(GUIElementState::Focus);
 
 		ShowSelection(0);
 		GetGUIManager().GetInputSelectionTool()->SelectAll();
@@ -401,32 +375,17 @@ bool GUIInputBox::DoOnCommandEvent(const GUICommandEvent& ev)
 		mHasFocus = true;
 		mFocusGainedFrame = GetTime().GetCurrentFrameIndex();
 
-		const GUILogicalSize newSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-		if(originalSize != newSize)
-			MarkLayoutAsDirty();
-		else
-			MarkContentAsDirty();
-
 		return true;
 	}
 
 	if(ev.GetType() == GUICommandEventType::FocusLost)
 	{
-		RemoveStateFlags(GUIElementStateFlag::Focus);
-
-		const GUILogicalSize originalSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-		mState = GUIElementState::Normal;
+		RemoveStateFlags(GUIElementState::Focus);
 
 		HideCaret();
 		ClearSelection();
 
 		mHasFocus = false;
-
-		const GUILogicalSize newSize = mSizeConstraints.CalculateConstrainedOptimalSize(CalculateUnconstrainedOptimalSize());
-		if(originalSize != newSize)
-			MarkLayoutAsDirty();
-		else
-			MarkContentAsDirty();
 
 		return true;
 	}
@@ -1034,6 +993,6 @@ void GUIInputBox::PasteText()
 
 TextSpriteInformation GUIInputBox::BuildTextSpriteInformation() const
 {
-	return GUISpriteHelper::BuildTextSpriteInformation(*this, mState, mText, mAbsoluteScale, mIsMultiline);
+	return GUISpriteHelper::BuildTextSpriteInformation(*this, mText, mAbsoluteScale, mIsMultiline);
 }
 
