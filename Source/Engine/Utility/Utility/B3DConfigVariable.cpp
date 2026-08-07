@@ -14,7 +14,7 @@ namespace b3d
 	namespace ConfigVariableRegistry
 	{
 		static std::atomic<bool> sManagerStarted{false};
-		static std::mutex sPendingMutex;
+		static Mutex sPendingMutex;
 
 		static Vector<ConfigVariable*>& GetPendingVariables()
 		{

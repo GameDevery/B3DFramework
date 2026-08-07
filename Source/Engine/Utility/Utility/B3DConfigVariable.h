@@ -301,7 +301,7 @@ namespace b3d
 		UnorderedMap<String, ConfigVariable*> mVariables;  // Keys are normalized (lowercase)
 		UnorderedMap<String, PendingConfigValue> mPendingValues;  // For late-registered variables
 		Vector<ConfigVariable*> mRenderThreadSafeVariables;  // Cached for fast sync
-		mutable std::mutex mMutex;
+		mutable Mutex mMutex;
 	};
 
 	/** Returns a reference to the ConfigVariableManager instance. */
