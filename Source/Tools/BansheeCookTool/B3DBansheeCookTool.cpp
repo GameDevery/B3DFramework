@@ -21,6 +21,10 @@ namespace
 	/** Returns true if the requested cook language id has a registered GPU bytecode compiler. */
 	bool IsLanguageSupported(const String& language)
 	{
+		// The null language produces no bytecode by design (the null GPU device accepts empty programs), so it needs no shader backend.
+		if(language == kGpuProgramLanguageNullsl)
+			return true;
+
 		if(ShaderCompilers::Instance().GetBytecodeCompiler(language) != nullptr)
 			return true;
 

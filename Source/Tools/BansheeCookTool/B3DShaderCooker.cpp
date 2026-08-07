@@ -8,6 +8,7 @@
 #include "Material/B3DVariation.h"
 #include "Material/B3DPass.h"
 #include "GpuBackend/B3DGpuProgram.h"
+#include "GpuBackend/B3DGpuBackend.h"
 #include "Resources/B3DPackage.h"
 #include "Resources/B3DPackageManager.h"
 #include "FileSystem/B3DFileSystem.h"
@@ -130,9 +131,11 @@ ShaderCooker::CookItemResult ShaderCooker::CookItem(const ShaderCookItem& item, 
 	}
 
 	// The cook only runs for languages with a registered bytecode compiler (see the tool's language check), and every
-	// shipped variation must carry bytecode - the store is the only shader source on platforms without a runtime compiler.
+	// shipped variation must carry bytecode - the store is the only shader source on platforms without a runtime
+	// compiler. The null language is the exception: it produces no bytecode by design (the null GPU device accepts
+	// empty programs), so its variations skip the bytecode validation below.
 	const TShared<IGpuBytecodeCompiler> bytecodeCompiler = ShaderCompilers::Instance().GetBytecodeCompiler(language);
-	if(bytecodeCompiler == nullptr)
+	if(bytecodeCompiler == nullptr && language != kGpuProgramLanguageNullsl)
 	{
 		B3D_LOG(Error, LogResources, "Shader cook failed for \"{0}\": no bytecode compiler is registered for language \"{1}\".", item.Name, language);
 		return CookItemResult::Failed;
@@ -163,7 +166,7 @@ ShaderCooker::CookItemResult ShaderCooker::CookItem(const ShaderCookItem& item, 
 		}
 
 		GpuProgramType offendingProgramType = GPT_VERTEX_PROGRAM;
-		switch(DetermineVariationBytecodeState(*variationData, *bytecodeCompiler, offendingProgramType))
+		switch(bytecodeCompiler == nullptr ? VariationBytecodeState::Complete : DetermineVariationBytecodeState(*variationData, *bytecodeCompiler, offendingProgramType))
 		{
 		case VariationBytecodeState::UnsupportedStage:
 			B3D_LOG(Warning, LogResources, "Shader cook skipped variation \"{0}\" of \"{1}\": it uses a {2} program, which the \"{3}\" bytecode compiler does not support. The variation will be unavailable on this platform.",
