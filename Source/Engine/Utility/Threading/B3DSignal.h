@@ -43,7 +43,7 @@ namespace b3d
 
 		Mutex mMutex;
 		List<Fiber*> mWaitingFibers;
-		std::condition_variable mCondition;
+		ConditionVariable mCondition;
 		std::atomic<int> mTotalWaitingCount = { 0 };
 		std::atomic<int> mThreadWaitingCount = { 0 };
 	};

@@ -4,6 +4,8 @@
 
 #define B3D_AUTO_MUTEX_NAME mutex
 
+#include "Prerequisites/B3DPlatformDefines.h"
+
 #include <thread>
 #include <chrono>
 #include <mutex>
@@ -11,6 +13,8 @@
 #include <shared_mutex>
 
 #include "Threading/B3DSpinLock.h"
+
+#include B3D_PLATFORM_HEADER(Threading, B3DPlatformThreading.h)
 
 namespace b3d
 {
@@ -26,18 +30,6 @@ namespace b3d
 
 	/** Causes the current thread to sleep for the provided amount of milliseconds. */
 #define B3D_THREAD_SLEEP(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-
-	/** Wrapper for the C++ std::mutex. */
-	using Mutex = std::mutex;
-
-	/** Wrapper for the C++ std::shared_mutex. */
-	using SharedMutex = std::shared_mutex;
-
-	/** Wrapper for the C++ std::recursive_mutex. */
-	using RecursiveMutex = std::recursive_mutex;
-
-	/** Wrapper for the C++ std::condition_variable. */
-	using ConditionVariable = std::condition_variable;
 
 	/** Wrapper for the C++ std::thread::id. */
 	using ThreadId = std::thread::id;

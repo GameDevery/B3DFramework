@@ -52,12 +52,17 @@
 #	define B3D_ARCHITECTURE B3D_ARCHITECTURE_ID_X86_32
 #endif
 
+#define B3D_INTERNAL_PLATFORM_HEADER_STRING(x) #x
+#define B3D_INTERNAL_PLATFORM_HEADER_PATH(x) B3D_INTERNAL_PLATFORM_HEADER_STRING(x)
+
+/**
+  * Expands to the include path of the active platform's variant of a header, located in a platform-named sub-folder:
+  * B3D_PLATFORM_HEADER(Threading, B3DPlatformThreading.h) becomes "Threading/PS5/B3DPlatformThreading.h" when building for PS5.
+  */
+#define B3D_PLATFORM_HEADER(dir, file) B3D_INTERNAL_PLATFORM_HEADER_PATH(dir/B3D_PLATFORM_NAME/file)
+
 // Pull in the active platform's compiler + platform-specific defines
-#define B3D_INTERNAL_STR(x) #x
-#define B3D_INTERNAL_XSTR(x) B3D_INTERNAL_STR(x)
-#include B3D_INTERNAL_XSTR(Prerequisites/B3D_PLATFORM_NAME/B3DPlatformDefines.h)
-#undef B3D_INTERNAL_STR
-#undef B3D_INTERNAL_XSTR
+#include B3D_PLATFORM_HEADER(Prerequisites, B3DPlatformDefines.h)
 
 // Optimization control. Relies on the compiler-specific pragmas pulled in above.
 #if !B3D_BUILD_TYPE_SHIPPING
