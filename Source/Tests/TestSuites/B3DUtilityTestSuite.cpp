@@ -15,6 +15,7 @@
 #include "Utility/B3DMinHeap.h"
 #include "Utility/B3DPool.h"
 #include "Allocators/B3DSegregatedFitAllocator.h"
+#include "Allocators/B3DTlsfAllocator.h"
 #include "Utility/B3DSpatialTree.h"
 #include "Utility/B3DBitstream.h"
 #include "Utility/B3DQueue.h"
@@ -142,6 +143,7 @@ UtilityTestSuite::UtilityTestSuite()
 	B3D_ADD_TEST(UtilityTestSuite::TestUnique)
 	B3D_ADD_TEST(UtilityTestSuite::TestPool)
 	B3D_ADD_TEST(UtilityTestSuite::TestSegregatedFitAllocator)
+	B3D_ADD_TEST(UtilityTestSuite::TestTlsfAllocator)
 }
 
 void UtilityTestSuite::TestBitfield()
@@ -1653,6 +1655,176 @@ void UtilityTestSuite::TestSegregatedFitAllocator()
 		B3D_TEST_ASSERT(((u64)handle.Data % 16) == 0)
 
 		memset(handle.Data, 0, 64);
+		allocator.Free(handle);
+	}
+}
+
+namespace
+{
+	/**
+	 * Instrumented heap backend for TTlsfAllocator tests. Sources real memory while recording heap
+	 * activity through external counters, letting the tests assert grow-on-demand, warm-spare retention,
+	 * graceful out-of-memory handling and that the allocator releases every heap on destruction.
+	 */
+	struct TlsfTestBackend
+	{
+		using HeapHandle = void*;
+		struct HeapCreateInformation { };
+
+		u32* CreateCalls = nullptr; /**< Incremented on every CreateHeap() call, whether it succeeds or is forced to fail. */
+		u32* LiveHeaps = nullptr; /**< ++ on a successful CreateHeap, -- on DestroyHeap; must return to 0 once the allocator dies. */
+		bool* FailAll = nullptr; /**< When set, CreateHeap returns nullptr - simulates an out-of-memory backend. */
+
+		HeapHandle CreateHeap(u64 sizeBytes, const HeapCreateInformation&)
+		{
+			(*CreateCalls)++;
+			if(FailAll != nullptr && *FailAll)
+				return nullptr;
+
+			(*LiveHeaps)++;
+			return B3DAllocate((size_t)sizeBytes);
+		}
+
+		void DestroyHeap(HeapHandle handle)
+		{
+			B3DFree(handle);
+			(*LiveHeaps)--;
+		}
+	};
+}
+
+void UtilityTestSuite::TestTlsfAllocator()
+{
+	using Allocator = TTlsfAllocator<TlsfTestBackend, ThreadUnsafe>;
+
+	const auto MakeConfiguration = [](u64 initialHeapSize, u64 maxHeapSize)
+	{
+		Allocator::Configuration configuration;
+		configuration.InitialHeapSize = initialHeapSize;
+		configuration.MaxHeapSize = maxHeapSize;
+		return configuration;
+	};
+
+	// Basic allocation: offsets respect alignment, blocks are distinct and non-overlapping, everything fits in one
+	// heap, and destroying the allocator returns every heap to the backend.
+	{
+		u32 createCalls = 0;
+		u32 liveHeaps = 0;
+
+		{
+			TlsfTestBackend backend{ &createCalls, &liveHeaps, nullptr };
+			Allocator allocator(&backend, MakeConfiguration(64 * 1024, 64 * 1024));
+
+			const u64 sizes[] = { 16, 100, 256, 4096, 30000 };
+			const u32 alignments[] = { 1, 16, 64, 256, 4096 };
+			Vector<Allocator::Allocation> handles;
+
+			for(u32 i = 0; i < 5; i++)
+			{
+				Allocator::Allocation handle;
+				B3D_TEST_ASSERT(allocator.TryAllocate(sizes[i], alignments[i], handle))
+				B3D_TEST_ASSERT(handle.IsValid())
+				B3D_TEST_ASSERT((handle.Offset % alignments[i]) == 0)
+				B3D_TEST_ASSERT(handle.Size >= sizes[i])
+
+				// The block must be usable across its whole extent.
+				memset((u8*)handle.Heap + handle.Offset, 0xAB, (size_t)sizes[i]);
+
+				for(const Allocator::Allocation& other : handles)
+				{
+					if(other.Heap != handle.Heap)
+						continue;
+
+					B3D_TEST_ASSERT(handle.Offset + handle.Size <= other.Offset || other.Offset + other.Size <= handle.Offset)
+				}
+
+				handles.push_back(handle);
+			}
+
+			B3D_TEST_ASSERT(createCalls == 1) // Everything fit within the first heap.
+			B3D_TEST_ASSERT(allocator.GetHeapCount() == 1)
+			B3D_TEST_ASSERT(allocator.GetUsedBytes() >= 16 + 100 + 256 + 4096 + 30000)
+
+			for(const Allocator::Allocation& handle : handles)
+				allocator.Free(handle);
+
+			B3D_TEST_ASSERT(allocator.GetUsedBytes() == 0)
+			B3D_TEST_ASSERT(allocator.GetEmptyHeapCount() == 1) // Retained as a warm spare.
+		}
+
+		B3D_TEST_ASSERT(liveHeaps == 0) // The allocator destructor released every heap through the backend.
+	}
+
+	// Coalescing: fragmenting a heap and freeing the pieces in a scrambled order must recombine them into one full
+	// free run, so a whole-heap allocation succeeds afterwards without growing a new heap.
+	{
+		u32 createCalls = 0;
+		u32 liveHeaps = 0;
+
+		TlsfTestBackend backend{ &createCalls, &liveHeaps, nullptr };
+		Allocator allocator(&backend, MakeConfiguration(16 * 1024, 16 * 1024));
+
+		Allocator::Allocation quarters[4];
+		for(u32 i = 0; i < 4; i++)
+			B3D_TEST_ASSERT(allocator.TryAllocate(4 * 1024, 1, quarters[i]))
+
+		B3D_TEST_ASSERT(createCalls == 1)
+
+		allocator.Free(quarters[1]);
+		allocator.Free(quarters[3]);
+		allocator.Free(quarters[0]);
+		allocator.Free(quarters[2]);
+
+		Allocator::Allocation whole;
+		B3D_TEST_ASSERT(allocator.TryAllocate(16 * 1024, 1, whole))
+		B3D_TEST_ASSERT(createCalls == 1) // Coalescing reclaimed the heap; no new one was grown.
+
+		allocator.Free(whole);
+	}
+
+	// Grow-on-demand and empty-heap release: exhausting the first heap grows a second; freeing everything keeps one
+	// warm spare (MaxEmptyHeapCount default of 1) and destroys the rest.
+	{
+		u32 createCalls = 0;
+		u32 liveHeaps = 0;
+
+		TlsfTestBackend backend{ &createCalls, &liveHeaps, nullptr };
+		Allocator allocator(&backend, MakeConfiguration(8 * 1024, 8 * 1024));
+
+		Allocator::Allocation first;
+		Allocator::Allocation second;
+		B3D_TEST_ASSERT(allocator.TryAllocate(8 * 1024, 1, first))
+		B3D_TEST_ASSERT(allocator.TryAllocate(8 * 1024, 1, second))
+		B3D_TEST_ASSERT(createCalls == 2)
+		B3D_TEST_ASSERT(first.Heap != second.Heap)
+		B3D_TEST_ASSERT(allocator.GetHeapCount() == 2)
+
+		allocator.Free(first);
+		allocator.Free(second);
+
+		B3D_TEST_ASSERT(allocator.GetHeapCount() == 1)
+		B3D_TEST_ASSERT(allocator.GetEmptyHeapCount() == 1)
+		B3D_TEST_ASSERT(liveHeaps == 1)
+	}
+
+	// Backend heap-creation failure surfaces as a soft TryAllocate failure, not a crash.
+	{
+		u32 createCalls = 0;
+		u32 liveHeaps = 0;
+		bool failAll = true;
+
+		TlsfTestBackend backend{ &createCalls, &liveHeaps, &failAll };
+		Allocator allocator(&backend, MakeConfiguration(8 * 1024, 8 * 1024));
+
+		Allocator::Allocation handle;
+		B3D_TEST_ASSERT(!allocator.TryAllocate(64, 1, handle))
+		B3D_TEST_ASSERT(!handle.IsValid())
+		B3D_TEST_ASSERT(allocator.GetHeapCount() == 0)
+
+		// Once the backend recovers the same request succeeds.
+		failAll = false;
+		B3D_TEST_ASSERT(allocator.TryAllocate(64, 1, handle))
+		B3D_TEST_ASSERT(handle.IsValid())
 		allocator.Free(handle);
 	}
 }

@@ -302,7 +302,7 @@ namespace
 	TlsfAllocator::Configuration MakeTlsfConfigWithGranularity(u64 granularity)
 	{
 		TlsfAllocator::Configuration configuration = MakeDefaultTlsfConfig();
-		configuration.BufferImageGranularity = granularity;
+		configuration.Granularity = granularity;
 		configuration.GranularityDisableThreshold = 0;
 		return configuration;
 	}
@@ -1014,7 +1014,7 @@ void GpuAllocatorTestSuite::TestTlsf_RandomStressNoLeak()
 
 void GpuAllocatorTestSuite::TestTlsf_GranularityDisabled()
 {
-	// Default config: BufferImageGranularity = 1 → tracker is fully inert. Linear / NonLinear
+	// Default config: Granularity = 1 → tracker is fully inert. Linear / NonLinear
 	// allocations should pack contiguously without any BIG-driven padding.
 	MockHeapBackend backend;
 	MockGpuCompletionTracker tracker;

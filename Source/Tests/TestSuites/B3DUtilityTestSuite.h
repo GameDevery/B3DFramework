@@ -28,5 +28,6 @@ namespace b3d
 		void TestUnique();
 		void TestPool();
 		void TestSegregatedFitAllocator();
+		void TestTlsfAllocator();
 	};
 } // namespace b3d
