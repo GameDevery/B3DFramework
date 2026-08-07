@@ -51,6 +51,8 @@ namespace b3d
 			VerticalAlign,
 			WordWrap,
 			FontWeight,
+			FontSlant,
+			FontFaceNormal, /**< The 'normal' keyword, which is valid for both the font-weight and the font-style property. */
 			Visibility,
 			None,
 			Multiple
@@ -182,10 +184,22 @@ namespace b3d
 				outValue = (GUIElementVisibility)UnsignedInteger;
 			}
 
-			void GetValue(GUIFontWeight& outValue)
+			void GetValue(FontWeight& outValue)
 			{
-				B3D_ASSERT(Type == ValueType::FontWeight);
-				outValue = (GUIFontWeight)UnsignedInteger;
+				B3D_ASSERT(Type == ValueType::FontWeight || Type == ValueType::Integer || Type == ValueType::FontFaceNormal);
+
+				if(Type == ValueType::FontFaceNormal)
+					outValue = FontWeight::Normal;
+				else if(Type == ValueType::Integer)
+					outValue = (FontWeight)Math::Clamp(UnsignedInteger, (u32)kMinimumFontWeight, (u32)kMaximumFontWeight);
+				else
+					outValue = (FontWeight)UnsignedInteger;
+			}
+
+			void GetValue(FontSlant& outValue)
+			{
+				B3D_ASSERT(Type == ValueType::FontSlant || Type == ValueType::FontFaceNormal);
+				outValue = Type == ValueType::FontFaceNormal ? FontSlant::Normal : (FontSlant)UnsignedInteger;
 			}
 		};
 
@@ -269,13 +283,19 @@ namespace b3d
 		bool TryParseImage(HSpriteImage& outValue);
 
 		/**
-		 * Attempts to parse the next token as a font family name or a path to a font file. If successful, returns true and outputs the regular face of the family,
-		 * as well as its bold face if the family provides one.
+		 * Attempts to parse the next token as a font family name or a path to a font file. If successful, returns true and outputs the family. A family referenced
+		 * by name is looked up in FontManager, while one referenced by path is built from that single font file.
 		 */
-		bool TryParseFontFamily(HFont& outRegularFace, HFont& outBoldFace);
+		bool TryParseFontFamily(HFontFamily& outValue);
 
-		/** Attempts to parse the next token as a font weight. Token must be one of the supported font weight identifiers. If successful, returns true and outputs the parsed value. */
-		bool TryParseFontWeight(GUIFontWeight& outValue);
+		/**
+		 * Attempts to parse the next token as a font weight. Token must be either the 'normal' or 'bold' keyword, or a number on the 100-900 weight scale. If
+		 * successful, returns true and outputs the parsed value.
+		 */
+		bool TryParseFontWeight(FontWeight& outValue);
+
+		/** Attempts to parse the next token as a font style. Token must be the 'normal', 'italic' or 'oblique' keyword. If successful, returns true and outputs the parsed value. */
+		bool TryParseFontSlant(FontSlant& outValue);
 
 		/**
 		 * Attempts to parse the next set of 1 to 4 pixel values and assigns them to the rectangle offset sides. If successful, returns true and outputs the parsed value.
@@ -399,8 +419,14 @@ namespace b3d
 		/** @copydoc TryParseAndLookupVariableValue(ValueType, T&) */
 		bool TryParseAndLookupVariableValue(ValueType expectedType, HSpriteImage& outValue);
 
-		/** Looks up a variable holding a font family name or a font file path, and resolves it into the family's regular and bold faces. */
-		bool TryParseAndLookupFontFamilyVariableValue(HFont& outRegularFace, HFont& outBoldFace);
+		/** @copydoc TryParseAndLookupVariableValue(ValueType, T&) */
+		bool TryParseAndLookupVariableValue(ValueType expectedType, HFontFamily& outValue);
+
+		/** Returns the font family registered under the provided name, warning and returning null if there is no such family. */
+		HFontFamily LookupFontFamily(const String& familyName);
+
+		/** Returns a single face font family built from the font file at the provided path, warning and returning null if it cannot be loaded. */
+		HFontFamily LoadFontFamilyFromPath(const Path& path);
 
 		/** Attempts to parse an integer from the provided string. Returns true if successful, and outputs the parsed integer. */
 		bool TryParseInteger(const StringView& toParse, i32& outValue) const;

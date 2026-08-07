@@ -13,6 +13,8 @@
 #include "Resources/B3DBuiltinResources.h"
 #include "Resources/B3DResources.h"
 #include "Text/B3DFont.h"
+#include "Text/B3DFontFamily.h"
+#include "Text/B3DFontManager.h"
 #include "Text/B3DStockIcons.h"
 
 using namespace b3d;
@@ -54,6 +56,7 @@ GUIStyleSheetParser::GUIStyleSheetParser()
 	mPropertyKeywords["font-family"] = { GUIStyleSheetPropertyType::FontFamily, ValueType::Multiple };
 	mPropertyKeywords["font-size"] = { GUIStyleSheetPropertyType::FontSize, ValueType::Decimal };
 	mPropertyKeywords["font-weight"] = { GUIStyleSheetPropertyType::FontWeight, ValueType::FontWeight };
+	mPropertyKeywords["font-style"] = { GUIStyleSheetPropertyType::FontStyle, ValueType::FontSlant };
 	mPropertyKeywords["line-height"] = { GUIStyleSheetPropertyType::LineHeight, ValueType::Decimal };
 	mPropertyKeywords["letter-spacing"] = { GUIStyleSheetPropertyType::LetterSpacing, ValueType::Pixel };
 	mPropertyKeywords["b3d-word-wrap"] = { GUIStyleSheetPropertyType::WordWrap, ValueType::WordWrap };
@@ -294,21 +297,13 @@ bool GUIStyleSheetParser::TryParseProperty(GUIStyleSheetRules& inOutValue)
 			// Text
 			CASE_PARSE(FontSize, FontSize)
 			CASE_PARSE(FontWeight, FontWeight)
+			CASE_PARSE(FontStyle, FontSlant)
+			CASE_PARSE(FontFamily, FontFamily)
 			CASE_PARSE(LineHeight, LineHeight)
 			CASE_PARSE(LetterSpacing, LetterSpacing)
 			CASE_PARSE(TextAlign, HorizontalTextAlignment)
 			CASE_PARSE(VerticalAlign, VerticalTextAlignment)
 			CASE_PARSE(WordWrap, WordWrap)
-
-				// TODO - To be refactored with native FontFamily support
-		case GUIStyleSheetPropertyType::FontFamily:
-			{
-				if(!TryParseFontFamily(inOutValue.Font, inOutValue.BoldFont))
-					return false;
-
-				inOutValue.OverridenProperties[(u32)GUIStyleSheetPropertyType::FontFamily] = true;
-				break;
-			}
 
 			// Border
 			CASE_PARSE(BorderLeftWidth, BorderLeft.Width)
@@ -655,14 +650,38 @@ bool GUIStyleSheetParser::TryParseVariable(VariableContext& inOutVariableContext
 		value.Type = ValueType::WordWrap;
 		break;
 	}
-	case GUIStyleSheetTokenTypes::FontWeight:
+	case GUIStyleSheetTokenTypes::FontFace:
 	{
-		GUIFontWeight parsedValue;
-		if(!TryParseFontWeight(parsedValue))
-			return false;
+		// A font face keyword defines either a weight or a slant, which the keyword itself determines. 'normal' is valid for
+		// both properties, so it is recorded as its own type that either one accepts.
+		const String& spelling = mCurrentToken->GetSpelling();
 
-		value.UnsignedInteger = (u32)parsedValue;
-		value.Type = ValueType::FontWeight;
+		if(spelling == "normal")
+		{
+			GetCurrentTokenAndAdvance();
+
+			value.UnsignedInteger = 0;
+			value.Type = ValueType::FontFaceNormal;
+		}
+		else if(spelling == "italic" || spelling == "oblique")
+		{
+			FontSlant parsedValue;
+			if(!TryParseFontSlant(parsedValue))
+				return false;
+
+			value.UnsignedInteger = (u32)parsedValue;
+			value.Type = ValueType::FontSlant;
+		}
+		else
+		{
+			FontWeight parsedValue;
+			if(!TryParseFontWeight(parsedValue))
+				return false;
+
+			value.UnsignedInteger = (u32)parsedValue;
+			value.Type = ValueType::FontWeight;
+		}
+
 		break;
 	}
 	default:
@@ -1026,11 +1045,8 @@ bool GUIStyleSheetParser::TryParseImage(HSpriteImage& outValue)
 	return true;
 }
 
-bool GUIStyleSheetParser::TryParseFontFamily(HFont& outRegularFace, HFont& outBoldFace)
+bool GUIStyleSheetParser::TryParseFontFamily(HFontFamily& outValue)
 {
-	if(IsCurrentToken(GUIStyleSheetTokenTypes::Variable))
-		return TryParseAndLookupFontFamilyVariableValue(outRegularFace, outBoldFace);
-
 	const bool isURL = IsCurrentToken(GUIStyleSheetTokenTypes::URL);
 	const bool isStringLiteral = IsCurrentToken(GUIStyleSheetTokenTypes::StringLiteral);
 
@@ -1040,19 +1056,13 @@ bool GUIStyleSheetParser::TryParseFontFamily(HFont& outRegularFace, HFont& outBo
 		return false;
 	}
 
-	outBoldFace = nullptr;
-
 	if(isStringLiteral)
 	{
 		String fontFamily;
 		if(!TryParseStringLiteral(fontFamily))
 			return false;
 
-		outRegularFace = GetBuiltinResources().GetFont(fontFamily);
-		outBoldFace = GetBuiltinResources().GetBoldFont(fontFamily);
-
-		if(!outRegularFace.IsLoaded(false))
-			Warning(StringUtility::Format("Unable to load font family \"{0}\".", fontFamily));
+		outValue = LookupFontFamily(fontFamily);
 	}
 	else
 	{
@@ -1062,32 +1072,93 @@ bool GUIStyleSheetParser::TryParseFontFamily(HFont& outRegularFace, HFont& outBo
 		if(!TryParseURL(url))
 			return false;
 
-		outRegularFace = GetResources().Load<Font>(url, ResourceLoadOptions(false));
-
-		if(!outRegularFace.IsLoaded(false))
-			Warning(StringUtility::Format("Unable to load font at path \"{0}\".", url));
+		outValue = LoadFontFamilyFromPath(url);
 	}
 
 	return true;
 }
 
-bool GUIStyleSheetParser::TryParseFontWeight(GUIFontWeight& outValue)
+HFontFamily GUIStyleSheetParser::LookupFontFamily(const String& familyName)
 {
-	TOptional<GUIStyleSheetToken> token = GetCurrentTokenAndAdvance(GUIStyleSheetTokenTypes::FontWeight);
+	HFontFamily family = GetFontManager().TryGetFamily(familyName);
+	if(family == nullptr)
+		Warning(StringUtility::Format("Unable to find font family \"{0}\".", familyName));
+
+	return family;
+}
+
+HFontFamily GUIStyleSheetParser::LoadFontFamilyFromPath(const Path& path)
+{
+	const HFont font = GetResources().Load<Font>(path, ResourceLoadOptions(false));
+	if(!font.IsLoaded(false))
+	{
+		Warning(StringUtility::Format("Unable to load font at path \"{0}\".", path));
+		return nullptr;
+	}
+
+	// A family referenced by path provides only the one face stored at that path
+	return FontFamily::CreateFromFace(font);
+}
+
+bool GUIStyleSheetParser::TryParseFontWeight(FontWeight& outValue)
+{
+	// CSS allows a weight to be given either as a keyword or as a number on the 100-900 scale, and the lexer scans those as two different tokens.
+	if(IsCurrentToken(GUIStyleSheetTokenTypes::IntegerLiteral))
+	{
+		u32 weight = 0;
+		if(!TryParseIntegerLiteral(weight))
+			return false;
+
+		if(weight < (u32)kMinimumFontWeight || weight > (u32)kMaximumFontWeight)
+		{
+			Error(StringUtility::Format("Font weight must be between {0} and {1}, but {2} was provided.", (u32)kMinimumFontWeight, (u32)kMaximumFontWeight, weight));
+			return false;
+		}
+
+		outValue = (FontWeight)weight;
+		return true;
+	}
+
+	TOptional<GUIStyleSheetToken> token = GetCurrentTokenAndAdvance(GUIStyleSheetTokenTypes::FontFace);
 	if(!token)
 		return false;
 
 	if(token->GetSpelling() == "normal")
 	{
-		outValue = GUIFontWeight::Normal;
+		outValue = FontWeight::Normal;
 		return true;
 	}
 	if(token->GetSpelling() == "bold")
 	{
-		outValue = GUIFontWeight::Bold;
+		outValue = FontWeight::Bold;
 		return true;
 	}
 
+	Error(StringUtility::Format("Expected a font weight but \"{0}\" was provided.", token->GetSpelling()));
+	return false;
+}
+
+bool GUIStyleSheetParser::TryParseFontSlant(FontSlant& outValue)
+{
+	TOptional<GUIStyleSheetToken> token = GetCurrentTokenAndAdvance(GUIStyleSheetTokenTypes::FontFace);
+	if(!token)
+		return false;
+
+	if(token->GetSpelling() == "normal")
+	{
+		outValue = FontSlant::Normal;
+		return true;
+	}
+
+	// Obliques are synthesized slants rather than drawn ones, but a family provides them through the same face slot, so both
+	// keywords resolve to the same slant.
+	if(token->GetSpelling() == "italic" || token->GetSpelling() == "oblique")
+	{
+		outValue = FontSlant::Italic;
+		return true;
+	}
+
+	Error(StringUtility::Format("Expected a font style but \"{0}\" was provided.", token->GetSpelling()));
 	return false;
 }
 
@@ -1345,8 +1416,12 @@ bool GUIStyleSheetParser::TryParsePropertyValue(ValueType valueType, T& outValue
 		return TryParseWordWrapMode(outValue);
 	else if constexpr(std::is_same_v<T, GUIElementVisibility>)
 		return TryParseVisibility(outValue);
-	else if constexpr(std::is_same_v<T, GUIFontWeight>)
+	else if constexpr(std::is_same_v<T, FontWeight>)
 		return TryParseFontWeight(outValue);
+	else if constexpr(std::is_same_v<T, FontSlant>)
+		return TryParseFontSlant(outValue);
+	else if constexpr(std::is_same_v<T, HFontFamily>)
+		return TryParseFontFamily(outValue);
 	else if constexpr(std::is_same_v<T, HSpriteImage>)
 		return TryParseImage(outValue);
 
@@ -1456,36 +1531,23 @@ bool GUIStyleSheetParser::TryParseAndLookupVariableValue(ValueType expectedType,
 	return true;
 }
 
-bool GUIStyleSheetParser::TryParseAndLookupFontFamilyVariableValue(HFont& outRegularFace, HFont& outBoldFace)
+bool GUIStyleSheetParser::TryParseAndLookupVariableValue(ValueType expectedType, HFontFamily& outValue)
 {
 	VariableValue value;
 	if(!TryParseAndLookupVariableValue(ValueType::Multiple, value))
 		return false;
 
-	outBoldFace = nullptr;
+	u32 stringLiteralIndex;
 
 	if(value.Type == ValueType::URL)
 	{
-		u32 stringLiteralIndex;
 		value.GetValue(stringLiteralIndex);
-
-		const Path filePath = mStringLiterals[stringLiteralIndex];
-		outRegularFace = GetResources().Load<Font>(filePath, ResourceLoadOptions(false));
-
-		if(!outRegularFace.IsLoaded(false))
-			Warning(StringUtility::Format("Unable to load font at path \"{0}\".", filePath));
+		outValue = LoadFontFamilyFromPath(mStringLiterals[stringLiteralIndex]);
 	}
 	else if(value.Type == ValueType::String)
 	{
-		u32 stringLiteralIndex;
 		value.GetValue(stringLiteralIndex);
-
-		const String& fontFamily = mStringLiterals[stringLiteralIndex];
-		outRegularFace = GetBuiltinResources().GetFont(fontFamily); // TODO - Add improved lookup of fonts by name
-		outBoldFace = GetBuiltinResources().GetBoldFont(fontFamily);
-
-		if(!outRegularFace.IsLoaded(false))
-			Warning(StringUtility::Format("Unable to load font family \"{0}\".", fontFamily));
+		outValue = LookupFontFamily(mStringLiterals[stringLiteralIndex]);
 	}
 	else
 	{
@@ -1696,6 +1758,8 @@ const char* GUIStyleSheetParser::ValueTypeToString(ValueType type)
 	case ValueType::VerticalAlign: return "VerticalAlign";
 	case ValueType::WordWrap: return "WordWrap";
 	case ValueType::FontWeight: return "FontWeight";
+	case ValueType::FontSlant: return "FontStyle";
+	case ValueType::FontFaceNormal: return "Normal";
 	case ValueType::Visibility: return "Visibility";
 	case ValueType::None: return "None";
 	}
@@ -1716,6 +1780,10 @@ bool GUIStyleSheetParser::CanCastValue(ValueType expectedType, ValueType receive
 		return receivedType == ValueType::Integer;
 	case ValueType::Integer:
 		return receivedType == ValueType::Decimal;
+	case ValueType::FontWeight:
+		return receivedType == ValueType::Integer || receivedType == ValueType::FontFaceNormal;
+	case ValueType::FontSlant:
+		return receivedType == ValueType::FontFaceNormal;
 	default:
 		return false;
 	}

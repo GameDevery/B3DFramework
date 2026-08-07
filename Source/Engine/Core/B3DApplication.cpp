@@ -59,6 +59,7 @@
 #include "Renderer/B3DRendererScene.h"
 #include "Scene/B3DPrefab.h"
 #include "Text/B3DFont.h"
+#include "Text/B3DFontManager.h"
 #include "Threading/B3DScheduler.h"
 #include "Utility/B3DCommandLine.h"
 #include "Utility/B3DConfigVariable.h"
@@ -146,6 +147,7 @@ Application::~Application()
 	SpriteManager::ShutDown();
 	StockIcons::ShutDown();
 	BuiltinResources::ShutDown();
+	FontManager::ShutDown();
 	RendererMaterialManager::ShutDown();
 	VirtualInput::ShutDown();
 
@@ -319,6 +321,7 @@ void Application::OnStartUp()
 
 	VirtualInput::StartUp();
 	StockIcons::StartUp();
+	FontManager::StartUp(); // Must be started before BuiltinResources, which indexes the built-in font folder
 	BuiltinResources::StartUp();
 	RendererMaterialManager::StartUp();
 	RendererManager::Instance().Initialize();

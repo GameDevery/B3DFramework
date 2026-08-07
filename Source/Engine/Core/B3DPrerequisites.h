@@ -511,6 +511,7 @@ namespace b3d
 	class TransientMesh;
 	class MeshHeap;
 	class Font;
+	class FontFamily;
 	class ResourceMetaData;
 	class DropTarget;
 	class StringTable;
@@ -823,6 +824,10 @@ namespace b3d
 		TID_GpuResourceTableLayout = 1284,
 		TID_GpuDescriptorTable = 1285,
 		TID_GpuDescriptorTableEntry = 1286,
+		TID_FontFaceStyle = 1287,
+		TID_FontMetaData = 1288,
+		TID_FontFamilyFace = 1289,
+		TID_FontFamily = 1290,
 
 		// Moved from Engine layer
 		TID_Camera = 30000,
@@ -883,6 +888,7 @@ namespace b3d
 	typedef TResourceHandle<Material> HMaterial;
 	typedef TResourceHandle<ShaderInclude> HShaderInclude;
 	typedef TResourceHandle<Font> HFont;
+	typedef TResourceHandle<FontFamily> HFontFamily;
 	typedef TResourceHandle<Shader> HShader;
 	typedef TResourceHandle<Prefab> HPrefab;
 	typedef TResourceHandle<Scene> HScene;

@@ -232,7 +232,8 @@ label
 {
     font-family: "Arial";
     font-size: 10;
-    font-weight: bold; /* or normal */
+    font-weight: bold; /* normal, bold, or 100-900 */
+    font-style: italic; /* normal, italic or oblique */
     line-height: 1.2;
     letter-spacing: -0.1px;
     text-align: center; /* left, center, right */
@@ -242,19 +243,28 @@ label
 ~~~~~~~~~~~~~
 
 Properties:
-- `font-family` - Font name (must be imported)
+- `font-family` - Name of a font family, or a `url()` pointing at a single font file
 - `font-size` - Font size in points
-- `font-weight` - Selects the regular or the bold face of the font family
+- `font-weight` - Weight of the face to use: `normal` (400), `bold` (700), or a number from 100 to 900
+- `font-style` - Slant of the face to use: `normal`, `italic` or `oblique`
 - `line-height` - Multiplier applied to the line height reported by the font
 - `letter-spacing` - Extra space inserted after every character, in pixels. Negative values tighten the text
 - `text-align` - Horizontal text alignment
 - `vertical-align` - Vertical text alignment
 - `word-wrap` - Text wrapping behavior
 
-`font-weight: bold` looks for a bold face belonging to the same family as `font-family`, matched by
-name: for a family named `Inter` it picks up `InterBold`, `InterSemiBold`, `Inter-Bold` or
-`Inter-SemiBold`, whichever is imported first. If the family has no bold face the regular one is
-used, so weight never blanks out text.
+A font family groups the font files that differ only in weight and slant. Families are discovered
+automatically from the imported fonts: each font file reports which family it belongs to and which
+face it is, so `Arial.ttf` and `arialbd.ttf` join the same `Arial` family without needing to be named
+alike.
+
+`font-weight` and `font-style` then select a face out of that family. If the family has no face with
+exactly the requested weight and slant, the closest one is substituted, so asking for a face a family
+does not provide never blanks out text. An exact slant match is preferred over a closer weight in the
+wrong slant, and weights substitute towards the requested one rather than across it.
+
+Referencing a font by `url()` instead of by name yields a family holding only that one file, so every
+weight and slant resolves to it.
 
 ## Border properties
 
@@ -344,7 +354,7 @@ GUIStyleSheetRules rules = styleSheet->BuildRules("button");
 // Access specific properties
 Color backgroundColor = rules.BackgroundColor;
 float fontSize = rules.FontSize;
-HFont font = rules.Font;
+HFont font = rules.GetFont();
 ~~~~~~~~~~~~~
 
 Query rules for specific element states:

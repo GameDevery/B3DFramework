@@ -357,6 +357,49 @@ TShared<const PackageResourceMetaData> PackageManager::GetResourceMetaData(const
 	return nullptr;
 }
 
+void PackageManager::EnumerateResourceMetaData(const Path& virtualFolderPath, const std::function<void(const Path&, const PackageResourceMetaData&)>& callback, u32 typeId)
+{
+	const Path folderPath = virtualFolderPath.GetDirectory();
+
+	// Acquiring a package read lock locks the manager mutex as well, so candidates are collected up front and the mutex
+	// released again before any of them is resolved.
+	Vector<std::pair<Path, ResourcePackagePath>> candidates;
+	{
+		Lock lock(mMutex);
+
+		// TODO - We're iterating all registered packages here, which could be pretty slow. An acceleration structure that allows per-folder filtering would be good here.
+		// - Also optionally extend this method to search recursively as well
+		for(const auto& entry : mVirtualPathToResourcePackagePath)
+		{
+			if(entry.first.GetDirectory().Equals(folderPath))
+				candidates.push_back(entry);
+		}
+	}
+
+	for(const auto& [virtualPath, resourcePackagePath] : candidates)
+	{
+		TUnique<PackageReadLock> readLock;
+		AcquirePackageReadLockOptions readLockOptions(false, true, "Enumerate meta-data");
+
+		const AcquirePackageLockResult lockResult = AcquireReadLock(resourcePackagePath.PhysicalPackagePath, readLockOptions, readLock);
+		if(lockResult != AcquirePackageLockResult::Acquired || readLock == nullptr)
+			continue;
+
+		const TShared<Package>& package = readLock->GetPackage();
+		if(!B3D_ENSURE(package != nullptr))
+			continue;
+
+		const TShared<const PackageResourceMetaData> metaData = package->GetResourceMetaData(resourcePackagePath.ResourcePathWithinPackage);
+		if(metaData == nullptr)
+			continue;
+
+		if(typeId != 0 && metaData->TypeId != typeId)
+			continue;
+
+		callback(virtualPath, *metaData);
+	}
+}
+
 AcquirePackageLockResult PackageManager::AcquireReadLock(const Path& physicalPackagePath, const AcquirePackageReadLockOptions& options, TUnique<PackageReadLock>& outLock)
 {
 	if(!physicalPackagePath.IsAbsolute())

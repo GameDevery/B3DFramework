@@ -4,6 +4,7 @@
 #include "GUI/B3DGUILabel.h"
 #include "Image/B3DSpriteTexture.h"
 #include "Text/B3DFont.h"
+#include "Text/B3DFontManager.h"
 #include "Image/B3DTexture.h"
 #include "Importer/B3DImporter.h"
 #include "Resources/B3DResources.h"
@@ -127,6 +128,9 @@ void BuiltinResources::OnStartUp()
 	const Path& defaultFontVirtualPath = Path::Combine(fontsFolderVirtualPath, kDefaultFontName);
 
 	mFont = GetResources().Load<Font>(defaultFontVirtualPath, ResourceLoadOptions(false));
+
+	// Must happen before the style sheet is parsed below, as it resolves font family names through FontManager
+	GetFontManager().RegisterFontFolder(fontsFolderVirtualPath);
 
 	mDefaultGUIStyleSheet = GUIStyleSheet::Parse(mBuiltinDataFolder + "GUI.css");
 	mDefaultGUIStyleSheetCascade = B3DMakeShared<GUIStyleSheetCascade>();
@@ -262,19 +266,6 @@ HFont BuiltinResources::GetFont(const String& font) const
 	return GetResources().Load<Font>(*fontVirtualFilePath, ResourceLoadOptions(false));
 	}
 
-HFont BuiltinResources::GetBoldFont(const String& font) const
-{
-	static const char* const kBoldFaceSuffixes[] = { "Bold", "SemiBold", "-Bold", "-SemiBold" };
-
-	for(const char* suffix : kBoldFaceSuffixes)
-	{
-		const TOptional<Path> fontVirtualFilePath = TryResolveFontPath(font + suffix);
-		if(fontVirtualFilePath.has_value())
-			return GetResources().Load<Font>(*fontVirtualFilePath, ResourceLoadOptions(false));
-	}
-
-	return nullptr;
-}
 
 HShader BuiltinResources::GetOrCompileShader(const Path& path) const
 {

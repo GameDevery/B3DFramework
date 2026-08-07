@@ -10,7 +10,7 @@ using namespace b3d;
 
 void TextSpriteInformation::InitializeFromStyleSheetRules(const GUIStyleSheetRules& rules, float scale)
 {
-	Font = rules.GetWeightedFont();
+	Font = rules.GetFont();
 	FontSize = rules.FontSize * scale;
 	Metrics = rules.GetTextMetrics(scale);
 	WordWrap = rules.WordWrap == GUIWordWrapMode::WrapWord;

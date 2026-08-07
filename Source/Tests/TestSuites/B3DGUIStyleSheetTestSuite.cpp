@@ -5,6 +5,7 @@
 #include "GUI/B3DGUIUtility.h"
 #include "GUI/StyleSheet/B3DGUIStyleSheetParser.h"
 #include "Resources/B3DBuiltinResources.h"
+#include "Text/B3DFontFamily.h"
 #include "String/B3DSourceCode.h"
 
 using namespace b3d;
@@ -115,6 +116,9 @@ GUIStyleSheetTestSuite::GUIStyleSheetTestSuite()
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestUnexpectedTokenIsReportedAsError)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestTextMetricParsing)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontWeightSelectsBoldFace)
+	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontMetaDataReportsFaceIdentity)
+	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontFamilyMatchesClosestFace)
+	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontStyleParsing)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestTextMetricsAffectMeasuredSize)
 }
 
@@ -326,7 +330,7 @@ void GUIStyleSheetTestSuite::TestTextMetricParsing()
 
 	B3D_TEST_ASSERT(Math::ApproxEquals(rules.LineHeight, 1.35f))
 	B3D_TEST_ASSERT(Math::ApproxEquals(rules.LetterSpacing, -0.2f))
-	B3D_TEST_ASSERT(rules.FontWeight == GUIFontWeight::Bold)
+	B3D_TEST_ASSERT(rules.FontWeight == FontWeight::Bold)
 
 	// Metrics are in logical units, so they must be scaled along with the font size
 	const TextMetrics scaledMetrics = rules.GetTextMetrics(2.0f);
@@ -340,7 +344,7 @@ void GUIStyleSheetTestSuite::TestTextMetricParsing()
 	{
 		const GUIStyleSheetRules& defaultRules = GetOnlyRules(*defaultStyleSheet);
 		B3D_TEST_ASSERT(defaultRules.GetTextMetrics() == TextMetrics())
-		B3D_TEST_ASSERT(defaultRules.FontWeight == GUIFontWeight::Normal)
+		B3D_TEST_ASSERT(defaultRules.FontWeight == FontWeight::Normal)
 	}
 }
 
@@ -352,21 +356,131 @@ void GUIStyleSheetTestSuite::TestFontWeightSelectsBoldFace()
 		return;
 
 	GUIStyleSheetRules rules;
-	rules.Font = regularFace;
+	rules.FontFamily = FontFamily::CreateFromFace(regularFace);
 
-	// Without a registered bold face the regular one is used, so a missing face never blanks out the text
-	rules.FontWeight = GUIFontWeight::Bold;
-	B3D_TEST_ASSERT(rules.GetWeightedFont() == regularFace)
+	// A family providing only a regular face substitutes it for every weight, so a missing face never blanks out the text
+	rules.FontWeight = FontWeight::Bold;
+	B3D_TEST_ASSERT(rules.GetFont() == regularFace)
 
-	const HFont boldFace = GetBuiltinResources().GetBoldFont("Inter");
-	if(boldFace != nullptr)
+	rules.FontWeight = FontWeight::Normal;
+	B3D_TEST_ASSERT(rules.GetFont() == regularFace)
+
+	// Once the family provides a bold face, a bold request resolves to it rather than to the substitute
+	B3D_TEST_ASSERT(rules.FontFamily->AddFace(regularFace, FontFaceStyle(FontWeight::Bold)))
+
+	rules.FontWeight = FontWeight::Bold;
+	B3D_TEST_ASSERT(rules.FontFamily->HasFace(FontFaceStyle(FontWeight::Bold)))
+	B3D_TEST_ASSERT(rules.GetFont() == regularFace)
+
+	// An unassigned family reports no face at all instead of asserting
+	rules.FontFamily = nullptr;
+	B3D_TEST_ASSERT(rules.GetFont() == nullptr)
+}
+
+void GUIStyleSheetTestSuite::TestFontMetaDataReportsFaceIdentity()
+{
+	const HFont font = GetBuiltinResources().GetDefaultFont();
+	B3D_TEST_ASSERT(font != nullptr)
+	if(font == nullptr)
+		return;
+
+	// Identity is read out of the font file's own tables whenever the renderer is initialized, so it is available for fonts
+	// loaded from a package as well as for those created at runtime
+	String familyName;
+	FontFaceStyle style;
+	B3D_TEST_ASSERT(FontFamily::TryGetFaceIdentity(font, familyName, style))
+
+	B3D_TEST_ASSERT(!familyName.empty())
+	B3D_TEST_ASSERT(style.Weight >= kMinimumFontWeight && style.Weight <= kMaximumFontWeight)
+
+	// A family built from a single face is named after the family that face reports belonging to, not after the file
+	const HFontFamily family = FontFamily::CreateFromFace(font);
+	B3D_TEST_ASSERT(family != nullptr)
+	if(family != nullptr)
 	{
-		rules.BoldFont = boldFace;
-		B3D_TEST_ASSERT(rules.GetWeightedFont() == boldFace)
-
-		rules.FontWeight = GUIFontWeight::Normal;
-		B3D_TEST_ASSERT(rules.GetWeightedFont() == regularFace)
+		B3D_TEST_ASSERT(family->GetFamilyName() == familyName)
+		B3D_TEST_ASSERT(family->HasFace(style))
 	}
+}
+
+void GUIStyleSheetTestSuite::TestFontFamilyMatchesClosestFace()
+{
+	const HFont face = GetBuiltinResources().GetDefaultFont();
+	B3D_TEST_ASSERT(face != nullptr)
+	if(face == nullptr)
+		return;
+
+	// The faces all share one font, as this exercises which style is picked rather than what it renders
+	FontFamilyCreateInformation createInformation;
+	createInformation.Name = "TestFamily";
+	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Light)));
+	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Normal)));
+	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Bold)));
+	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Normal, FontSlant::Italic)));
+
+	const HFontFamily family = FontFamily::Create(createInformation);
+	B3D_TEST_ASSERT(family != nullptr)
+	if(family == nullptr)
+		return;
+
+	B3D_TEST_ASSERT(family->GetFamilyName() == "TestFamily")
+	B3D_TEST_ASSERT(family->GetFaces().size() == 4)
+
+	// Duplicate styles are rejected rather than shadowing the face that was added first
+	B3D_TEST_ASSERT(!family->AddFace(face, FontFaceStyle(FontWeight::Bold)))
+	B3D_TEST_ASSERT(family->GetFaces().size() == 4)
+
+	// A weight heavier than anything on offer falls back to the heaviest available face, never to a lighter one
+	B3D_TEST_ASSERT(family->HasFace(FontFaceStyle(FontWeight::Bold)))
+	B3D_TEST_ASSERT(!family->HasFace(FontFaceStyle(FontWeight::Black)))
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Black)) != nullptr)
+
+	// An exact slant match is preferred over a better weight match in the wrong slant
+	B3D_TEST_ASSERT(family->HasFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)))
+
+	// Removing the only italic face leaves italic requests resolving to an upright substitute
+	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)))
+	B3D_TEST_ASSERT(!family->HasFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)))
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)) != nullptr)
+
+	// An empty family has nothing to substitute, so it reports no face rather than an arbitrary one
+	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Light)))
+	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Normal)))
+	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Bold)))
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle()) == nullptr)
+}
+
+void GUIStyleSheetTestSuite::TestFontStyleParsing()
+{
+	const TShared<GUIStyleSheet> styleSheet = ParseStyleSheet(
+		"label\n"
+		"{\n"
+		"    font-weight: 600;\n"
+		"    font-style: italic;\n"
+		"}\n");
+
+	B3D_TEST_ASSERT(styleSheet != nullptr)
+	if(styleSheet == nullptr)
+		return;
+
+	const GUIStyleSheetRules& rules = GetOnlyRules(*styleSheet);
+	B3D_TEST_ASSERT(rules.IsPropertySet(GUIStyleSheetPropertyType::FontWeight))
+	B3D_TEST_ASSERT(rules.IsPropertySet(GUIStyleSheetPropertyType::FontStyle))
+
+	// Numeric weights are accepted on the same scale the font files report
+	B3D_TEST_ASSERT(rules.FontWeight == FontWeight::SemiBold)
+	B3D_TEST_ASSERT(rules.FontSlant == FontSlant::Italic)
+
+	// Obliques resolve to the same slant as italics, as a family provides both through one face
+	const TShared<GUIStyleSheet> obliqueStyleSheet = ParseStyleSheet("label\n{\n    font-style: oblique;\n}\n");
+	B3D_TEST_ASSERT(obliqueStyleSheet != nullptr)
+	if(obliqueStyleSheet != nullptr)
+		B3D_TEST_ASSERT(GetOnlyRules(*obliqueStyleSheet).FontSlant == FontSlant::Italic)
+
+	// A weight outside the 100-900 scale is a parse error rather than a silently clamped value
+	GUIStyleSheetParser parser;
+	B3D_TEST_ASSERT(parser.Parse(B3DMakeShared<SourceCode>(String("label\n{\n    font-weight: 1200;\n}\n"))) == nullptr)
+	B3D_TEST_ASSERT(!parser.GetErrors().empty())
 }
 
 void GUIStyleSheetTestSuite::TestTextMetricsAffectMeasuredSize()
@@ -379,7 +493,7 @@ void GUIStyleSheetTestSuite::TestTextMetricsAffectMeasuredSize()
 	const String text = "Measured text";
 
 	GUIStyleSheetRules rules;
-	rules.Font = font;
+	rules.FontFamily = FontFamily::CreateFromFace(font);
 	rules.FontSize = 12.0f;
 
 	const GUILogicalSize defaultSize = GUIUtility::CalculateOptimalContentSizeWithPaddingAndBorder(text, rules, 0);

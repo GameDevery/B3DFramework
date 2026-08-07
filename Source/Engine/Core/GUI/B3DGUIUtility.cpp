@@ -47,7 +47,7 @@ GUILogicalSize GUIUtility::CalculateOptimalContentSizeWithPaddingAndBorder(const
 	if(styleSheetRule.WordWrap != GUIWordWrapMode::WrapWord)
 		wordWrapWidth = 0;
 
-	const HFont font = styleSheetRule.GetWeightedFont();
+	const HFont font = styleSheetRule.GetFont();
 	if(font != nullptr && !text.empty())
 	{
 		FrameAllocatorScope frameScope;

@@ -15,12 +15,16 @@
 #define USE_FREETYPE2_STATIC
 #include <ft2build.h>
 #include <freetype/freetype.h>
+#include <freetype/tttables.h>
 
 #include FT_FREETYPE_H
 
-B3D_LOG_CATEGORY_STATIC(LogFont, Log)
-
 using namespace b3d;
+
+namespace b3d
+{
+	B3D_LOG_CATEGORY(LogFont)
+}
 
 /** Converts a 26.6 fixed point format to float. */
 static float ConvertFixed26Dot6ToFloat(i32 value)
@@ -89,6 +93,12 @@ RTTIType* FontBitmapPage::GetRtti() const
 {
 	return GetRttiStatic();
 }
+
+/** Version reported by an OS/2 table that is present but carries no usable data. */
+constexpr u16 kInvalidOS2TableVersion = 0xFFFF;
+
+/** Bit within the OS/2 fsSelection field that marks the face as italic. */
+constexpr u16 kOS2SelectionItalic = 1 << 0;
 
 struct Font::Implementation
 {
@@ -162,6 +172,31 @@ bool Font::InitializeFontRenderer()
 	else if(error)
 	{
 		B3D_LOG(Error, LogFont, "Failed to initialize font renderer. Unknown error.");
+	}
+
+	// Record which family the face belongs to and which face of it this is, so it can be found through a family lookup without loading the font.
+	if(const FT_Face& face = mImplementation->Face; face != nullptr)
+	{
+		TShared<FontMetaData> metaData = B3DMakeShared<FontMetaData>();
+		metaData->FamilyName = face->family_name != nullptr ? face->family_name : mInformation.Name;
+
+		// The OS/2 table carries the exact weight and slant, but it is optional. When it is missing FreeType still provides
+		// a coarse bold/italic classification derived from the face, which is enough to place the face within its family.
+		const TT_OS2* os2Table = (const TT_OS2*)FT_Get_Sfnt_Table(face, FT_SFNT_OS2);
+		if(os2Table != nullptr && os2Table->version != kInvalidOS2TableVersion)
+		{
+			const u16 weight = Math::Clamp(os2Table->usWeightClass, (u16)kMinimumFontWeight, (u16)kMaximumFontWeight);
+
+			metaData->Style.Weight = (FontWeight)weight;
+			metaData->Style.Slant = (os2Table->fsSelection & kOS2SelectionItalic) != 0 ? FontSlant::Italic : FontSlant::Normal;
+		}
+		else
+		{
+			metaData->Style.Weight = (face->style_flags & FT_STYLE_FLAG_BOLD) != 0 ? FontWeight::Bold : FontWeight::Normal;
+			metaData->Style.Slant = (face->style_flags & FT_STYLE_FLAG_ITALIC) != 0 ? FontSlant::Italic : FontSlant::Normal;
+		}
+
+		mMetaData = std::move(metaData);
 	}
 
 	return true;
@@ -674,6 +709,16 @@ RTTIType* Font::GetRttiStatic()
 RTTIType* Font::GetRtti() const
 {
 	return Font::GetRttiStatic();
+}
+
+RTTIType* FontMetaData::GetRttiStatic()
+{
+	return FontMetaDataRTTI::Instance();
+}
+
+RTTIType* FontMetaData::GetRtti() const
+{
+	return FontMetaData::GetRttiStatic();
 }
 
 void FontAtlasRenderer::OnStartUp()

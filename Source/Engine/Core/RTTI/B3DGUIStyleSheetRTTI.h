@@ -84,7 +84,7 @@ namespace b3d
 			B3D_RTTI_MEMBER(BorderBottomLeftRadius, 16)
 			B3D_RTTI_MEMBER(BorderBottomRightRadius, 17)
 
-			B3D_RTTI_MEMBER(Font, 18)
+			B3D_RTTI_MEMBER(FontFamily, 18)
 			B3D_RTTI_MEMBER(FontSize, 19)
 			B3D_RTTI_MEMBER(HorizontalTextAlignment, 20)
 			B3D_RTTI_MEMBER(VerticalTextAlignment, 21)
@@ -94,7 +94,7 @@ namespace b3d
 
 			B3D_RTTI_MEMBER(PseudoClass, 24)
 
-			B3D_RTTI_MEMBER(BoldFont, 25)
+			B3D_RTTI_MEMBER(FontSlant, 25)
 			B3D_RTTI_MEMBER(FontWeight, 26)
 			B3D_RTTI_MEMBER(LineHeight, 27)
 			B3D_RTTI_MEMBER(LetterSpacing, 28)

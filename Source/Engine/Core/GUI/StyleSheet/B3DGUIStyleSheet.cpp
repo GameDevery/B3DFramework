@@ -8,8 +8,19 @@
 #include "RTTI/B3DGUIStyleSheetRTTI.h"
 #include "Resources/B3DBuiltinResources.h"
 #include "Resources/B3DResources.h"
+#include "Text/B3DFontFamily.h"
 
 using namespace b3d;
+
+const HFont& GUIStyleSheetRules::GetFont() const
+{
+	static const HFont kNoFont;
+
+	if(FontFamily == nullptr || !FontFamily.IsLoaded(false))
+		return kNoFont;
+
+	return FontFamily->GetFace(FontFaceStyle(FontWeight, FontSlant));
+}
 
 bool GUIStyleSheetSelector::IsMatching(const GUIRenderable& element, StringView pseudoElement, StringView pseudoClass, bool ignorePseudoClass) const
 {
@@ -217,10 +228,10 @@ void GUIStyleSheetRules::Override(const GUIStyleSheetRules& other)
 
 	OVERRIDE_PROPERTY(TextAlign, HorizontalTextAlignment)
 	OVERRIDE_PROPERTY(VerticalAlign, VerticalTextAlignment)
-	OVERRIDE_PROPERTY(FontFamily, Font)
-	OVERRIDE_PROPERTY(FontFamily, BoldFont)
+	OVERRIDE_PROPERTY(FontFamily, FontFamily)
 	OVERRIDE_PROPERTY(FontSize, FontSize)
 	OVERRIDE_PROPERTY(FontWeight, FontWeight)
+	OVERRIDE_PROPERTY(FontStyle, FontSlant)
 	OVERRIDE_PROPERTY(LineHeight, LineHeight)
 	OVERRIDE_PROPERTY(LetterSpacing, LetterSpacing)
 	OVERRIDE_PROPERTY(WordWrap, WordWrap)

@@ -6,6 +6,8 @@
 #include "Script/B3DIScriptExportable.h"
 #include "Image/B3DTextureAtlasLayout.h"
 #include "Resources/B3DResource.h"
+#include "Resources/B3DResourceMetaData.h"
+#include "Text/B3DFontFace.h"
 
 namespace b3d
 {namespace render
@@ -16,6 +18,8 @@ namespace b3d
 	/** @addtogroup Text
 	 *  @{
 	 */
+
+	B3D_EXPORT B3D_LOG_CATEGORY_EXTERN(LogFont, Log)
 
 	/**	Kerning pair representing larger or smaller offset between a specific pair of characters. */
 	struct B3D_SCRIPT_EXPORT(ExportAsStruct(true), DocumentationGroup(Text)) KerningPair
@@ -118,6 +122,31 @@ namespace b3d
 		Raster, /*< Render non-antialiased fonts without hinting (slightly more blurry). */
 		HintedSmooth, /*< Render antialiased fonts with hinting. */
 		HintedRaster /*< Render non-antialiased fonts with hinting. */
+	};
+
+	/**
+	 * Font specific resource meta-data recording which face of which family the font contains. Meta-data is stored alongside
+	 * the resource in its package and remains available without loading the font itself, allowing font families to be indexed
+	 * without paying for the font data of every face.
+	 */
+	class B3D_EXPORT B3D_SCRIPT_EXPORT() FontMetaData : public ResourceMetaData
+	{
+	public:
+		/** Name of the family the face belongs to, as reported by the font file. Empty if the font file provides no name. */
+		B3D_SCRIPT_EXPORT()
+		String FamilyName;
+
+		/** Weight and slant of this particular face, as reported by the font file. */
+		B3D_SCRIPT_EXPORT()
+		FontFaceStyle Style;
+
+		/************************************************************************/
+		/* 								SERIALIZATION                      		*/
+		/************************************************************************/
+	public:
+		friend class FontMetaDataRTTI;
+		static RTTIType* GetRttiStatic();
+		RTTIType* GetRtti() const override;
 	};
 
 	/** Information about a Font. */

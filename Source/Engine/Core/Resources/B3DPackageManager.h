@@ -262,6 +262,18 @@ namespace b3d
 		/** Retrieves resource meta-data from the associated (previously loaded) package. Returns null if resource cannot be found. */
 		TShared<const PackageResourceMetaData> GetResourceMetaData(const UUID& resourceId);
 
+		/**
+		 * Calls the provided callback with the meta-data of every resource located directly within the provided virtual
+		 * folder, in no particular order. Only resources of already loaded packages are considered, and no resource data is
+		 * loaded.
+		 *
+		 * @param virtualFolderPath		Virtual path of the folder to enumerate, e.g. '/B3D/EngineData/Fonts/'.
+		 * @param callback				Called once per matching resource, with its virtual path and its meta-data. Called
+		 *								while the containing package is locked, so it must not call back into PackageManager.
+		 * @param typeId				If non-zero, only resources whose RTTI type matches this ID are enumerated.
+		 */
+		void EnumerateResourceMetaData(const Path& virtualFolderPath, const std::function<void(const Path&, const PackageResourceMetaData&)>& callback, u32 typeId = 0);
+
 	private:
 		/**
 		 * Registers all required resource path/id mappings for all resources in the package. Package read or write lock must be acquired, and

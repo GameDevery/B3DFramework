@@ -53,7 +53,7 @@ namespace b3d
 		TextAlign, // left, center, right
 		VerticalAlign, // top, middle, bottom
 		WordWrap, // none, wrap-word
-		FontWeight, // normal, bold
+		FontFace, // normal, bold, italic, oblique
 		Visibility, // hidden, visible
 		PseudoClassSelector, // active, hover, focus, checked, disabled
 		None, // none

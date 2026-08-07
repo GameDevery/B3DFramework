@@ -5,6 +5,7 @@
 #include "B3DPrerequisites.h"
 #include "Reflection/B3DRTTIType.h"
 #include "RTTI/B3DStdRTTI.h"
+#include "RTTI/B3DStringRTTI.h"
 #include "Text/B3DFont.h"
 #include "Image/B3DTexture.h"
 #include "FileSystem/B3DDataStream.h"
@@ -15,6 +16,8 @@ namespace b3d
 	/** @addtogroup RTTI-Impl-Engine
 	 *  @{
 	 */
+
+	B3D_ALLOW_MEMCPY_SERIALIZATION(FontFaceStyle, TID_FontFaceStyle)
 
 	template <>
 	struct RTTIPlainType<CharacterInformation>
@@ -269,6 +272,32 @@ namespace b3d
 
 				object.Initialize();
 			}
+		}
+	};
+
+	class B3D_EXPORT FontMetaDataRTTI : public TRTTIType<FontMetaData, ResourceMetaData, FontMetaDataRTTI>
+	{
+	private:
+		B3D_RTTI_BEGIN_MEMBERS
+			B3D_RTTI_MEMBER(FamilyName, 0)
+			B3D_RTTI_MEMBER(Style, 1)
+		B3D_RTTI_END_MEMBERS
+
+	public:
+		const String& GetRttiName() override
+		{
+			static String name = "FontMetaData";
+			return name;
+		}
+
+		u32 GetRttiId() const override
+		{
+			return TID_FontMetaData;
+		}
+
+		TShared<IReflectable> NewRttiObject() override
+		{
+			return B3DMakeShared<FontMetaData>();
 		}
 	};
 

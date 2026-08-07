@@ -7,6 +7,7 @@
 #include "GUI/B3DGUIInteractable.h"
 #include "Image/B3DColor.h"
 #include "Resources/B3DResource.h"
+#include "Text/B3DFontFace.h"
 #include "Utility/B3DBitfield.h"
 #include "Utility/B3DRectOffset.h"
 #include "2D/B3DTextSprite.h"
@@ -49,13 +50,6 @@ namespace b3d
 		Hidden
 	};
 
-	/** Determines which face of a font family is used for rendering text. */
-	enum class GUIFontWeight
-	{
-		Normal,
-		Bold
-	};
-
 	/** All possible properties in a GUI style sheet. See GUIStyleSheetStateStyle for their descriptions. */
 	enum class GUIStyleSheetPropertyType
 	{
@@ -91,6 +85,7 @@ namespace b3d
 		FontFamily,
 		FontSize,
 		FontWeight,
+		FontStyle,
 		LineHeight,
 		LetterSpacing,
 		WordWrap,
@@ -222,10 +217,9 @@ namespace b3d
 		u32 BorderBottomLeftRadius = 0; /**< Radius of the bottom left border corner, if rounded corners are desired. In logical pixel units. */
 		u32 BorderBottomRightRadius = 0; /**< Radius of the bottom right border corner, if rounded corners are desired. In logical pixel units. */
 
-		HFont Font; /**< Regular face of the font family to render the text contents of the GUI element with. */
-		// TODO - To be removed with the font family refactor
-		HFont BoldFont; /**< Bold face of the same font family as @p Font. Null if the family has no bold face. */
-		GUIFontWeight FontWeight = GUIFontWeight::Normal; /**< Determines which face of the font family the text is rendered with. */
+		HFontFamily FontFamily; /**< Font family to render the text contents of the GUI element with. */
+		FontWeight FontWeight = FontWeight::Normal; /**< Weight of the font family face to render the text with. */
+		FontSlant FontSlant = FontSlant::Normal; /**< Slant of the font family face to render the text with. */
 		float FontSize = 8.0f; /**< Font size to render the text contents of the GUI element with, in logical point units. */
 		float LineHeight = 1.0f; /**< Multiplier applied to the line height reported by the font. */
 		float LetterSpacing = 0.0f; /**< Extra space inserted after every character, in logical pixel units. Negative values tighten the text. */
@@ -233,8 +227,11 @@ namespace b3d
 		GUIVerticalTextAlignment VerticalTextAlignment = GUIVerticalTextAlignment::Middle; /**< Determines vertical alignment of text within the GUI element. */
 		GUIWordWrapMode WordWrap = GUIWordWrapMode::None; /**< Determines if text wraps when it doesn't fit in a single line. */
 
-		/** Returns the font face the text should be rendered with, accounting for the requested font weight. */
-		B3D_NO_RREF const HFont& GetWeightedFont() const { return FontWeight == GUIFontWeight::Bold && BoldFont != nullptr ? BoldFont : Font; }
+		/**
+		 * Returns the font face the text should be rendered with. This is the face of the assigned family that best matches
+		 * the requested weight and slant, which may be a substitute when the family provides no exact match.
+		 */
+		B3D_NO_RREF const HFont& GetFont() const;
 
 		/** Returns the typographic controls to apply on top of the font's own metrics, scaled from logical to physical units by @p scale. */
 		TextMetrics GetTextMetrics(float scale = 1.0f) const { return TextMetrics{ LineHeight, LetterSpacing * scale }; }

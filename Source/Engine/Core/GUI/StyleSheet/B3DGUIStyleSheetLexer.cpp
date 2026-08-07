@@ -44,13 +44,16 @@ GUIStyleSheetLexer::GUIStyleSheetLexer()
 	mPropertyKeywords["font-family"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["font-size"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["font-weight"] = GUIStyleSheetTokenTypes::Property;
+	mPropertyKeywords["font-style"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["line-height"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["letter-spacing"] = GUIStyleSheetTokenTypes::Property;
 	mPropertyKeywords["b3d-word-wrap"] = GUIStyleSheetTokenTypes::Property;
 
-	// Font weights
-	mPropertyKeywords["normal"] = GUIStyleSheetTokenTypes::FontWeight;
-	mPropertyKeywords["bold"] = GUIStyleSheetTokenTypes::FontWeight;
+	// Font face keywords, shared between the font-weight and font-style properties
+	mPropertyKeywords["normal"] = GUIStyleSheetTokenTypes::FontFace;
+	mPropertyKeywords["bold"] = GUIStyleSheetTokenTypes::FontFace;
+	mPropertyKeywords["italic"] = GUIStyleSheetTokenTypes::FontFace;
+	mPropertyKeywords["oblique"] = GUIStyleSheetTokenTypes::FontFace;
 
 	// Border properties
 	mPropertyKeywords["border"] = GUIStyleSheetTokenTypes::Property;

@@ -20,6 +20,9 @@ namespace b3d
 		void TestUnexpectedTokenIsReportedAsError();
 		void TestTextMetricParsing();
 		void TestFontWeightSelectsBoldFace();
+		void TestFontMetaDataReportsFaceIdentity();
+		void TestFontFamilyMatchesClosestFace();
+		void TestFontStyleParsing();
 		void TestTextMetricsAffectMeasuredSize();
 	};
 } // namespace b3d
