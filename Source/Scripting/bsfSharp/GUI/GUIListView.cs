@@ -114,6 +114,15 @@ namespace b3d
         }
 
         /// <summary>
+        /// Marks the contents of all visible entries as out of date, causing them to be rebuilt on the next update. Use when
+        /// entry visuals depend on state the list view itself doesn't track, such as an externally managed selection.
+        /// </summary>
+        public void Refresh()
+        {
+            contentsDirty = true;
+        }
+
+        /// <summary>
         /// Finds an index of the specified entry in the list.
         /// </summary>
         /// <param name="data">Data of the entry to search for.</param>
