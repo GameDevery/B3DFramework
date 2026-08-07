@@ -984,7 +984,7 @@ TGpuTlsfAllocator<VulkanHeapBackend>& VulkanGpuDevice::GetOrCreateGpuMemoryAlloc
 		configuration.GrowthFactor = 2;
 		configuration.MaxEmptyHeapCount = 1;
 		configuration.MinAllocationSize = 16;
-		configuration.BufferImageGranularity = mDeviceProperties.limits.bufferImageGranularity;
+		configuration.Granularity = mDeviceProperties.limits.bufferImageGranularity;
 		configuration.DeferralMode = GpuAllocatorFreeDeferralMode::ResourceLifecycle;
 		configuration.HeapCreateInfo.MemoryTypeBits = (1u << memoryTypeIndex);
 		configuration.HeapCreateInfo.PropertyFlags = flags;

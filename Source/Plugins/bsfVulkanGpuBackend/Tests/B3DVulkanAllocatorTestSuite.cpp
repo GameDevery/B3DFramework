@@ -41,7 +41,7 @@ namespace
 		configuration.GrowthFactor = 2;
 		configuration.MaxEmptyHeapCount = 1;
 		configuration.MinAllocationSize = 16;
-		configuration.BufferImageGranularity = limits.bufferImageGranularity;
+		configuration.Granularity = limits.bufferImageGranularity;
 
 		configuration.HeapCreateInfo.MemoryTypeBits = (1u << memoryTypeIndex);
 		configuration.HeapCreateInfo.PropertyFlags = flags;
