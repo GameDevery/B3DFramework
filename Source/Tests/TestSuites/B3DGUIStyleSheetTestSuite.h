@@ -22,6 +22,7 @@ namespace b3d
 		void TestFontWeightSelectsBoldFace();
 		void TestFontMetaDataReportsFaceIdentity();
 		void TestFontFamilyMatchesClosestFace();
+		void TestFontFamilyLoadsFacesOnDemand();
 		void TestFontStyleParsing();
 		void TestTextMetricsAffectMeasuredSize();
 	};

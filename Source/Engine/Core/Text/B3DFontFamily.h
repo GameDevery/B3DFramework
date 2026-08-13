@@ -20,6 +20,7 @@ namespace b3d
 			: Font(std::move(font)), Style(style)
 		{ }
 
+		/** Font providing the face. May not have been loaded yet, as faces are only loaded once they are used. */
 		B3D_SCRIPT_EXPORT()
 		HFont Font;
 
@@ -59,12 +60,12 @@ namespace b3d
 		B3D_NO_RREF const String& GetFamilyName() const { return mFamilyName; }
 
 		/**
-		 * Returns the face that best matches the requested style. For a family that provides at least one face this never
-		 * returns null: when no face provides the requested style exactly, the closest available face is substituted. Use
-		 * HasFace() when an exact match is required.
+		 * Returns the face that best matches the requested style, loading it if it has not been loaded yet. When no face
+		 * provides the requested style exactly the closest available face is substituted, so this only returns null for a
+		 * family that provides no face that can be loaded. Use HasFace() when an exact match is required.
 		 */
 		B3D_SCRIPT_EXPORT()
-		B3D_NO_RREF const HFont& GetFace(const FontFaceStyle& style) const;
+		B3D_NO_RREF const HFont& GetFace(const FontFaceStyle& style);
 
 		/** Returns true if the family provides a face with exactly the requested style. */
 		B3D_SCRIPT_EXPORT()
@@ -74,8 +75,9 @@ namespace b3d
 		B3D_NO_RREF const Vector<FontFamilyFace>& GetFaces() const { return mFaces; }
 
 		/**
-		 * Adds a face to the family. Returns false without modifying the family if @p font is null, or if the family already
-		 * provides a face with the same style.
+		 * Adds a face to the family. The font need not have been loaded, as faces are only loaded once they are used.
+		 * Returns false without modifying the family if @p font is null, or if the family already provides a face with the
+		 * same style.
 		 */
 		B3D_SCRIPT_EXPORT()
 		bool AddFace(const HFont& font, const FontFaceStyle& style);
@@ -106,8 +108,6 @@ namespace b3d
 		/** Returns the family name and face style the provided font reports through its resource meta-data. */
 		static bool TryGetFaceIdentity(const HFont& font, String& outFamilyName, FontFaceStyle& outStyle);
 
-		void Initialize() override;
-
 		/** @} */
 
 	protected:
@@ -119,14 +119,10 @@ namespace b3d
 		const FontFamilyFace* FindExactFace(const FontFaceStyle& style) const;
 
 		/**
-		 * Returns the face of the provided slant whose weight is closest to @p weight, searching only in a single direction.
-		 * Returns null if the family provides no face of that slant in that direction.
-		 *
-		 * @param slant			Slant the face must have. Faces of any other slant are ignored.
-		 * @param weight		Weight to search around.
-		 * @param searchHeavier	If true only faces at or above @p weight are considered, otherwise only those at or below it.
+		 * Returns the face that substitutes best for the provided style, or null if the family provides no faces at all.
+		 * Considers style alone, so no font data needs to be loaded to determine the best match.
 		 */
-		const FontFamilyFace* FindClosestWeight(FontSlant slant, FontWeight weight, bool searchHeavier) const;
+		FontFamilyFace* FindBestFace(const FontFaceStyle& style);
 
 		String mFamilyName;
 		Vector<FontFamilyFace> mFaces;

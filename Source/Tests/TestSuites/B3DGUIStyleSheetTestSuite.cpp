@@ -6,6 +6,8 @@
 #include "GUI/StyleSheet/B3DGUIStyleSheetParser.h"
 #include "Resources/B3DBuiltinResources.h"
 #include "Text/B3DFontFamily.h"
+#include "Text/B3DFontManager.h"
+#include "Resources/B3DResources.h"
 #include "String/B3DSourceCode.h"
 
 using namespace b3d;
@@ -65,6 +67,15 @@ namespace
 		return ParseStyleSheet(kChainedPseudoClassSource);
 	}
 
+	/**
+	 * Creates an empty font that is distinct from every other font. Intended for tests that need to tell one face of a
+	 * font family apart from another, and that never render from them.
+	 */
+	HFont CreateDistinctFont()
+	{
+		return B3DStaticResourceCast<Font>(GetResources().CreateResourceHandle(Font::CreateEmpty()));
+	}
+
 	/** Returns the rules of the first (and expected to be only) ruleset in the style sheet. */
 	const GUIStyleSheetRules& GetOnlyRules(const GUIStyleSheet& styleSheet)
 	{
@@ -118,6 +129,7 @@ GUIStyleSheetTestSuite::GUIStyleSheetTestSuite()
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontWeightSelectsBoldFace)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontMetaDataReportsFaceIdentity)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontFamilyMatchesClosestFace)
+	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontFamilyLoadsFacesOnDemand)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestFontStyleParsing)
 	B3D_ADD_TEST(GUIStyleSheetTestSuite::TestTextMetricsAffectMeasuredSize)
 }
@@ -405,18 +417,19 @@ void GUIStyleSheetTestSuite::TestFontMetaDataReportsFaceIdentity()
 
 void GUIStyleSheetTestSuite::TestFontFamilyMatchesClosestFace()
 {
-	const HFont face = GetBuiltinResources().GetDefaultFont();
-	B3D_TEST_ASSERT(face != nullptr)
-	if(face == nullptr)
-		return;
+	// Every face is a distinct font, so the face that was picked can be identified from the font that comes back. None of
+	// them are rendered from, as this exercises which style is picked rather than what it draws
+	const HFont lightFace = CreateDistinctFont();
+	const HFont regularFace = CreateDistinctFont();
+	const HFont boldFace = CreateDistinctFont();
+	const HFont italicFace = CreateDistinctFont();
 
-	// The faces all share one font, as this exercises which style is picked rather than what it renders
 	FontFamilyCreateInformation createInformation;
 	createInformation.Name = "TestFamily";
-	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Light)));
-	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Normal)));
-	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Bold)));
-	createInformation.Faces.push_back(FontFamilyFace(face, FontFaceStyle(FontWeight::Normal, FontSlant::Italic)));
+	createInformation.Faces.push_back(FontFamilyFace(lightFace, FontFaceStyle(FontWeight::Light)));
+	createInformation.Faces.push_back(FontFamilyFace(regularFace, FontFaceStyle(FontWeight::Normal)));
+	createInformation.Faces.push_back(FontFamilyFace(boldFace, FontFaceStyle(FontWeight::Bold)));
+	createInformation.Faces.push_back(FontFamilyFace(italicFace, FontFaceStyle(FontWeight::Normal, FontSlant::Italic)));
 
 	const HFontFamily family = FontFamily::Create(createInformation);
 	B3D_TEST_ASSERT(family != nullptr)
@@ -427,27 +440,76 @@ void GUIStyleSheetTestSuite::TestFontFamilyMatchesClosestFace()
 	B3D_TEST_ASSERT(family->GetFaces().size() == 4)
 
 	// Duplicate styles are rejected rather than shadowing the face that was added first
-	B3D_TEST_ASSERT(!family->AddFace(face, FontFaceStyle(FontWeight::Bold)))
+	B3D_TEST_ASSERT(!family->AddFace(CreateDistinctFont(), FontFaceStyle(FontWeight::Bold)))
 	B3D_TEST_ASSERT(family->GetFaces().size() == 4)
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Bold)) == boldFace)
 
 	// A weight heavier than anything on offer falls back to the heaviest available face, never to a lighter one
-	B3D_TEST_ASSERT(family->HasFace(FontFaceStyle(FontWeight::Bold)))
 	B3D_TEST_ASSERT(!family->HasFace(FontFaceStyle(FontWeight::Black)))
-	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Black)) != nullptr)
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Black)) == boldFace)
+
+	// A weight lighter than anything on offer likewise falls back to the lightest available face
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Thin)) == lightFace)
+
+	// A request above the regular-to-medium band searches heavier before lighter, so semi-bold takes the bold face rather
+	// than the regular one that is the same distance away
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::SemiBold)) == boldFace)
+
+	// A request within the band steps across it first, so medium takes the regular face rather than the bold one
+	B3D_TEST_ASSERT(!family->HasFace(FontFaceStyle(FontWeight::Medium)))
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Medium)) == regularFace)
 
 	// An exact slant match is preferred over a better weight match in the wrong slant
-	B3D_TEST_ASSERT(family->HasFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)))
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Bold, FontSlant::Italic)) == italicFace)
 
-	// Removing the only italic face leaves italic requests resolving to an upright substitute
+	// Removing the only italic face leaves italic requests resolving to an upright substitute of the right weight
 	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)))
 	B3D_TEST_ASSERT(!family->HasFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)))
-	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Normal, FontSlant::Italic)) != nullptr)
+	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle(FontWeight::Bold, FontSlant::Italic)) == boldFace)
 
 	// An empty family has nothing to substitute, so it reports no face rather than an arbitrary one
 	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Light)))
 	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Normal)))
 	B3D_TEST_ASSERT(family->RemoveFace(FontFaceStyle(FontWeight::Bold)))
 	B3D_TEST_ASSERT(family->GetFace(FontFaceStyle()) == nullptr)
+}
+
+void GUIStyleSheetTestSuite::TestFontFamilyLoadsFacesOnDemand()
+{
+	// Scanning a font folder records what each face is without reading any font data, so a discovered family starts out
+	// holding faces that have not been loaded
+	const Vector<String> familyNames = GetFontManager().GetFamilyNames();
+	B3D_TEST_ASSERT(!familyNames.empty())
+
+	HFontFamily familyWithUnloadedFace;
+	FontFaceStyle unloadedFaceStyle;
+
+	for(const String& familyName : familyNames)
+	{
+		const HFontFamily family = GetFontManager().TryGetFamily(familyName);
+		if(family == nullptr)
+			continue;
+
+		const auto found = std::find_if(family->GetFaces().begin(), family->GetFaces().end(),
+			[](const FontFamilyFace& face) { return !face.Font.IsLoaded(false); });
+
+		if(found == family->GetFaces().end())
+			continue;
+
+		familyWithUnloadedFace = family;
+		unloadedFaceStyle = found->Style;
+
+		break;
+	}
+
+	B3D_TEST_ASSERT(familyWithUnloadedFace != nullptr)
+	if(familyWithUnloadedFace == nullptr)
+		return;
+
+	// Asking for the face is what loads it, and the family holds on to it from then on
+	const HFont face = familyWithUnloadedFace->GetFace(unloadedFaceStyle);
+	B3D_TEST_ASSERT(face.IsLoaded(false))
+	B3D_TEST_ASSERT(familyWithUnloadedFace->GetFace(unloadedFaceStyle) == face)
 }
 
 void GUIStyleSheetTestSuite::TestFontStyleParsing()

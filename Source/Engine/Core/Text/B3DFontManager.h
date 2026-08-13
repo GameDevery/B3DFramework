@@ -19,9 +19,9 @@ namespace b3d
 	 * family name and style rather than by pointing at an individual font file.
 	 *
 	 * Families are normally discovered by scanning folders of font resources through RegisterFontFolder(). Scanning reads
-	 * only resource meta-data, so indexing a folder does not load any font data; a family's faces are loaded the first time
-	 * something asks for that family. Families may also be registered explicitly through RegisterFamily(), which takes
-	 * precedence over anything discovery would produce under the same name.
+	 * only resource meta-data, so indexing a folder does not load any font data; an individual face is loaded the first
+	 * time it is used. Families may also be registered explicitly through RegisterFamily(), which takes precedence over
+	 * anything discovery would produce under the same name.
 	 *
 	 * @note Thread safe.
 	 */
@@ -30,7 +30,7 @@ namespace b3d
 	public:
 		/**
 		 * Returns the family registered under the provided name, or null if no faces are registered under it. Name matching
-		 * ignores case. Discovered families and their faces are loaded on the first request and cached afterwards.
+		 * ignores case. The returned family loads its faces as they are used.
 		 */
 		HFontFamily TryGetFamily(const String& name);
 
@@ -65,20 +65,10 @@ namespace b3d
 		Vector<String> GetFamilyNames() const;
 
 	private:
-		/** A face known to the index, which may not have been loaded yet. */
-		struct IndexedFace
-		{
-			FontFaceStyle Style;
-			Path VirtualPath; /**< Path the face is loaded from. Blank for faces that were registered already loaded. */
-			HFont Font; /**< Set once the face has been loaded, or immediately for faces that were registered already loaded. */
-		};
-
-		/** A family known to the index, whose FontFamily resource may not have been built yet. */
+		/** A family known to the index. */
 		struct IndexedFamily
 		{
-			String Name; /**< Name with its original casing, used when the family resource is built. */
-			Vector<IndexedFace> Faces;
-			HFontFamily Family; /**< Built on the first request, or provided up front for explicitly registered families. */
+			HFontFamily Family;
 			bool IsExplicitlyRegistered = false; /**< True if the family came from RegisterFamily(), which discovery must not modify. */
 		};
 

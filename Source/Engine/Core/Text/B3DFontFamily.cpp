@@ -6,6 +6,62 @@
 
 using namespace b3d;
 
+/** Number of distinct weights, used to separate faces that substitute equally well but in a less preferred direction. */
+constexpr u32 kWeightBandSize = (u32)kMaximumFontWeight - (u32)kMinimumFontWeight + 1;
+
+/** Penalty of a face in the wrong slant. Exceeds every weight penalty, so slant is always matched ahead of weight. */
+constexpr u32 kSlantMismatchPenalty = 3 * kWeightBandSize;
+
+/**
+ * Returns how poorly a face of weight @p available substitutes for a request for weight @p requested, where zero is an
+ * exact match and lower is better.
+ *
+ * Faces are ordered the same way CSS orders them: the search commits to one direction and exhausts it before doubling
+ * back, so a request for a bold face never lands on a light one while a semi-bold face is available. Directions searched
+ * later are pushed into a higher band, which keeps every face in them behind every face in the direction before it.
+ */
+static u32 GetWeightPenalty(FontWeight requested, FontWeight available)
+{
+	const u32 requestedWeight = (u32)requested;
+	const u32 availableWeight = (u32)available;
+	const u32 distance = requestedWeight > availableWeight ? requestedWeight - availableWeight : availableWeight - requestedWeight;
+
+	u32 band;
+	if(requested >= FontWeight::Normal && requested <= FontWeight::Medium)
+	{
+		// A request within the regular-to-medium band steps across the band before searching outwards, as those two weights
+		// substitute for each other far better than either substitutes for a face outside the band.
+		if(availableWeight >= requestedWeight && available <= FontWeight::Medium)
+			band = 0;
+		else if(availableWeight < requestedWeight)
+			band = 1;
+		else
+			band = 2;
+	}
+	else
+	{
+		// A light face is best replaced by a lighter one and a heavy face by a heavier one, so the direction searched first
+		// is the one leading away from the regular-to-medium band.
+		const bool preferHeavier = requested > FontWeight::Medium;
+		band = (availableWeight >= requestedWeight) == preferHeavier ? 0 : 1;
+	}
+
+	return band * kWeightBandSize + distance;
+}
+
+/** Ensures the font providing the face is loaded. Returns false if it is missing or could not be loaded. */
+static bool TryLoadFace(FontFamilyFace& face)
+{
+	if(face.Font.IsLoaded(false))
+		return true;
+
+	if(face.Font == nullptr)
+		return false;
+
+	face.Font = GetResources().Load<Font>(face.Font.GetId(), ResourceLoadOptions(false));
+	return face.Font.IsLoaded(false);
+}
+
 FontFamily::FontFamily(const FontFamilyCreateInformation& createInformation)
 	: Resource(false, createInformation.Name), mFamilyName(createInformation.Name)
 {
@@ -13,53 +69,20 @@ FontFamily::FontFamily(const FontFamilyCreateInformation& createInformation)
 		AddFace(face.Font, face.Style);
 }
 
-void FontFamily::Initialize()
-{
-	for(const FontFamilyFace& face : mFaces)
-		AddResourceDependency(face.Font);
-
-	Resource::Initialize();
-}
-
-const HFont& FontFamily::GetFace(const FontFaceStyle& style) const
+const HFont& FontFamily::GetFace(const FontFaceStyle& style)
 {
 	static const HFont kNoFace;
 
-	// Slant is matched ahead of weight, the same way CSS does it: an upright face at the wrong weight reads better than a
-	// slanted face at the right one.
-	const FontSlant slantSearchOrder[] =
+	// A face that cannot be loaded is dropped and the next best match tried, as it would fail on every later request too.
+	while(FontFamilyFace* face = FindBestFace(style))
 	{
-		style.Slant,
-		style.Slant == FontSlant::Italic ? FontSlant::Normal : FontSlant::Italic
-	};
-
-	for(FontSlant slant : slantSearchOrder)
-	{
-		if(const FontFamilyFace* face = FindExactFace({ style.Weight, slant }); face != nullptr)
+		if(TryLoadFace(*face))
 			return face->Font;
 
-		// A request within the regular-to-medium band takes a single step across the band before searching outwards, as
-		// those two weights substitute for each other far better than either substitutes for a heavier or lighter face.
-		if(style.Weight == FontWeight::Normal)
-		{
-			if(const FontFamilyFace* face = FindExactFace({ FontWeight::Medium, slant }); face != nullptr)
-				return face->Font;
-		}
-		else if(style.Weight == FontWeight::Medium)
-		{
-			if(const FontFamilyFace* face = FindExactFace({ FontWeight::Normal, slant }); face != nullptr)
-				return face->Font;
-		}
+		const FontFaceStyle faceStyle = face->Style;
+		B3D_LOG(Warning, LogFont, "Unable to load the weight {0} face of font family \"{1}\". Dropping it from the family.", (u32)faceStyle.Weight, mFamilyName);
 
-		// Without an exact match the search commits to one direction and exhausts it before doubling back, so a request for
-		// a bold face never lands on a light one while a semi-bold face is available.
-		const bool searchHeavierFirst = style.Weight > FontWeight::Medium;
-
-		if(const FontFamilyFace* face = FindClosestWeight(slant, style.Weight, searchHeavierFirst); face != nullptr)
-			return face->Font;
-
-		if(const FontFamilyFace* face = FindClosestWeight(slant, style.Weight, !searchHeavierFirst); face != nullptr)
-			return face->Font;
+		RemoveFace(faceStyle);
 	}
 
 	return kNoFace;
@@ -74,6 +97,8 @@ bool FontFamily::AddFace(const HFont& font, const FontFaceStyle& style)
 		return false;
 
 	mFaces.push_back(FontFamilyFace(font, style));
+	AddResourceDependency(font);
+
 	return true;
 }
 
@@ -85,7 +110,9 @@ bool FontFamily::RemoveFace(const FontFaceStyle& style)
 	if(found == mFaces.end())
 		return false;
 
+	RemoveResourceDependency(found->Font);
 	mFaces.erase(found);
+
 	return true;
 }
 
@@ -97,26 +124,26 @@ const FontFamilyFace* FontFamily::FindExactFace(const FontFaceStyle& style) cons
 	return found != mFaces.end() ? &(*found) : nullptr;
 }
 
-const FontFamilyFace* FontFamily::FindClosestWeight(FontSlant slant, FontWeight weight, bool searchHeavier) const
+FontFamilyFace* FontFamily::FindBestFace(const FontFaceStyle& style)
 {
-	const FontFamilyFace* closest = nullptr;
+	FontFamilyFace* bestFace = nullptr;
+	u32 bestPenalty = 0;
 
-	for(const FontFamilyFace& face : mFaces)
+	for(FontFamilyFace& face : mFaces)
 	{
-		if(face.Style.Slant != slant)
-			continue;
+		// Slant is matched ahead of weight, the same way CSS does it: an upright face at the wrong weight reads better than
+		// a slanted face at the right one.
+		const u32 slantPenalty = face.Style.Slant != style.Slant ? kSlantMismatchPenalty : 0;
+		const u32 penalty = slantPenalty + GetWeightPenalty(style.Weight, face.Style.Weight);
 
-		if(searchHeavier ? face.Style.Weight < weight : face.Style.Weight > weight)
-			continue;
-
-		const bool isCloser = closest == nullptr ||
-			(searchHeavier ? face.Style.Weight < closest->Style.Weight : face.Style.Weight > closest->Style.Weight);
-
-		if(isCloser)
-			closest = &face;
+		if(bestFace == nullptr || penalty < bestPenalty)
+		{
+			bestFace = &face;
+			bestPenalty = penalty;
+		}
 	}
 
-	return closest;
+	return bestFace;
 }
 
 bool FontFamily::TryGetFaceIdentity(const HFont& font, String& outFamilyName, FontFaceStyle& outStyle)

@@ -256,7 +256,8 @@ Properties:
 A font family groups the font files that differ only in weight and slant. Families are discovered
 automatically from the imported fonts: each font file reports which family it belongs to and which
 face it is, so `Arial.ttf` and `arialbd.ttf` join the same `Arial` family without needing to be named
-alike.
+alike. Discovery reads only the metadata of each font, and an individual face is loaded the first time it is
+used, so a family may offer many faces without any of the unused ones costing anything.
 
 `font-weight` and `font-style` then select a face out of that family. If the family has no face with
 exactly the requested weight and slant, the closest one is substituted, so asking for a face a family
