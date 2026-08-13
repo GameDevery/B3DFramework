@@ -1171,11 +1171,14 @@ void RCNodeIndirectDiffuseLighting::Render(const RenderCompositorNodeInputs& inp
 
 		TShared<RenderTexture> rt = RenderTexture::Create(rtDesc);
 
-		RenderPassCreateInformation clearRenderPassCreateInformation(rt);
+		ClearMaterial* clearMaterial = ClearMaterial::GetVariation(false);
+		clearMaterial->Prepare(~0u);
+
+		RenderPassCreateInformation clearRenderPassCreateInformation(rt, clearMaterial->GetGpuParameterSet());
 		clearRenderPassCreateInformation.ClearMask = RT_DEPTH;
 
 		commandBuffer.BeginRenderPass(clearRenderPassCreateInformation);
-		GetRendererUtility().Clear(commandBuffer, -1);
+		clearMaterial->Execute(commandBuffer);
 		commandBuffer.EndRenderPass();
 
 		TetrahedraRenderMaterial* renderTetrahedra =

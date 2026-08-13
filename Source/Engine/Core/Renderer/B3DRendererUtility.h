@@ -167,7 +167,8 @@ namespace b3d
 		};
 
 		B3D_UNIFORM_BUFFER_BEGIN(ClearUniformDefinition)
-			B3D_UNIFORM_BUFFER_MEMBER(i32, gClearValue)
+			B3D_UNIFORM_BUFFER_MEMBER(Vector4UI, gIntegerClearValue)
+			B3D_UNIFORM_BUFFER_MEMBER(Color, gColorClearValue)
 		B3D_UNIFORM_BUFFER_END
 
 		extern ClearUniformDefinition gClearUniformDefinition;
@@ -177,12 +178,35 @@ namespace b3d
 		{
 			RMAT_DEF("Clear.bsl");
 
+			/** Helper method used for initializing variations of this material. */
+			template <u32 MODE>
+			static const ShaderVariationParameters& GetVariation()
+			{
+				static ShaderVariationParameters variation = ShaderVariationParameters(
+					TInlineArray<ShaderVariationParameter, 4>({ ShaderVariationParameter("MODE", MODE) }));
+
+				return variation;
+			}
+
 		public:
 			ClearMaterial() = default;
 			void Initialize() override;
 
-			/** Executes the material on the currently bound render target, clearing to to @p value. */
-			void Execute(GpuCommandBuffer& commandBuffer, u32 value);
+			/** Assigns the integer value the target will be cleared to. Only valid on the integer variation. */
+			void Prepare(u32 value);
+
+			/** Assigns the color the target will be cleared to. Only valid on the color variation. */
+			void Prepare(const Color& color);
+
+			/** Executes the material on the currently bound render target, clearing it to the value set by Prepare(). */
+			void Execute(GpuCommandBuffer& commandBuffer);
+
+			/**
+			 * Returns the material variation matching the provided parameters.
+			 *
+			 * @param	isColor		If true the target is cleared to a floating point color, otherwise to an integer value.
+			 */
+			static ClearMaterial* GetVariation(bool isColor);
 
 		private:
 			GpuParameterUniformBuffer mUniformBufferParameter;
@@ -447,12 +471,6 @@ namespace b3d
 
 				DrawScreenQuad(commandBuffer, uv, textureSize, numInstances);
 			}
-
-			/**
-			 * Clears the currently bound render target to the provided integer value. This is similar to
-			 * GpuBackend::clearRenderTarget(), except it supports integer clears.
-			 */
-			void Clear(GpuCommandBuffer& commandBuffer, u32 value);
 
 			/** Returns a unit sphere stencil mesh. */
 			TShared<Mesh> GetSphereStencil() const { return mUnitSphereStencilMesh; }

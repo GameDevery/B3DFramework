@@ -403,12 +403,6 @@ void RendererUtility::DrawScreenQuad(GpuCommandBuffer& commandBuffer, const Area
 	mNextQuadVBSlot = (mNextQuadVBSlot + 1) % kNumQuadVbSlots;
 }
 
-void RendererUtility::Clear(GpuCommandBuffer& commandBuffer, u32 value)
-{
-	ClearMaterial* clearMat = ClearMaterial::Get();
-	clearMat->Execute(commandBuffer, value);
-}
-
 RendererUtility& GetRendererUtility()
 {
 	return RendererUtility::Instance();
@@ -505,17 +499,36 @@ void ClearMaterial::Initialize()
 	mGpuParameterSet->GetUniformBufferParameter("Params", mUniformBufferParameter);
 }
 
-void ClearMaterial::Execute(GpuCommandBuffer& commandBuffer, u32 value)
+void ClearMaterial::Prepare(u32 value)
+{
+	GpuBufferMappedScope uniforms = gClearUniformDefinition.AllocateTransient().Map();
+	gClearUniformDefinition.gIntegerClearValue.Set(uniforms, Vector4UI(value, value, value, value));
+
+	mUniformBufferParameter.Set(uniforms);
+}
+
+void ClearMaterial::Prepare(const Color& color)
+{
+	GpuBufferMappedScope uniforms = gClearUniformDefinition.AllocateTransient().Map();
+	gClearUniformDefinition.gColorClearValue.Set(uniforms, color);
+
+	mUniformBufferParameter.Set(uniforms);
+}
+
+void ClearMaterial::Execute(GpuCommandBuffer& commandBuffer)
 {
 	B3D_PROFILE_RENDERER_MATERIAL
 
-	GpuBufferMappedScope uniforms = gClearUniformDefinition.AllocateTransient().Map();
-	gClearUniformDefinition.gClearValue.Set(uniforms, value);
-
-	mUniformBufferParameter.Set(uniforms);
-
 	Bind(commandBuffer);
 	GetRendererUtility().DrawScreenQuad(commandBuffer);
+}
+
+ClearMaterial* ClearMaterial::GetVariation(bool isColor)
+{
+	if(isColor)
+		return Get(GetVariation<1>());
+
+	return Get(GetVariation<0>());
 }
 
 CompositeUniformDefinition gCompositeUniformDefinition;

@@ -633,25 +633,39 @@ bool RenderBeast::RenderOverlay(GpuCommandBuffer& commandBuffer, RenderBeastScen
 	TShared<RenderTarget> target = viewProps.Target.Target;
 	TShared<Viewport> viewport = camera->GetViewport();
 
+	commandBuffer.SetViewport(viewport->GetArea());
+
 	ClearFlags clearFlags = viewport->GetClearFlags();
 	RenderSurfaceMask clearMask = RT_NONE;
-	if(clearFlags.IsSet(ClearFlagBits::Color))
-		clearMask |= RT_COLOR_ALL;
-
 	if(clearFlags.IsSet(ClearFlagBits::Depth))
 		clearMask |= RT_DEPTH;
 
 	if(clearFlags.IsSet(ClearFlagBits::Stencil))
 		clearMask |= RT_STENCIL;
 
-	if(clearMask != RT_NONE)
+	ClearMaterial* clearMaterial = nullptr;
+	if(clearFlags.IsSet(ClearFlagBits::Color))
 	{
-		commandBuffer.BeginRenderPass(RenderPassCreateInformation(target));
-		commandBuffer.ClearViewport(clearMask);
-		commandBuffer.EndRenderPass();
+		clearMaterial = ClearMaterial::GetVariation(true);
+		clearMaterial->Prepare(viewport->GetBackgroundColor());
 	}
 
-	commandBuffer.SetViewport(viewport->GetArea());
+	if(clearMask != RT_NONE || clearMaterial != nullptr)
+	{
+		RenderPassCreateInformation renderPassCreateInformation(target, RT_NONE, RT_COLOR_ALL | RT_DEPTH_STENCIL);
+		if(clearMaterial != nullptr)
+			renderPassCreateInformation.Parameters.Add(clearMaterial->GetGpuParameterSet());
+
+		commandBuffer.BeginRenderPass(renderPassCreateInformation);
+
+		if(clearMask != RT_NONE)
+			commandBuffer.ClearViewport(clearMask);
+
+		if(clearMaterial != nullptr)
+			clearMaterial->Execute(commandBuffer);
+
+		commandBuffer.EndRenderPass();
+	}
 
 	const Set<RendererExtension*, RendererExtension::SortFunction>& rendererExtensions = scene.GetCombinedRendererExtensions();
 
