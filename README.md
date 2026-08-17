@@ -8,11 +8,24 @@ B3D Framework is a C++17 library intended as a foundation for high-performance g
  * Feature rich: integrated UI system, C# scripting, physics, animation, audio and asset import for all popular formats
  * Clean architecture: highly modular, fully documented, and cross-platform
 
-The framework is still in active development, but can already serve as a solid foundation for custom game engines. Some of the upcoming features include support for every major desktop and console platform, meshlet-style rendering with LOD and streaming over a persistent GPU scene, real-time global illumination, physical camera, light and material controls.
+The framework is still in active development, but can already serve as a solid foundation for custom game engines.
+
+# In development
+
+Currently being worked on:
+ * Platform ports: macOS, Linux and PlayStation 5
+ * GPU backends: Direct3D 12 and Metal
+ * GPU backend enhancements: push constants, bindless resources, reserved resources, frame graph and memory aliasing
+
+What's next:
+ * Physically based API for controlling cameras, lights and materials
+ * Renderer overhaul: all shaders modernized with the new BSL 2.0 language, large coordinate support, view-relative rendering, reverse Z, occlusion culling, instanced rendering, GPU scene, virtualized geometry, mesh simplification and LODs
+
+Further out: rebuilt Banshee 3D editor, real-time global illumination, high level networking, Recast / Detour nav-mesh integration and more.
 
 # Features
 * [Features](Documentation/GitHub/features.md) - A detailed list of all currently available features.
-* [Roadmap](Documentation/GitHub/roadmap.md) - A list of features to be implemented in both near and far future. 
+* [Release notes](Documentation/GitHub/ReleaseNotes.md) - A list of changes made in each release. 
 
 # Get started
 * [Documentation](https://docs.banshee3d.io) - Head over to the "Manuals" section to learn how to use the framework from the ground up. Use the API reference to look up what a particular class/method does.
