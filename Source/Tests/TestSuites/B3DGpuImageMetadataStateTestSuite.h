@@ -19,6 +19,9 @@ namespace b3d
 		/** Verifies only selected native writes acquire readers and publish a writer epoch. */
 		void TestSubmissionSelection();
 
+		/** Verifies barrier-only ranges are retained without fake accesses and released after submission or reset. */
+		void TestExplicitBarrierRetention();
+
 		/** Verifies render-pass aggregation, base-typed accesses and post-barrier callbacks use static backend dispatch. */
 		void TestStaticDispatch();
 

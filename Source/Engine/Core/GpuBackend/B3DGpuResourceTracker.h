@@ -196,7 +196,8 @@ namespace b3d
 
 			/**
 			 * Tracks an explicit image barrier. The tracker partitions @p subresourceRange and derives each source scope and
-			 * layout. A barrier before the first access becomes a submission-entry requirement.
+			 * layout. A barrier before the first access becomes a submission-entry requirement. 
+			 * The image and affected subresources are retained without declaring a read or write.
 			 */
 			void TrackExplicitImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, GpuStageFlags destinationStages, GpuAccessFlags destinationAccess, GpuImageLayout destinationLayout, TBarrierHelper& barrierHelper);
 
@@ -372,7 +373,7 @@ namespace b3d
 			u32 CopySubresourceTrackingStateWithNewRange(u32 copyFromIndex, const GpuTextureSubresourceRange& newRange);
 
 		protected:
-			/** Retains the image and its affected subresources, including their read/write submission accounting. */
+			/** Retains the image and its affected subresources. Use GpuAccessFlag::None to retain them without declaring a read or write. */
 			void RegisterImageSubresources(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, GpuAccessFlags accessFlags);
 
 			/** Determines if a barrier is required for the provided destination usage/access, and if so queues a barrier in the barrier helper, to be executed before the next buffer access. */

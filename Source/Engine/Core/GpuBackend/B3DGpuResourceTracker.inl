@@ -556,6 +556,7 @@ void TGpuResourceTracker<TDerived, TBarrierHelper>::TrackExplicitImageBarrier(IG
 			}
 		}
 
+		callbackParameters->Tracker->RegisterImageSubresources(callbackParameters->Image, subresourceTrackingState.Range, GpuAccessFlag::None);
 		callbackParameters->Tracker->GetDerived().QueueRequiredImageBarrier(callbackParameters->Image, subresourceTrackingState, callbackParameters->DestinationStages, callbackParameters->DestinationAccess, callbackParameters->DestinationLayout, *callbackParameters->BarrierHelper);
 	}, &callbackParameters);
 }

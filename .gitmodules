@@ -11,3 +11,7 @@
 [submodule "Tools/BansheeDocGenerator"]
 	path = Tools/BansheeDocGenerator
 	url = https://github.com/GameFoundry/B3DDocGenerator.git
+[submodule "PS5"]
+	path = Platform/PS5
+	url = https://example.invalid/optional-ps5.git
+	update = none

@@ -41,11 +41,11 @@ namespace
 	class NativeTestImage : public IGpuImageResource
 	{
 	public:
-		NativeTestImage()
+		explicit NativeTestImage(u32 mipLevelCount = 1)
 		{
 			mFaceCount = 2;
-			mMipLevelCount = 1;
-			mFullRange = GpuTextureSubresourceRange(0, 1, 0, 2, GpuTextureAspectFlag::Depth | GpuTextureAspectFlag::Stencil);
+			mMipLevelCount = mipLevelCount;
+			mFullRange = GpuTextureSubresourceRange(0, mipLevelCount, 0, 2, GpuTextureAspectFlag::Depth | GpuTextureAspectFlag::Stencil);
 			mSubresources = (IGpuResource**)B3DAllocate(sizeof(IGpuResource*) * GetSubresourceCount());
 			for(u32 subresourceIndex = 0; subresourceIndex < GetSubresourceCount(); subresourceIndex++)
 				mSubresources[subresourceIndex] = B3DNew<NativeTestSubresource>();
@@ -170,6 +170,7 @@ GpuImageMetadataStateTestSuite::GpuImageMetadataStateTestSuite() : TestSuite("Gp
 {
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestRangeSplits)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestSubmissionSelection)
+	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestExplicitBarrierRetention)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestStaticDispatch)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestInternalAccess)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestAttachmentClear)
@@ -534,4 +535,79 @@ void GpuImageMetadataStateTestSuite::TestComputeAccessTracking()
 	helper.Execute();
 	tracker.NotifyUnbound();
 	tracker.Clear();
+}
+
+void GpuImageMetadataStateTestSuite::TestExplicitBarrierRetention()
+{
+	const GpuQueueId graphics(GQT_GRAPHICS, 0);
+	const GpuTextureSubresourceRange range(1, 1, 0, ~0u, GpuTextureAspectFlag::Depth | GpuTextureAspectFlag::Stencil);
+	for(bool submit : { false, true })
+	{
+		for(bool enableRewrite : { false, true })
+		{
+			NativeTestImage image(2);
+			NativeTestTracker tracker;
+			NativeTestBarrierHelper helper(&tracker);
+			for(u32 barrierIndex = 0; barrierIndex < 2; barrierIndex++)
+				tracker.TrackExplicitImageBarrier(&image, range, GpuStageFlag::Transfer, GpuAccessFlag::Read, GpuImageLayout::TransferSource, helper);
+
+			B3D_TEST_ASSERT(image.GetBoundCount() == 1)
+			B3D_TEST_ASSERT(!helper.HasBarriers())
+			helper.Execute();
+			for(u32 face = 0; face < 2; face++)
+			{
+				for(GpuTextureAspectFlag aspect : { GpuTextureAspectFlag::Depth, GpuTextureAspectFlag::Stencil })
+				{
+					B3D_TEST_ASSERT(image.GetSubresource(face, 0, aspect)->GetBoundCount() == 0)
+					B3D_TEST_ASSERT(image.GetSubresource(face, 1, aspect)->GetBoundCount() == 1)
+					B3D_TEST_ASSERT(!tracker.GetSubresourceTrackingState(&image, face, 1, aspect).HazardState->HasAccess())
+				}
+
+				// Only one incoming depth encoding selects the internal write; stencil has no meta-data operation.
+				static_cast<NativeTestSubresource&>(*image.GetSubresource(face, 1, GpuTextureAspectFlag::Depth)).Compressed = enableRewrite && face == 0;
+			}
+
+			GpuImageSubresourceTrackingState& trackingState = tracker.GetSubresourceTrackingState(&image, 0, 1, GpuTextureAspectFlag::Depth);
+			NativeTestState& metadataState = static_cast<NativeTestState&>(*trackingState.MetadataState);
+			metadataState.Compressed.RecordAccess(GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write);
+			*trackingState.HazardState = metadataState.Compressed;
+
+			if(submit)
+			{
+				NativeTestVisitor visitor;
+				tracker.ResolveSubmissionTransitions(graphics, visitor);
+				B3D_TEST_ASSERT(visitor.Writes == (enableRewrite ? 1u : 0u))
+				tracker.NotifyUsed(graphics);
+				B3D_TEST_ASSERT(image.GetBoundCount() == 1)
+				B3D_TEST_ASSERT(image.GetUseCount() == (enableRewrite ? 1u : 0u))
+				B3D_TEST_ASSERT(image.GetUseInfo(GpuAccessFlag::Read).IsEmpty())
+				for(u32 face = 0; face < 2; face++)
+				{
+					for(GpuTextureAspectFlag aspect : { GpuTextureAspectFlag::Depth, GpuTextureAspectFlag::Stencil })
+					{
+						IGpuResource& subresource = *image.GetSubresource(face, 1, aspect);
+						const bool hasWrite = enableRewrite && face == 0 && aspect == GpuTextureAspectFlag::Depth;
+						B3D_TEST_ASSERT(subresource.GetBoundCount() == 1)
+						B3D_TEST_ASSERT(subresource.GetUseCount() == (hasWrite ? 1u : 0u))
+						B3D_TEST_ASSERT(subresource.GetUseInfo(GpuAccessFlag::Write).IsSet(graphics) == hasWrite)
+						B3D_TEST_ASSERT(subresource.GetUseInfo(GpuAccessFlag::Read).IsEmpty())
+					}
+				}
+				tracker.NotifyDone(graphics);
+			}
+			else
+				tracker.NotifyUnbound();
+
+			tracker.Clear();
+			B3D_TEST_ASSERT(image.GetBoundCount() == 0 && image.GetUseCount() == 0)
+			for(u32 face = 0; face < 2; face++)
+			{
+				for(GpuTextureAspectFlag aspect : { GpuTextureAspectFlag::Depth, GpuTextureAspectFlag::Stencil })
+				{
+					B3D_TEST_ASSERT(image.GetSubresource(face, 1, aspect)->GetBoundCount() == 0)
+					B3D_TEST_ASSERT(image.GetSubresource(face, 1, aspect)->GetUseCount() == 0)
+				}
+			}
+		}
+	}
 }
