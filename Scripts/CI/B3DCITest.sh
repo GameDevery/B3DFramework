@@ -67,11 +67,17 @@ if [ ! -f "$TEST_RUNNER" ]; then
 	exit 1
 fi
 
+# Vulkan is the default backend on Windows and Linux. Keep layer settings local to each process.
+UNIT_TEST_ENVIRONMENT=()
+if [ "$PLATFORM" = "win32" ] || [ "$PLATFORM" = "linux" ]; then
+	UNIT_TEST_ENVIRONMENT+=("VK_VALIDATION_VALIDATE_SYNC=true")
+fi
+
 echo "Running unit tests..."
 
 cd "$BIN_DIR"
 set +e
-"$TEST_RUNNER" \
+env "${UNIT_TEST_ENVIRONMENT[@]}" "$TEST_RUNNER" \
 	--headless \
 	--gpu.PreferIntegrated=true \
 	--debug.DisableErrorDialogs=true \
@@ -195,10 +201,16 @@ run_snapshot() {
 	echo "Running snapshot test: $CATEGORY/$TEST_NAME"
 
 	mkdir -p "$OUT_DIR"
+	rm -f "$OUT_DIR/${TEST_NAME}_result.json"
+
+	local TEST_ENVIRONMENT=()
+	if [ "$CATEGORY" = "Vulkan" ] || { [ "$CATEGORY" = "Editor" ] && [ "$PLATFORM" != "darwin" ]; }; then
+		TEST_ENVIRONMENT+=("VK_VALIDATION_VALIDATE_SYNC=true")
+	fi
 
 	set +e
 	# CATEGORY_ARGS is intentionally unquoted so it word-splits into arguments
-	"$EXE" \
+	env "${TEST_ENVIRONMENT[@]}" "$EXE" \
 		--headless \
 		--gpu.PreferIntegrated=true \
 		--debug.DisableErrorDialogs=true \
@@ -213,6 +225,10 @@ run_snapshot() {
 
 	if [ $EXIT_CODE -ne 0 ]; then
 		echo "::error::Snapshot test $CATEGORY/$TEST_NAME failed with exit code $EXIT_CODE"
+		FAILED_TESTS+=("$CATEGORY/$TEST_NAME")
+	elif [ ! -f "$OUT_DIR/${TEST_NAME}_result.json" ] || ! grep -Eq '"statusText"[[:space:]]*:[[:space:]]*"passed(_with_warnings)?"' "$OUT_DIR/${TEST_NAME}_result.json"; then
+		# Logged validation errors fail the snapshot verdict even when the executable exits successfully.
+		echo "::error::Snapshot test $CATEGORY/$TEST_NAME reported failure or produced no valid result"
 		FAILED_TESTS+=("$CATEGORY/$TEST_NAME")
 	fi
 }
