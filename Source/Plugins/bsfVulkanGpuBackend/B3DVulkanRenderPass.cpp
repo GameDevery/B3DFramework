@@ -48,7 +48,6 @@ bool VulkanRenderPassAttachmentCreateInformation::IsCompatible(bool isDepth, con
 size_t VulkanRenderPassCreateInformation::CalculateCompatibilityHash() const
 {
 	size_t hash = 0;
-	B3DCombineHash(hash, IsOffscreenSurface);
 	B3DCombineHash(hash, SampleCount);
 
 	for(u32 i = 0; i < B3DSize(ColorAttachments); i++)
@@ -63,7 +62,7 @@ size_t VulkanRenderPassCreateInformation::CalculateCompatibilityHash() const
 
 bool VulkanRenderPassCreateInformation::IsCompatible(const VulkanRenderPassCreateInformation& other) const
 {
-	if(IsOffscreenSurface != other.IsOffscreenSurface || SampleCount != other.SampleCount)
+	if(SampleCount != other.SampleCount)
 		return false;
 
 	for(u32 i = 0; i < B3DSize(ColorAttachments); i++)
@@ -104,14 +103,6 @@ VulkanRenderPass::VulkanRenderPass(const VkDevice& device, const VulkanRenderPas
 			vkAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			vkAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			vkAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			vkAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-			if(createInformation.IsOffscreenSurface)
-				mColorAttachmentFinalLayouts[sequentialAttachmentIndex] = GpuImageLayout::ColorAttachment;
-			else
-				mColorAttachmentFinalLayouts[sequentialAttachmentIndex] = GpuImageLayout::Present;
-
-			vkAttachmentDescription.finalLayout = VulkanUtility::ToVkImageLayout(mColorAttachmentFinalLayouts[sequentialAttachmentIndex]);
 
 			vkAttachmentReference.attachment = sequentialAttachmentIndex;
 			vkAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -144,10 +135,6 @@ VulkanRenderPass::VulkanRenderPass(const VkDevice& device, const VulkanRenderPas
 		vkAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		vkAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		vkAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-		vkAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-		mDepthAttachmentFinalLayout = GpuImageLayout::DepthStencilAttachment;
-		vkAttachmentDescription.finalLayout = VulkanUtility::ToVkImageLayout(mDepthAttachmentFinalLayout);
 
 		mDepthReference.attachment = sequentialAttachmentIndex;
 		mDepthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -172,25 +159,6 @@ VulkanRenderPass::VulkanRenderPass(const VkDevice& device, const VulkanRenderPas
 	else
 		mSubpassDescription.pDepthStencilAttachment = nullptr;
 
-	// No external memory barriers, we handle them explicitly
-	mDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	mDependencies[0].dstSubpass = 0;
-	mDependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-	mDependencies[0].srcAccessMask = 0;
-	mDependencies[0].dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-	mDependencies[0].dstAccessMask = 0;
-	mDependencies[0].dependencyFlags = 0;
-
-	mDependencies[1].srcSubpass = 0;
-	mDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	mDependencies[1].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-	mDependencies[1].srcAccessMask = 0;
-	mDependencies[1].dstStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-	mDependencies[1].dstAccessMask = 0;
-	mDependencies[1].dependencyFlags = 0;
-
-	// Any other use-case other than those above require an explicit barrier
-
 	// Create render pass and frame buffer create infos
 	mRenderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	mRenderPassCI.pNext = nullptr;
@@ -199,8 +167,8 @@ VulkanRenderPass::VulkanRenderPass(const VkDevice& device, const VulkanRenderPas
 	mRenderPassCI.pAttachments = mAttachments;
 	mRenderPassCI.subpassCount = 1;
 	mRenderPassCI.pSubpasses = &mSubpassDescription;
-	mRenderPassCI.dependencyCount = 2;
-	mRenderPassCI.pDependencies = mDependencies;
+	mRenderPassCI.dependencyCount = 0;
+	mRenderPassCI.pDependencies = nullptr;
 
 	mDefault = CreateVariant(RT_NONE, RT_NONE, RT_NONE);
 }
@@ -225,27 +193,19 @@ VkRenderPass VulkanRenderPass::CreateVariant(RenderSurfaceMask loadMask, RenderS
 		VkAttachmentReference& vkAttachmentReference = mColorReferences[attachmentIndex];
 
 		if(loadMask.IsSet((RenderSurfaceMaskBits)(1 << attachmentIndex)))
-		{
 			vkAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-		}
 		else if(clearMask.IsSet((RenderSurfaceMaskBits)(1 << attachmentIndex)))
-		{
 			vkAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			vkAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		}
 		else
-		{
 			vkAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			vkAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		}
 
 		if(readMask.IsSet((RenderSurfaceMaskBits)(1 << attachmentIndex)))
 			vkAttachmentReference.layout = VK_IMAGE_LAYOUT_GENERAL;
 		else
 			vkAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		if(loadMask.IsSet((RenderSurfaceMaskBits)(1 << attachmentIndex)))
-			vkAttachmentDescription.initialLayout = vkAttachmentReference.layout;
+		vkAttachmentDescription.initialLayout = vkAttachmentReference.layout;
+		vkAttachmentDescription.finalLayout = vkAttachmentReference.layout;
 	}
 
 	if(mHasDepthAttachment)
@@ -270,7 +230,6 @@ VkRenderPass VulkanRenderPass::CreateVariant(RenderSurfaceMask loadMask, RenderS
 			else
 				vkAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
-			vkAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 
 		// When depth-stencil is readable it's up to the caller to ensure he doesn't try to write to it as well, so we
@@ -290,8 +249,8 @@ VkRenderPass VulkanRenderPass::CreateVariant(RenderSurfaceMask loadMask, RenderS
 				vkAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		}
 
-		if(loadMask.IsSet(RT_DEPTH) || loadMask.IsSet(RT_STENCIL))
-			vkAttachmentDescription.initialLayout = vkAttachmentReference.layout;
+		vkAttachmentDescription.initialLayout = vkAttachmentReference.layout;
+		vkAttachmentDescription.finalLayout = vkAttachmentReference.layout;
 	}
 
 	VkRenderPass output;

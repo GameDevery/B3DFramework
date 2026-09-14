@@ -34,7 +34,7 @@ namespace b3d::render
 		void RecordNativeBufferBarrier(IGpuBufferResource* buffer, const GpuBarrierScope& barrier);
 
 		/** Adds a native transition for one logical image range. */
-		void RecordNativeImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, const GpuBarrierScope& barrier, GpuImageLayout& oldLayout, GpuImageLayout newLayout, GpuImageBarrierFlags barrierFlags);
+		void RecordNativeImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, const GpuBarrierScope& barrier, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuImageBarrierFlags barrierFlags);
 
 		/** Returns the destination stages of the preceding barrier recorded for @p buffer. */
 		GpuStageFlags GetPrecedingBarrierDestinationStages(IGpuBufferResource* buffer) const;

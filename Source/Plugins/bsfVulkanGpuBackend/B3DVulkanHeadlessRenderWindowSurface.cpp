@@ -89,7 +89,6 @@ void VulkanHeadlessRenderWindowSurface::CreateSwapChainImages()
 	// Create render pass
 	VulkanRenderPassCreateInformation renderPassCreateInformation;
 	renderPassCreateInformation.SampleCount = 1;
-	renderPassCreateInformation.IsOffscreenSurface = false;
 	renderPassCreateInformation.ColorAttachments[0].Format = colorFormat;
 	renderPassCreateInformation.ColorAttachments[0].IsShaderReadAllowed = false;
 	renderPassCreateInformation.ColorAttachments[0].IsEnabled = true;

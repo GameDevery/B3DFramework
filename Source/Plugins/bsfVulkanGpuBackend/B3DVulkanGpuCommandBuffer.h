@@ -98,6 +98,41 @@ namespace b3d
 			TInlineArray<VulkanSemaphore*, 2> SignalSemaphores; /**< Binary semaphores signaled after the complete logical submission. */
 		};
 
+		/** Resolves layout, ownership and access barriers for command-buffer submission and presentation. */
+		class VulkanSubmissionTransitionVisitor : public GpuSubmissionTransitionVisitor
+		{
+		public:
+			/** Collects submission barriers and queue waits for the destination queue. */
+			VulkanSubmissionTransitionVisitor(VulkanGpuDevice& device, GpuQueueId destinationQueueId, VulkanGpuCommandBufferSubmitInformation& outSubmitInformation);
+
+			void VisitBuffer(const GpuSubmissionBufferTransition& transition) override;
+			void VisitImage(const GpuSubmissionImageTransition& transition) override;
+
+			/** Records destination barriers into the supplied command buffer, or creates a submission prelude when omitted. */
+			void Finalize(VkCommandBuffer destinationCommandBuffer = VK_NULL_HANDLE);
+
+		private:
+			struct SourceQueueTransitionInformation
+			{
+				GpuQueueId QueueId;
+				GpuQueueMask WaitMask;
+				VulkanBarrierBatch Barriers;
+			};
+
+			/** Excludes source accesses from other queue families; semaphore waits make those accesses available. */
+			GpuAccessScope GetQueueSourceScope(const GpuAccessScope& sourceScope, u32 queueFamily) const;
+
+			/** Finds or creates the release-barrier batch for a source queue and accumulates its prerequisite waits. */
+			SourceQueueTransitionInformation& GetSourceQueueTransitionInformation(GpuQueueId sourceQueueId, GpuQueueMask waitMask);
+
+			VulkanGpuDevice& mDevice;
+			GpuQueueId mDestinationQueueId;
+			u32 mDestinationQueueFamily;
+			VulkanGpuCommandBufferSubmitInformation& mSubmitInformation;
+			VulkanBarrierBatch mDestinationQueueBarriers;
+			TInlineArray<SourceQueueTransitionInformation, 4> mSourceQueueTransitions;
+		};
+
 		/** CommandBuffer implementation for Vulkan. */
 		class VulkanGpuCommandBuffer final : public GpuCommandBuffer
 		{

@@ -31,6 +31,12 @@ namespace b3d
 		/** Checks that the concurrent-read texture hint enables concurrent Vulkan queue-family sharing when needed. */
 		void TestConcurrentQueueReadTexture();
 
+		/** Clears, loads and reads back color and depth/stencil attachments across render-pass layout transitions. */
+		void TestRenderPassAttachmentTransitions();
+
+		/** Presents acquired, rendered and read-back images, then recreates the swapchain. Uses a real swapchain when running without --headless. */
+		void TestSwapChainTransitions();
+
 		/** Resolves a multisampled texture through the Vulkan transfer-native resolve path. */
 		void TestMultisampleResolve();
 

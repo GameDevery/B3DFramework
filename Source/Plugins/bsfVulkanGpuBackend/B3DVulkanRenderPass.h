@@ -46,9 +46,6 @@ namespace b3d
 			/** Number of samples in the attachments. All attachments must have the same number of samples. */
 			u32 SampleCount = 0;
 
-			/** Set to true if render pass will be rendering to an offscreen surface that will not be presented. */
-			bool IsOffscreenSurface = false;
-
 			/** Calculates hash that determines if two render passes are considered compatible. @see IsCompatible() */
 			size_t CalculateCompatibilityHash() const;
 
@@ -61,7 +58,7 @@ namespace b3d
 
 		/**
 		 * Wrapper around a Vulkan render pass. Currently sub-passes are not used, so different render passes just
-		 * represent a different number of attachments and their layout transitions as well as load and store operations.
+		 * represent attachments and their load/store operations. Layout transitions and synchronization are recorded explicitly outside the pass.
 		 */
 		class VulkanRenderPass
 		{
@@ -82,18 +79,6 @@ namespace b3d
 			 *							cannot have both load and clear bits set. If load bit is set, clear will be ignored.
 			 */
 			VkRenderPass GetVkRenderPass(RenderSurfaceMask loadMask, RenderSurfaceMask readMask, RenderSurfaceMask clearMask) const;
-
-			/**
-			 * Returns the final layout the specified color attachment transitions to when the render pass ends. The
-			 * attachment index is sequential in range [0, getNumColorAttachments()).
-			 */
-			GpuImageLayout GetColorAttachmentFinalLayout(u32 index) const { return mColorAttachmentFinalLayouts[index]; }
-
-			/**
-			 * Returns the final layout the depth attachment transitions to when the render pass ends. Only valid if depth
-			 * attachment was requested during render pass creation.
-			 */
-			GpuImageLayout GetDepthAttachmentFinalLayout() const { return mDepthAttachmentFinalLayout; }
 
 			/** Gets the total number of frame-buffer attachments, including both color and depth. */
 			u32 GetAttachmentCount() const { return mAttachmentCount; }
@@ -148,8 +133,6 @@ namespace b3d
 			u32 mMaximumColorAttachmentIndex = 0;
 			u32 mColorAttachmentSequentialToAttachmentIndexMap[B3D_MAXIMUM_RENDER_TARGET_COUNT]{ 0 };
 			std::array<bool, B3D_MAXIMUM_RENDER_TARGET_COUNT> mIsShaderReadAllowedForColorAttachment { false };
-			GpuImageLayout mColorAttachmentFinalLayouts[B3D_MAXIMUM_RENDER_TARGET_COUNT]{};
-			GpuImageLayout mDepthAttachmentFinalLayout = GpuImageLayout::Undefined;
 			bool mHasDepthAttachment;
 			VkSampleCountFlagBits mSampleFlags = VK_SAMPLE_COUNT_1_BIT;
 			VkDevice mDevice;
@@ -158,7 +141,6 @@ namespace b3d
 			mutable VkAttachmentReference mColorReferences[B3D_MAXIMUM_RENDER_TARGET_COUNT];
 			mutable VkAttachmentReference mDepthReference;
 			mutable VkSubpassDescription mSubpassDescription;
-			mutable VkSubpassDependency mDependencies[2];
 			mutable VkRenderPassCreateInfo mRenderPassCI;
 
 			VkRenderPass mDefault;

@@ -31,11 +31,11 @@ namespace b3d::render
 		/** Adds a buffer memory barrier and includes its stages in the batch dependency. */
 		void AddBufferBarrier(VkBuffer buffer, VkPipelineStageFlags sourceStages, VkAccessFlags sourceAccess, VkPipelineStageFlags destinationStages, VkAccessFlags destinationAccess, u32 sourceQueueFamily = VK_QUEUE_FAMILY_IGNORED, u32 destinationQueueFamily = VK_QUEUE_FAMILY_IGNORED, VkDeviceSize offset = 0, VkDeviceSize size = VK_WHOLE_SIZE);
 
-		/** Adds an image memory barrier and returns the effective old layout if it merged with an existing barrier. */
-		VkImageLayout AddImageBarrier(VkImage image, const VkImageSubresourceRange& range, const GpuBarrierScope& barrier, VkImageLayout oldLayout, VkImageLayout newLayout, u32 sourceQueueFamily = VK_QUEUE_FAMILY_IGNORED, u32 destinationQueueFamily = VK_QUEUE_FAMILY_IGNORED);
+		/** Adds or merges an image barrier. An undefined old layout discards contents. */
+		void AddImageBarrier(VkImage image, const VkImageSubresourceRange& range, const GpuBarrierScope& barrier, VkImageLayout oldLayout, VkImageLayout newLayout, u32 sourceQueueFamily = VK_QUEUE_FAMILY_IGNORED, u32 destinationQueueFamily = VK_QUEUE_FAMILY_IGNORED);
 
-		/** Adds an image memory barrier and returns the effective old layout if it merged with an existing barrier. */
-		VkImageLayout AddImageBarrier(VkImage image, const VkImageSubresourceRange& range, VkPipelineStageFlags sourceStages, VkAccessFlags sourceAccess, VkPipelineStageFlags destinationStages, VkAccessFlags destinationAccess, VkImageLayout oldLayout, VkImageLayout newLayout, u32 sourceQueueFamily = VK_QUEUE_FAMILY_IGNORED, u32 destinationQueueFamily = VK_QUEUE_FAMILY_IGNORED);
+		/** Adds or merges an image barrier. An undefined old layout discards contents. */
+		void AddImageBarrier(VkImage image, const VkImageSubresourceRange& range, VkPipelineStageFlags sourceStages, VkAccessFlags sourceAccess, VkPipelineStageFlags destinationStages, VkAccessFlags destinationAccess, VkImageLayout oldLayout, VkImageLayout newLayout, u32 sourceQueueFamily = VK_QUEUE_FAMILY_IGNORED, u32 destinationQueueFamily = VK_QUEUE_FAMILY_IGNORED);
 
 		/** Adds an execution-only dependency described using backend-independent stages. */
 		void AddExecutionBarrier(const GpuBarrierScope& barrier);
@@ -113,7 +113,7 @@ namespace b3d::render
 		void RecordNativeBufferBarrier(IGpuBufferResource* buffer, const GpuBarrierScope& barrier);
 
 		/** Accumulates a resolved native image barrier and reconciles @p oldLayout after barrier merging. */
-		void RecordNativeImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, const GpuBarrierScope& barrier, GpuImageLayout& oldLayout, GpuImageLayout newLayout, GpuImageBarrierFlags barrierFlags);
+		void RecordNativeImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& subresourceRange, const GpuBarrierScope& barrier, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuImageBarrierFlags barrierFlags);
 
 		VulkanBarrierBatch mBarrierBatch;
 	};

@@ -22,7 +22,7 @@ D3D12BarrierHelper::D3D12BarrierHelper(D3D12ResourceTracker* resourceTracker, Gp
 	: TGpuBarrierHelper<D3D12BarrierHelper, D3D12ResourceTracker>(resourceTracker), mQueueType(queueType)
 { }
 
-void D3D12BarrierHelper::RecordNativeImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& range, const GpuBarrierScope& barrier, GpuImageLayout& oldLayout, GpuImageLayout newLayout, GpuImageBarrierFlags barrierFlags)
+void D3D12BarrierHelper::RecordNativeImageBarrier(IGpuImageResource* image, const GpuTextureSubresourceRange& range, const GpuBarrierScope& barrier, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuImageBarrierFlags barrierFlags)
 {
 	D3D12Image* const d3d12Image = static_cast<D3D12Image*>(image);
 	const bool discardContents = barrierFlags.IsSet(GpuImageBarrierFlag::DiscardContents);
@@ -61,8 +61,6 @@ void D3D12BarrierHelper::RecordNativeImageBarrier(IGpuImageResource* image, cons
 		found->NewLayout = newLayout;
 		found->BarrierFlags |= barrierFlags;
 		found->PrecedingBarrierDestinationStages |= GetPrecedingBarrierDestinationStages(image, range);
-
-		oldLayout = found->OldLayout;
 
 		const bool mergedDiscardContents = found->BarrierFlags.IsSet(GpuImageBarrierFlag::DiscardContents);
 		const GpuImageLayout resolvedOldLogicalLayout = mergedDiscardContents ? GpuImageLayout::Undefined : found->OldLayout;

@@ -30,7 +30,7 @@ VulkanFramebuffer::VulkanFramebuffer(VulkanResourceManager* owner, VulkanRenderP
 		else
 			attachmentViews[attachmentIdx] = desc.Color[i].Image->GetView(desc.Color[i].Surface, true).Handle;
 
-		AddColorAttachment(*desc.Color[i].Image, desc.Color[i].Image->GetRange(desc.Color[i].Surface), i, renderPass->GetColorAttachmentFinalLayout(attachmentIdx));
+		AddColorAttachment(*desc.Color[i].Image, desc.Color[i].Image->GetRange(desc.Color[i].Surface), i);
 
 		attachmentIdx++;
 	}
@@ -42,7 +42,7 @@ VulkanFramebuffer::VulkanFramebuffer(VulkanResourceManager* owner, VulkanRenderP
 		else
 			attachmentViews[attachmentIdx] = desc.Depth.Image->GetView(desc.Depth.Surface, true).Handle;
 
-		AddDepthStencilAttachment(*desc.Depth.Image, desc.Depth.Image->GetRange(desc.Depth.Surface), renderPass->GetDepthAttachmentFinalLayout());
+		AddDepthStencilAttachment(*desc.Depth.Image, desc.Depth.Image->GetRange(desc.Depth.Surface));
 
 		attachmentIdx++;
 	}
@@ -78,8 +78,7 @@ const GpuFramebufferLayoutPolicy& VulkanFramebuffer::GetLayoutPolicy()
 		GpuRenderPassAttachmentLayout(GpuImageLayout::DepthStencilAttachment),
 		GpuRenderPassAttachmentLayout(GpuImageLayout::DepthReadOnlyStencilAttachment, GpuImageLayout::DepthReadOnlyStencilAttachment),
 		GpuRenderPassAttachmentLayout(GpuImageLayout::DepthAttachmentStencilReadOnly, GpuImageLayout::DepthAttachmentStencilReadOnly),
-		GpuRenderPassAttachmentLayout(GpuImageLayout::DepthStencilReadOnly, GpuImageLayout::DepthStencilReadOnly),
-		GpuImageLayout::Undefined);
+		GpuRenderPassAttachmentLayout(GpuImageLayout::DepthStencilReadOnly, GpuImageLayout::DepthStencilReadOnly));
 
 	return policy;
 }

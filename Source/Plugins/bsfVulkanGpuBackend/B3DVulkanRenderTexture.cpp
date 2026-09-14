@@ -27,7 +27,6 @@ void VulkanRenderTexture::Initialize()
 
 	VulkanRenderPassCreateInformation renderPassInformation;
 	renderPassInformation.SampleCount = mRenderTargetProperties.MultisampleCount > 1 ? mRenderTargetProperties.MultisampleCount : 1;
-	renderPassInformation.IsOffscreenSurface = true;
 
 	VulkanFramebufferInformation framebufferInformation;
 	framebufferInformation.Width = mRenderTargetProperties.Width;

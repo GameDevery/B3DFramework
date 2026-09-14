@@ -73,7 +73,7 @@ namespace
 	private:
 		friend class TGpuBarrierHelper<NativeTestBarrierHelper, NativeTestTracker>;
 		void RecordNativeBufferBarrier(IGpuBufferResource*, const GpuBarrierScope&) { }
-		void RecordNativeImageBarrier(IGpuImageResource*, const GpuTextureSubresourceRange&, const GpuBarrierScope&, GpuImageLayout&, GpuImageLayout, GpuImageBarrierFlags) { }
+		void RecordNativeImageBarrier(IGpuImageResource*, const GpuTextureSubresourceRange&, const GpuBarrierScope&, GpuImageLayout, GpuImageLayout, GpuImageBarrierFlags) { }
 	};
 
 	/** Exposes mutable state for synthetic native command recording. */
@@ -171,6 +171,7 @@ GpuImageMetadataStateTestSuite::GpuImageMetadataStateTestSuite() : TestSuite("Gp
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestRangeSplits)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestSubmissionSelection)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestExplicitBarrierRetention)
+	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestMergedImageLayoutBarriers)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestStaticDispatch)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestInternalAccess)
 	B3D_ADD_TEST(GpuImageMetadataStateTestSuite::TestAttachmentClear)
@@ -610,4 +611,31 @@ void GpuImageMetadataStateTestSuite::TestExplicitBarrierRetention()
 			}
 		}
 	}
+}
+
+void GpuImageMetadataStateTestSuite::TestMergedImageLayoutBarriers()
+{
+	NativeTestImage image;
+	NativeTestTracker tracker;
+	NativeTestBarrierHelper helper(&tracker);
+	const GpuTextureSubresourceRange range(0, 1, 0, 1, GpuTextureAspectFlag::Stencil);
+	tracker.TrackImageAccess(&image, range, GpuImageLayout::General, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Write, helper);
+	helper.Execute();
+
+	// The final request cancels the pending layout change, but retains its synchronization.
+	tracker.TrackExplicitImageBarrier(&image, range, GpuStageFlag::Transfer, GpuAccessFlag::Read, GpuImageLayout::TransferSource, helper);
+	tracker.TrackExplicitImageBarrier(&image, range, GpuStageFlag::ComputeShaderNonUniform, GpuAccessFlag::Read | GpuAccessFlag::Write, GpuImageLayout::General, helper);
+	helper.Execute();
+	const GpuImageSubresourceTrackingState& state = tracker.GetSubresourceTrackingState(&image, 0, 0, GpuTextureAspectFlag::Stencil);
+	B3D_TEST_ASSERT(state.CurrentLayout == GpuImageLayout::General)
+	B3D_TEST_ASSERT(state.RequiredLayout == GpuImageLayout::General)
+
+	// Discarding changes the native barrier's old layout, not the old layout validated by the tracker.
+	tracker.TrackImageAccess(&image, range, GpuImageLayout::TransferDestination, GpuStageFlag::Transfer, GpuAccessFlag::Write, helper, GpuImageBarrierFlag::DiscardContents);
+	tracker.TrackExplicitImageBarrier(&image, range, GpuStageFlag::Transfer, GpuAccessFlag::Read, GpuImageLayout::TransferSource, helper);
+	helper.Execute();
+	B3D_TEST_ASSERT(state.CurrentLayout == GpuImageLayout::TransferSource)
+	B3D_TEST_ASSERT(state.RequiredLayout == GpuImageLayout::TransferSource)
+	tracker.NotifyUnbound();
+	tracker.Clear();
 }

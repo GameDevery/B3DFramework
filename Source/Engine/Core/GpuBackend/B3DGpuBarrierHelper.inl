@@ -32,31 +32,27 @@ namespace b3d::render
 		if(image == nullptr)
 			return;
 
-		// Accumulate the native barrier. The backend may reconcile oldLayout from an already-merged barrier (e.g. Vulkan),
-		// in which case the layout-tracking bookkeeping below must observe the reconciled value.
 		static_cast<TDerived*>(this)->RecordNativeImageBarrier(image, subresourceRange, barrier, oldLayout, newLayout, barrierFlags);
 
-		if(oldLayout != newLayout)
+		auto foundTracking = std::find_if(mImageLayoutTracking.begin(), mImageLayoutTracking.end(), [image, &subresourceRange](const LayoutTrackingInfo& layoutTrackingInfo)
 		{
-			auto foundTracking = std::find_if(mImageLayoutTracking.begin(), mImageLayoutTracking.end(), [image, &subresourceRange](const LayoutTrackingInfo& layoutTrackingInfo)
-			{
-				return layoutTrackingInfo.Image == image && GpuBackendUtility::RangeEquals(layoutTrackingInfo.SubresourceRange, subresourceRange);
-			});
+			return layoutTrackingInfo.Image == image && GpuBackendUtility::RangeEquals(layoutTrackingInfo.SubresourceRange, subresourceRange);
+		});
 
-			if(foundTracking == mImageLayoutTracking.end())
-			{
-				LayoutTrackingInfo layoutTrackingInfo;
-				layoutTrackingInfo.Image = image;
-				layoutTrackingInfo.SubresourceRange = subresourceRange;
-				layoutTrackingInfo.OldLayout = oldLayout;
-				layoutTrackingInfo.NewLayout = newLayout;
-				mImageLayoutTracking.Add(layoutTrackingInfo);
-			}
-			else
-			{
-				B3D_ASSERT(foundTracking->OldLayout == oldLayout);
-				foundTracking->NewLayout = newLayout;
-			}
+		if(foundTracking != mImageLayoutTracking.end())
+		{
+			B3D_ASSERT(foundTracking->OldLayout == oldLayout);
+			// Retain the latest destination even when it returns to the original layout.
+			foundTracking->NewLayout = newLayout;
+		}
+		else if(oldLayout != newLayout)
+		{
+			LayoutTrackingInfo layoutTrackingInfo;
+			layoutTrackingInfo.Image = image;
+			layoutTrackingInfo.SubresourceRange = subresourceRange;
+			layoutTrackingInfo.OldLayout = oldLayout;
+			layoutTrackingInfo.NewLayout = newLayout;
+			mImageLayoutTracking.Add(layoutTrackingInfo);
 		}
 
 		BarrierTrackingInfo barrierTrackingInfo;

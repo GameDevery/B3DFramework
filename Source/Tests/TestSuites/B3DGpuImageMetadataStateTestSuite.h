@@ -22,6 +22,9 @@ namespace b3d
 		/** Verifies barrier-only ranges are retained without fake accesses and released after submission or reset. */
 		void TestExplicitBarrierRetention();
 
+		/** Verifies merged barriers retain their final requested layout, including cancellation and discard. */
+		void TestMergedImageLayoutBarriers();
+
 		/** Verifies render-pass aggregation, base-typed accesses and post-barrier callbacks use static backend dispatch. */
 		void TestStaticDispatch();
 

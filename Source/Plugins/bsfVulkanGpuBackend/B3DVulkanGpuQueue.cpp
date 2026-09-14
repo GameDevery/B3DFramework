@@ -6,6 +6,8 @@
 #include "B3DIVulkanRenderWindowSurface.h"
 #include "GpuBackend/B3DGpuSubmitThread.h"
 #include "B3DVulkanSwapChain.h"
+#include "B3DVulkanFramebuffer.h"
+#include "B3DVulkanTexture.h"
 #include "Profiling/B3DRenderStats.h"
 
 using namespace b3d;
@@ -283,14 +285,29 @@ VkResult VulkanGpuQueue::Present(VulkanSwapChain* swapChain, u32 swapChainImageI
 	AssertIfNotSubmitThread();
 
 	// vkQueuePresentKHR can only wait on binary semaphores, so all present dependencies (acquire semaphores and
-	// inter-queue timeline waits) are routed through an empty bridge submission.
+	// inter-queue timeline waits) and the explicit Present transition are routed through the bridge submission.
 	VulkanSemaphore* const presentSemaphore = swapChain->GetPresentBridgeSemaphore(swapChainImageIndex);
 
 	GpuCommandBufferPool& commandBufferPool = GetDevice().GetSubmitThread().GetCommandBufferPool(GetType());
 	const TShared<VulkanGpuCommandBuffer> bridgeCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(commandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Present synchronization")));
+	VulkanGpuCommandBufferSubmitInformation bridgeSubmitInformation;
+
+	VulkanImage& image = static_cast<VulkanImage&>(*swapChain->GetFramebufferForImage(swapChainImageIndex)->GetColorAttachments()[0].Image);
+	VulkanImageSubresource& subresource = *image.GetSubresource(0, 0, GpuTextureAspectFlag::Color);
+
+	// Present has no pipeline consumer; reuse submission ordering and ownership handling for its layout-only barrier.
+	// Swapchain destruction/recreation waits for device idle, including this bridge submission.
+	GpuResourceHazardState presentHazards;
+	presentHazards.HasLeadingBarrier = true;
+
+	GpuSubmissionImageTransition transition(image, GpuTextureSubresourceRange(0, 1, 0, 1, GpuTextureAspectFlag::Color), GpuImageLayout::Present, GpuImageLayout::Present, GpuImageBarrierFlag::None, GpuSubmissionTransition::Build(subresource, GetId(), presentHazards));
+	VulkanSubmissionTransitionVisitor transitionVisitor(GetDevice(), GetId(), bridgeSubmitInformation);
+	transitionVisitor.VisitImage(transition);
+	transitionVisitor.Finalize(bridgeCommandBuffer->GetVulkanHandle());
+
+	subresource.SetSubmissionState(std::move(transition.PostTransitionSubmissionState));
 	bridgeCommandBuffer->End();
 
-	VulkanGpuCommandBufferSubmitInformation bridgeSubmitInformation;
 	bridgeSubmitInformation.PrimaryCommandBuffer = bridgeCommandBuffer;
 	bridgeSubmitInformation.WaitSemaphores.Append(waitSemaphores.begin(), waitSemaphores.end());
 	bridgeSubmitInformation.SignalSemaphores.Add(presentSemaphore);

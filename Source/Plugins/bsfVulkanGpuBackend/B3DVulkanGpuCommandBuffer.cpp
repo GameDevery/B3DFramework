@@ -1294,7 +1294,7 @@ void VulkanGpuCommandBuffer::EndRenderPass()
 
 	mQueuedEvents.clear();
 
-	// Publish final attachment layouts and clear the render-pass tracking scope.
+	// Clear the render-pass tracking scope; attachment layouts remain unchanged.
 	mResourceTracker.EndRenderPass();
 
 	mState = GpuCommandBufferState::Recording;
@@ -1311,16 +1311,15 @@ void VulkanGpuCommandBuffer::EndRenderPass()
 	// TODO - Probably best to clear mBoundParams since I cleared the cache above
 }
 
-namespace
+namespace b3d
 {
-	class VulkanSubmissionTransitionVisitor : public GpuSubmissionTransitionVisitor
+	namespace render
 	{
-	public:
-		VulkanSubmissionTransitionVisitor(VulkanGpuDevice& device, GpuQueueId destinationQueueId, VulkanGpuCommandBufferSubmitInformation& submitInformation)
-			: mDevice(device), mDestinationQueueId(destinationQueueId), mDestinationQueueFamily(device.GetQueueFamily(destinationQueueId.GetType())), mSubmitInformation(submitInformation)
+		VulkanSubmissionTransitionVisitor::VulkanSubmissionTransitionVisitor(VulkanGpuDevice& device, GpuQueueId destinationQueueId, VulkanGpuCommandBufferSubmitInformation& outSubmitInformation)
+			: mDevice(device), mDestinationQueueId(destinationQueueId), mDestinationQueueFamily(device.GetQueueFamily(destinationQueueId.GetType())), mSubmitInformation(outSubmitInformation)
 		{ }
 
-		void VisitBuffer(const GpuSubmissionBufferTransition& transition) override
+		void VulkanSubmissionTransitionVisitor::VisitBuffer(const GpuSubmissionBufferTransition& transition)
 		{
 			VulkanBuffer* const buffer = static_cast<VulkanBuffer*>(transition.Buffer);
 
@@ -1337,7 +1336,7 @@ namespace
 
 			if(needsOwnershipTransfer)
 			{
-				const GpuAccessScope& sourceAccessScope = transition.SourceAccessScope;
+				const GpuAccessScope sourceAccessScope = GetQueueSourceScope(transition.SourceAccessScope, sourceQueueFamily);
 				const GpuAccessScope& submissionBarrierAccessScope = transition.SubmissionBarrierAccessScope;
 				VkPipelineStageFlags sourceStages, destinationStages;
 				VkAccessFlags sourceAccess, destinationAccess;
@@ -1363,14 +1362,15 @@ namespace
 			buffer->SetOwnerQueueId(mDestinationQueueId);
 		}
 
-		void VisitImage(const GpuSubmissionImageTransition& transition) override
+		void VulkanSubmissionTransitionVisitor::VisitImage(const GpuSubmissionImageTransition& transition)
 		{
 			VulkanImage* const image = static_cast<VulkanImage*>(transition.Image);
 			VulkanImageSubresource* const subresource = static_cast<VulkanImageSubresource*>(transition.StateResource);
 			const VkImageLayout oldLayout = subresource->GetLayout();
 			const VkImageLayout requestedInitialLayout = VulkanUtility::ToVkImageLayout(transition.InitialLayout);
 			const VkImageLayout newLayout = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED ? requestedInitialLayout : oldLayout;
-			const bool layoutMismatch = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED && oldLayout != newLayout;
+			const bool discardContents = transition.SubmissionBarrierFlags.IsSet(GpuImageBarrierFlag::DiscardContents);
+			const bool layoutMismatch = requestedInitialLayout != VK_IMAGE_LAYOUT_UNDEFINED && (oldLayout != newLayout || discardContents);
 			const VkImageSubresourceRange vkRange = VulkanUtility::ToVkImageSubresourceRange(transition.ImageRange);
 
 			GpuQueueId ownerQueueId;
@@ -1388,7 +1388,7 @@ namespace
 			if(!needsFullSync)
 				mSubmitInformation.RequiredWaitMask |= transition.ParallelAccessWaitMask;
 
-			const GpuAccessScope& sourceAccessScope = transition.SourceAccessScope;
+			const GpuAccessScope sourceAccessScope = GetQueueSourceScope(transition.SourceAccessScope, needsOwnershipTransfer ? sourceQueueFamily : mDestinationQueueFamily);
 			const GpuAccessScope& submissionBarrierAccessScope = transition.SubmissionBarrierAccessScope;
 			VkPipelineStageFlags sourceStages, destinationStages;
 			VkAccessFlags sourceAccess, destinationAccess;
@@ -1399,25 +1399,27 @@ namespace
 				sourceStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
 			if(destinationStages == 0)
-				destinationStages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+				destinationStages = newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR ? VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+			const VkImageLayout barrierOldLayout = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED : oldLayout;
 
 			if(needsOwnershipTransfer)
 			{
 				SourceQueueTransitionInformation& sourceQueueTransitionInformation = GetSourceQueueTransitionInformation(ownerQueueId, transition.ExclusiveAccessWaitMask);
-				sourceQueueTransitionInformation.Barriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, oldLayout, newLayout, sourceQueueFamily, mDestinationQueueFamily);
-				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, destinationStages, destinationAccess, oldLayout, newLayout, sourceQueueFamily, mDestinationQueueFamily);
+				sourceQueueTransitionInformation.Barriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, barrierOldLayout, newLayout, sourceQueueFamily, mDestinationQueueFamily);
+				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, destinationStages, destinationAccess, barrierOldLayout, newLayout, sourceQueueFamily, mDestinationQueueFamily);
 			}
 			else if(layoutMismatch)
 			{
 				mSubmitInformation.RequiredWaitMask |= transition.ExclusiveAccessWaitMask;
-				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, destinationStages, destinationAccess, oldLayout, newLayout);
+				mDestinationQueueBarriers.AddImageBarrier(image->GetVulkanHandle(), vkRange, sourceStages, sourceAccess, destinationStages, destinationAccess, barrierOldLayout, newLayout);
 			}
 
 			subresource->SetLayout(VulkanUtility::ToVkImageLayout(transition.FinalLayout));
 			subresource->SetOwnerQueueId(mDestinationQueueId);
 		}
 
-		void Finalize()
+		void VulkanSubmissionTransitionVisitor::Finalize(VkCommandBuffer destinationCommandBuffer)
 		{
 			for(SourceQueueTransitionInformation& sourceQueueTransitionInformation : mSourceQueueTransitions)
 			{
@@ -1433,7 +1435,9 @@ namespace
 				mSubmitInformation.SourceQueueTransitions.Add(std::move(sourceQueueTransition));
 			}
 
-			if(mDestinationQueueBarriers.HasBarriers())
+			if(destinationCommandBuffer != VK_NULL_HANDLE)
+				mDestinationQueueBarriers.Execute(destinationCommandBuffer);
+			else if(mDestinationQueueBarriers.HasBarriers())
 			{
 				GpuCommandBufferPool& destinationCommandBufferPool = mDevice.GetSubmitThread().GetCommandBufferPool(mDestinationQueueId.GetType());
 				TShared<VulkanGpuCommandBuffer> transitionCommandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(destinationCommandBufferPool.Create(GpuCommandBufferCreateInformation::Create("Queue and layout transitions")));
@@ -1443,15 +1447,7 @@ namespace
 			}
 		}
 
-	private:
-		struct SourceQueueTransitionInformation
-		{
-			GpuQueueId QueueId;
-			GpuQueueMask WaitMask;
-			VulkanBarrierBatch Barriers;
-		};
-
-		SourceQueueTransitionInformation& GetSourceQueueTransitionInformation(GpuQueueId sourceQueueId, GpuQueueMask waitMask)
+		VulkanSubmissionTransitionVisitor::SourceQueueTransitionInformation& VulkanSubmissionTransitionVisitor::GetSourceQueueTransitionInformation(GpuQueueId sourceQueueId, GpuQueueMask waitMask)
 		{
 			auto found = std::find_if(mSourceQueueTransitions.begin(), mSourceQueueTransitions.end(), [sourceQueueId](const SourceQueueTransitionInformation& sourceQueueTransitionInformation)
 			{
@@ -1471,13 +1467,21 @@ namespace
 			return *found;
 		}
 
-		VulkanGpuDevice& mDevice;
-		GpuQueueId mDestinationQueueId;
-		u32 mDestinationQueueFamily;
-		VulkanGpuCommandBufferSubmitInformation& mSubmitInformation;
-		VulkanBarrierBatch mDestinationQueueBarriers;
-		TInlineArray<SourceQueueTransitionInformation, 4> mSourceQueueTransitions;
-	};
+		GpuAccessScope VulkanSubmissionTransitionVisitor::GetQueueSourceScope(const GpuAccessScope& sourceScope, u32 queueFamily) const
+		{
+			if(queueFamily == mDevice.GetQueueFamily(GQT_GRAPHICS))
+				return sourceScope;
+
+			GpuStageFlags supportedStages = GpuStageFlag::Transfer | GpuStageFlag::Host;
+			if(queueFamily == mDevice.GetQueueFamily(GQT_COMPUTE))
+				supportedStages |= GpuStageFlag::DrawIndirect | GpuStageFlag::ComputeShaderUniform | GpuStageFlag::ComputeShaderNonUniform;
+
+			GpuAccessScope scope;
+			scope.ReadStages = sourceScope.ReadStages & supportedStages;
+			scope.WriteStages = sourceScope.WriteStages & supportedStages;
+			return scope;
+		}
+	}
 }
 
 VulkanGpuCommandBufferSubmitInformation VulkanGpuCommandBuffer::PrepareForSubmitOnSubmitThread(GpuQueueType queueType, u32 queueIndex)

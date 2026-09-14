@@ -80,7 +80,7 @@ namespace b3d::render
 			usage.Range = attachment.Range;
 			usage.Surface = attachment.Surface;
 			usage.UseFlags = attachment.GetUseFlags();
-			usage.Access = readOnly ? GpuAccessFlags(GpuAccessFlag::Read) : GpuAccessFlags(GpuAccessFlag::Write);
+			usage.Access = readOnly ? GpuAccessFlags(GpuAccessFlag::Read) : GpuAccessFlag::Read | GpuAccessFlag::Write; // Writable attachments can also read through loads, blending and depth/stencil tests.
 			if(!readOnly && !loadMask.IsSet(attachment.Surface))
 				usage.BarrierFlags.Set(GpuImageBarrierFlag::DiscardContents);
 

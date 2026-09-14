@@ -218,7 +218,6 @@ VulkanSwapChain::VulkanSwapChain(VulkanResourceManager* owner, const TShared<Vul
 	// Create a render pass
 	VulkanRenderPassCreateInformation renderPassCreateInformation;
 	renderPassCreateInformation.SampleCount = 1;
-	renderPassCreateInformation.IsOffscreenSurface = false;
 	renderPassCreateInformation.ColorAttachments[0].Format = colorFormat;
 	renderPassCreateInformation.ColorAttachments[0].IsShaderReadAllowed = false;
 	renderPassCreateInformation.ColorAttachments[0].IsEnabled = true;
@@ -396,47 +395,6 @@ void VulkanSwapChain::Present(u32 imageIndex, GpuQueue& queue, GpuQueueMask sync
 
 	if(!mSurfaces[imageIndex].Acquired)
 		return;
-
-	// Ensure the image is in the correct layout
-	VulkanImage *const image = mSurfaces[imageIndex].Image;
-	VulkanImageSubresource* const imageSubresource = image->GetSubresource(0, 0, GpuTextureAspectFlag::Color);
-	const VkImageLayout imageLayout = imageSubresource->GetLayout();
-
-	if(imageLayout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-	{
-		GpuCommandBufferPool& commandBufferPool = GetDevice().GetSubmitThread().GetCommandBufferPool(vulkanQueue.GetType());
-
-		const TShared<VulkanGpuCommandBuffer> commandBuffer = std::static_pointer_cast<VulkanGpuCommandBuffer>(commandBufferPool.Create(GpuCommandBufferCreateInformation::Create("SwapChainImageLayoutTransition")));
-		commandBuffer->SetName("Swap chain image layout transition");
-
-		VkCommandBuffer vkCommandBuffer = commandBuffer->GetVulkanHandle();
-
-		VkImageMemoryBarrier layoutTransitionBarrier;
-		layoutTransitionBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		layoutTransitionBarrier.pNext = nullptr;
-		layoutTransitionBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		layoutTransitionBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		layoutTransitionBarrier.image = image->GetVulkanHandle();
-		layoutTransitionBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		layoutTransitionBarrier.subresourceRange.layerCount = 1;
-		layoutTransitionBarrier.subresourceRange.levelCount = 1;
-		layoutTransitionBarrier.subresourceRange.baseArrayLayer = 0;
-		layoutTransitionBarrier.subresourceRange.baseMipLevel = 0;
-		layoutTransitionBarrier.srcAccessMask = 0;
-		layoutTransitionBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-		layoutTransitionBarrier.oldLayout = imageLayout;
-		layoutTransitionBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-		vkCmdPipelineBarrier(vkCommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &layoutTransitionBarrier);
-
-		commandBuffer->End();
-
-		VulkanGpuCommandBufferSubmitInformation submitInformation;
-		submitInformation.PrimaryCommandBuffer = commandBuffer;
-		vulkanQueue.ExecuteSubmitOnSubmitThread(submitInformation, GpuQueueMask::kNone, {});
-
-		imageSubresource->SetLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-	}
 
 	B3D_ENSURE(mSemaphoresBuffer.Empty());
 
