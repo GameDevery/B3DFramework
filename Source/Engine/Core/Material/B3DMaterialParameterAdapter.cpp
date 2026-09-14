@@ -930,47 +930,54 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 	const GpuBackendConventions& gpuBackendConventions = device->GetCapabilities().Conventions;
 	const TShared<MaterialParametersType>& materialParameters = material->GetMaterialParameters();
 
-	// Parameters are sorted by buffer, so we map when buffer changes.
+	// Parameters are sorted by buffer, so we map when buffer changes
 	TGpuBufferMappedScope<IsRenderProxy> mappedScope;
-	TShared<render::GpuBuffer> stagingBuffer;  // Only used for render proxy when buffer doesn't support direct mapping
+	void* scratchMemory = nullptr; // Only used for render proxy when the buffer cannot be mapped directly
 	const UniformBufferInfo* currentUniformBufferInfo = nullptr;
 	void* bufferMemory = nullptr;
 	u32 curentBlockIndex = ~0u;
 
-	// Helper to finalize previous buffer (flush staging + queue copy if needed)
-	auto fnFinalizePreviousBuffer = [&stagingBuffer, &currentUniformBufferInfo, &mappedScope]()
+	// Helper to finalize previous buffer (release the mapping, or deliver the scratch block if one was used)
+	auto fnFinalizePreviousBuffer = [&mappedScope, &scratchMemory, &currentUniformBufferInfo]()
 	{
+		mappedScope.Unmap();
+
 		if constexpr(IsRenderProxy)
 		{
-			if(stagingBuffer && currentUniformBufferInfo)
+			if(scratchMemory != nullptr && currentUniformBufferInfo != nullptr)
 			{
-				mappedScope.Unmap();
-
 				GpuWorkContext& gpuContext = render::GetRenderer()->GetGpuContext();
-				const TShared<render::GpuCommandBuffer>& commandBuffer = gpuContext.GetTransferCommandBuffer();
-				commandBuffer->CopyBufferToBuffer(stagingBuffer, currentUniformBufferInfo->Buffer, 0, currentUniformBufferInfo->SuballocationByteOffset, currentUniformBufferInfo->Buffer->GetSuballocationSize());
-				stagingBuffer = nullptr;
+				const TShared<render::GpuBuffer>& buffer = currentUniformBufferInfo->Buffer;
+
+				// Note: Perhaps it would be better to have a re-useable pool of uniform buffers, rather than allocating a staging buffer to copy every frame
+				render::GpuBufferUtility::Write(gpuContext, buffer, currentUniformBufferInfo->SuballocationByteOffset, buffer->GetSuballocationSize(), scratchMemory);
+
+				B3DStackFree(scratchMemory);
+				scratchMemory = nullptr;
 			}
 		}
 	};
 
-	// Pre-processing: Determine which buffers need full update due to staging.
-	// When using staging buffers, only dirty parameters are written, but the entire staging buffer
-	// is copied to the uniform buffer. This would overwrite valid data with uninitialized garbage.
-	// Solution: If a buffer uses staging and has any dirty parameter, write ALL parameters in that buffer.
+	// Pre-processing: Determine which buffers can be written directly and which need a full update. A buffer can be mapped
+	// directly only if it has CPU-visible memory and no command buffer references it (bound or in-flight); writing to a
+	// buffer the GPU may still be reading is a hazard. Otherwise the parameters are written to a scratch block that
+	// replaces the whole suballocation, so every parameter in that buffer must be written, not just the dirty ones.
 	TInlineArray<bool, 8> bufferNeedsFullUpdate;
 	if constexpr(IsRenderProxy)
 	{
 		bufferNeedsFullUpdate.Resize((u32)mUniformBuffers.size(), false);
 
-			for(const auto& paramInfo : mDataParamInfos)
+		for(const auto& paramInfo : mDataParamInfos)
 		{
 			const UniformBufferInfo& uniformBufferInfo = mUniformBuffers[paramInfo.UniformBufferIndex];
 			if(uniformBufferInfo.Buffer == nullptr || !uniformBufferInfo.AllowUpdate)
 				continue;
 
-			// Check if buffer uses staging (non-mapped memory means staging is required)
-			if(uniformBufferInfo.Buffer->GetMappedMemory() != nullptr)
+			if(bufferNeedsFullUpdate[paramInfo.UniformBufferIndex])
+				continue;
+
+			const bool canMapDirectly = uniformBufferInfo.Buffer->GetMappedMemory() != nullptr && uniformBufferInfo.Buffer->GetBoundCount() == 0;
+			if(canMapDirectly)
 				continue;
 
 			const MaterialParameters::ParamData* materialParamInfo = materialParameters->GetParamData(paramInfo.ParameterIndex);
@@ -1008,7 +1015,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 				break;
 		}
 
-		// Don't skip if buffer needs full update due to staging
+		// Don't skip if buffer needs full update because it is written through a scratch block
 		bool forceUpdate = false;
 		if constexpr(IsRenderProxy)
 			forceUpdate = bufferNeedsFullUpdate[paramInfo.UniformBufferIndex];
@@ -1021,25 +1028,20 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 		{
 			fnFinalizePreviousBuffer();
 
-			// Check if buffer supports direct CPU mapping (render proxy only)
-			if constexpr(IsRenderProxy)
-			{
-				bool useStaging = false;
-				useStaging = (uniformBufferInfo.Buffer->GetMappedMemory() == nullptr);
+			const u32 suballocationSize = uniformBufferInfo.Buffer->GetSuballocationSize();
 
-				if(useStaging)
-				{
-					GpuWorkContext& gpuContext = render::GetRenderer()->GetGpuContext();
-					stagingBuffer = render::GpuBufferUtility::CreateStaging(gpuContext, uniformBufferInfo.Buffer, false);
-					mappedScope = stagingBuffer->Map(GpuMapOption::Write);
-				}
-				else
-					mappedScope = uniformBufferInfo.Buffer->Map(GpuMapOption::Write);
+			// A buffer that needs a full update cannot be mapped directly (render proxy only), so write to scratch instead
+			if(forceUpdate)
+			{
+				scratchMemory = B3DStackAllocate(suballocationSize);
+				bufferMemory = scratchMemory;
 			}
 			else
-				mappedScope = uniformBufferInfo.Buffer->Map(GpuMapOption::Write);
+			{
+				mappedScope = uniformBufferInfo.Buffer->Map(uniformBufferInfo.SuballocationByteOffset, suballocationSize, GpuMapOption::Write);
+				bufferMemory = mappedScope.GetMappedMemory();
+			}
 
-			bufferMemory = mappedScope.GetMappedMemory();
 			currentUniformBufferInfo = &uniformBufferInfo;
 			curentBlockIndex = paramInfo.UniformBufferIndex;
 		}
@@ -1068,7 +1070,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 							memcpy(&temp, data + readOffset, paramSize);
 							auto transposed = temp.Transpose();
 
-							u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+							u32 writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 							memcpy(static_cast<u8*>(bufferMemory) + writeOffset, &transposed, paramSize);
 						}
 					};
@@ -1134,7 +1136,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 							for(u32 i = 0; i < arraySize; i++)
 							{
 								u32 arrayOffset = i * paramSize;
-								u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+								u32 writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 								memcpy(static_cast<u8*>(bufferMemory) + writeOffset, data + arrayOffset, paramSize);
 							}
 							break;
@@ -1146,7 +1148,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 					for(u32 i = 0; i < arraySize; i++)
 					{
 						u32 readOffset = i * paramSize;
-						u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+						u32 writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 						memcpy(static_cast<u8*>(bufferMemory) + writeOffset, data + readOffset, paramSize);
 					}
 				}
@@ -1160,7 +1162,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 					for(u32 i = 0; i < arraySize; i++)
 					{
 						u32 readOffset = i * paramSize;
-						u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+						u32 writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 
 						float value;
 						if(materialParameters->IsAnimated(*materialParamInfo, i))
@@ -1182,7 +1184,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 					CoreVariantHandleType<SpriteImage, IsRenderProxy> spriteImage =
 						materialParameters->GetOwningSpriteImage(*materialParamInfo);
 
-					u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + paramInfo.Offset * sizeof(u32);
+					u32 writeOffset = paramInfo.Offset * sizeof(u32);
 					Area2 uv = Area2(0.0f, 0.0f, 1.0f, 1.0f);
 					if(spriteImage != nullptr)
 						uv = spriteImage->EvaluateAnimation(spriteImage->GetDefaultAllocatedImage(), t);
@@ -1193,7 +1195,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 					for(u32 i = 1; i < arraySize; i++)
 					{
 						u32 readOffset = i * paramSize;
-						writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+						writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 
 						memcpy(static_cast<u8*>(bufferMemory) + writeOffset, data + readOffset, paramSize);
 					}
@@ -1205,7 +1207,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 						B3D_ASSERT(paramSize == sizeof(Color));
 
 						u32 readOffset = i * paramSize;
-						u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+						u32 writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 
 						Color value;
 						if(materialParameters->IsAnimated(*materialParamInfo, i))
@@ -1231,7 +1233,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 			{
 				materialParameters->GetStructData(*materialParamInfo, paramData, paramSize, i);
 
-				u32 writeOffset = uniformBufferInfo.SuballocationByteOffset + (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
+				u32 writeOffset = (paramInfo.Offset + paramInfo.ArrayStride * i) * sizeof(u32);
 				memcpy(static_cast<u8*>(bufferMemory) + writeOffset, paramData, paramSize);
 			}
 			B3DStackFree(paramData);
