@@ -1,4 +1,5 @@
 if(B3D_GPU_BACKEND MATCHES "Vulkan" OR B3D_BUILD_ALL_PLUGINS)
+	# Source files
 	B3DGlobSourceFiles(${CMAKE_CURRENT_SOURCE_DIR} "" "" BS_VULKAN_TESTS_SRC)
 
 	add_library(bsfVulkanGpuBackendTests SHARED ${BS_VULKAN_TESTS_SRC})
