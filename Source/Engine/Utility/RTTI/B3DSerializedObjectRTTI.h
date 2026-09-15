@@ -18,7 +18,7 @@ namespace b3d
 	class B3D_EXPORT ISerializedRTTI : public TRTTIType<ISerialized, IReflectable, ISerializedRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ISerialized";
 			return name;
@@ -29,7 +29,7 @@ namespace b3d
 			return TID_ISerialized;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return nullptr;
 		}
@@ -60,7 +60,7 @@ namespace b3d
 			AddDataBlockField("data", 0, &SerializedPlainDataRTTI::GetData, &SerializedPlainDataRTTI::SetData);
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "SerializedPlainData";
 			return name;
@@ -71,7 +71,7 @@ namespace b3d
 			return TID_SerializedPlainData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<SerializedPlainData>();
 		}
@@ -104,7 +104,7 @@ namespace b3d
 			AddDataBlockField("data", 0, &SerializedDataBlockRTTI::GetData, &SerializedDataBlockRTTI::SetData);
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "SerializedDataBlock";
 			return name;
@@ -115,7 +115,7 @@ namespace b3d
 			return TID_SerializedDataBlock;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<SerializedDataBlock>();
 		}

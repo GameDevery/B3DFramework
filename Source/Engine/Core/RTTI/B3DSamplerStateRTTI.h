@@ -31,7 +31,7 @@ namespace b3d
 				object.Initialize();
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "SamplerState";
 			return name;
@@ -42,7 +42,7 @@ namespace b3d
 			return TID_SamplerState;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			const TShared<GpuDevice>& gpuDevice = GetApplication().GetPrimaryGpuDevice();
 			if(!gpuDevice)

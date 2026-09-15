@@ -95,7 +95,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "FontBitmapPage";
 			return name;
@@ -106,7 +106,7 @@ namespace b3d
 			return TID_FontBitmapPage;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<FontBitmapPage>();
 		}
@@ -125,7 +125,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "FontBitmapInformation";
 			return name;
@@ -136,7 +136,7 @@ namespace b3d
 			return TID_FontBitmapInformation;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<FontBitmapInformation>();
 		}

@@ -84,7 +84,7 @@ namespace b3d
 			return TID_NVGVectorPathRenderable;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<render::NVGVectorPathRenderable>();
 		}

@@ -52,7 +52,7 @@ namespace b3d
 			}
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return Mesh::CreateEmptyShared();
 		}

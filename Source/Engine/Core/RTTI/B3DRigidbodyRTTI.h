@@ -46,7 +46,7 @@ namespace b3d
 			return TID_Rigidbody;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return SceneObject::CreateEmptyComponent<Rigidbody>();
 		}

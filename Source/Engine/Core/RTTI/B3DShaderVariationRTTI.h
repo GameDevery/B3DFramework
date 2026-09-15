@@ -79,7 +79,7 @@ namespace b3d
 			B3D_RTTI_MEMBER(mParams, 0)
 		B3D_RTTI_END_MEMBERS
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ShaderVariation";
 			return name;
@@ -90,7 +90,7 @@ namespace b3d
 			return TID_ShaderVariation;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<ShaderVariationParameters>();
 		}

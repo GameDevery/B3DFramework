@@ -39,7 +39,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ManagedAssemblyInfo";
 			return name;
@@ -50,7 +50,7 @@ namespace b3d
 			return TID_ManagedAssemblyInfo;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<ManagedAssemblyInfo>();
 		}

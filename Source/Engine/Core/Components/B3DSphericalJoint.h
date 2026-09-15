@@ -83,7 +83,7 @@ namespace b3d
 	public:
 		friend class SphericalJointRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		SphericalJoint(); // Serialization only

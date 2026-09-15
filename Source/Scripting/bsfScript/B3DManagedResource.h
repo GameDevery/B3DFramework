@@ -70,7 +70,7 @@ namespace b3d
 	public:
 		friend class ManagedResourceRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**	Contains serialized resource data buffer. */

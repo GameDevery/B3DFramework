@@ -169,7 +169,7 @@ namespace b3d
 	public:
 		friend class AudioClipRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 		/**
 		 * Creates an AudioClip with no samples. You must populate its data manually followed by a call to Initialize().

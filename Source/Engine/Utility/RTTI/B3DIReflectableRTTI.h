@@ -15,7 +15,7 @@ namespace b3d
 	class B3D_EXPORT IReflectableRTTI : public TRTTIType<IReflectable, IReflectable, IReflectableRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "IReflectable";
 			return name;
@@ -26,7 +26,7 @@ namespace b3d
 			return TID_IReflectable;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return nullptr;
 		}

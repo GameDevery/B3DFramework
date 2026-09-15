@@ -148,7 +148,7 @@ namespace b3d
 			return TID_Texture;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return Texture::CreateEmpty();
 		}

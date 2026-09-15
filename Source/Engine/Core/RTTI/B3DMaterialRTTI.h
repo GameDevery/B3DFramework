@@ -59,7 +59,7 @@ namespace b3d
 			return TID_Material;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return Material::CreateEmpty();
 		}

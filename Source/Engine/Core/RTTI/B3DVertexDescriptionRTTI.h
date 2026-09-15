@@ -33,12 +33,12 @@ namespace b3d
 			}
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeSharedFromExisting<VertexDescription>(new(B3DAllocate<VertexDescription>()) VertexDescription());
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "VertexDescription";
 			return name;

@@ -27,7 +27,7 @@ namespace b3d
 			B3D_RTTI_MEMBER(mCollisionReportMode, 8)
 		B3D_RTTI_END_MEMBERS
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "Collider";
 			return name;
@@ -38,7 +38,7 @@ namespace b3d
 			return TID_Collider;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			B3D_ASSERT(false && "Cannot instantiate an abstract class.");
 			return nullptr;

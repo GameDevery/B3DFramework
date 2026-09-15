@@ -28,7 +28,7 @@ namespace b3d
 			return TID_GUIWidget;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return SceneObject::CreateEmptyComponent<GUIWidget>();
 		}

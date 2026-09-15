@@ -19,7 +19,7 @@ namespace b3d
 	class B3D_EXPORT GUIRenderableRTTI : public TRTTIType<GUIRenderable, GUIElement, GUIRenderableRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "GUIRenderable";
 			return name;
@@ -27,7 +27,7 @@ namespace b3d
 
 		u32 GetRttiId() const override { return TID_GUIRenderable; }
 
-		TShared<IReflectable> NewRttiObject() { return nullptr; }
+		TShared<IReflectable> NewRttiObject() override { return nullptr; }
 	};
 } // namespace b3d
 

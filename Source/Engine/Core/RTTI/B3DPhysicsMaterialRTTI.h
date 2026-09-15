@@ -47,7 +47,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "PhysicsMaterial";
 			return name;
@@ -58,7 +58,7 @@ namespace b3d
 			return TID_PhysicsMaterial;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return PhysicsMaterial::CreateShared();
 		}

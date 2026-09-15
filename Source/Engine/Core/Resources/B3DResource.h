@@ -128,7 +128,7 @@ namespace b3d
 	public:
 		friend class ResourceRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/** @} */

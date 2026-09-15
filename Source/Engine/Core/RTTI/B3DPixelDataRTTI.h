@@ -69,7 +69,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "PixelData";
 			return name;
@@ -80,7 +80,7 @@ namespace b3d
 			return TID_PixelData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<PixelData>();
 		}

@@ -219,7 +219,7 @@ namespace b3d
 	public:
 		friend class LightProbeVolumeRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		LightProbeVolume(); // Serialization only

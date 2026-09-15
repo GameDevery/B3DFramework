@@ -129,7 +129,7 @@ namespace b3d
 	public:
 		friend class HingeJointRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		HingeJoint(); // Serialization only

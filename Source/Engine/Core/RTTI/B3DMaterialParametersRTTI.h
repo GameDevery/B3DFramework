@@ -43,7 +43,7 @@ namespace b3d
 			return TID_TextureParamData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<MaterialParamTextureData>();
 		}
@@ -63,7 +63,7 @@ namespace b3d
 			return TID_BufferParamData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<MaterialParamBufferData>();
 		}
@@ -87,7 +87,7 @@ namespace b3d
 			return TID_SamplerStateParamData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<MaterialParamSamplerStateData>();
 		}
@@ -139,7 +139,7 @@ namespace b3d
 			return TID_MaterialParameters;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<MaterialParameters>();
 		}

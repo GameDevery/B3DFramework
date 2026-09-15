@@ -26,7 +26,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "SpriteGlyph";
 			return name;
@@ -37,7 +37,7 @@ namespace b3d
 			return TID_SpriteGlyph;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return SpriteGlyph::CreateEmpty();
 		}

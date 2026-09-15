@@ -48,7 +48,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "StrongResourceHandle";
 			return name;
@@ -59,7 +59,7 @@ namespace b3d
 			return TID_StrongResourceHandle;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeSharedFromExisting<StrongResourceHandle>(new(B3DAllocate<StrongResourceHandle>()) StrongResourceHandle());
 		}
@@ -107,7 +107,7 @@ namespace b3d
 			return TID_WeakResourceHandle;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeSharedFromExisting<WeakResourceHandle>(new(B3DAllocate<WeakResourceHandle>()) WeakResourceHandle());
 		}

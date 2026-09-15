@@ -181,7 +181,7 @@ namespace b3d
 	public:
 		friend class AudioSourceRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		AudioSource(); // Serialization only

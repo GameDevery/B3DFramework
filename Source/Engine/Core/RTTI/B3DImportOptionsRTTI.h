@@ -16,7 +16,7 @@ namespace b3d
 	class B3D_EXPORT ImportOptionsRTTI : public TRTTIType<ImportOptions, IReflectable, ImportOptionsRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ImportOptions";
 			return name;
@@ -27,7 +27,7 @@ namespace b3d
 			return TID_ImportOptions;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<ImportOptions>();
 		}

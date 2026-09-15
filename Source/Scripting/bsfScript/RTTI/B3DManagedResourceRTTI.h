@@ -50,7 +50,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ManagedResource";
 			return name;
@@ -61,7 +61,7 @@ namespace b3d
 			return TID_ManagedResource;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return ManagedResource::CreateUninitializedAsShared();
 		}
