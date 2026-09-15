@@ -49,8 +49,10 @@ namespace b3d
 		/** Verifies push-constant buffer metadata survives bytecode serialization. */
 		void TestPushConstantSerialization();
 
-		/** Verifies bytecode reflection reports the declared push-constant size without exposing its native carrier. */
-		void TestPushConstantShaderCompilation();
+#if !B3D_PLATFORM_PS5
+		/** Compiles host shader fixtures and verifies push-constant size and separation from ordinary resources. */
+		void TestHostPushConstantShaderCompilation();
+#endif
 
 		/** Verifies Vulkan storage-buffer reflection distinguishes read-only blocks and members from writable buffers. */
 		void TestVulkanStorageBufferAccessReflection();

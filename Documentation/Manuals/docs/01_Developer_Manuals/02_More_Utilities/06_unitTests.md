@@ -6,6 +6,8 @@ All unit tests are implemented as a part of a @b3d::TestSuite class. You can cre
 
 To register new tests call @B3D_ADD_TEST in the test suite's constructor. The test method must not accept any parameters or return any values. To report test failure call @B3D_TEST_ASSERT or @B3D_TEST_ASSERT_MSG. If neither of those trigger, test is assumed to be successful.
 
+Shared helper functions can report failures through @B3D_TEST_ASSERT_EXTERNAL(suite, condition) or @B3D_TEST_ASSERT_EXTERNAL_MSG(suite, condition, message), passing a test-suite reference. These assertions report failure without stopping execution; return explicitly before accessing invalid data.
+
 ~~~~~~~~~~~~~{.cpp}
 class MyTestSuite : TestSuite
 {

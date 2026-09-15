@@ -20,6 +20,9 @@ namespace b3d
 /** Tests if condition is true, and reports unit test failure if it fails. Expects a reference to the TestSuite. */
 #define B3D_TEST_ASSERT_EXTERNAL(TestSuite, Expr) TestSuite.Assertment((Expr), __FUNCTION__, __FILE__, __LINE__);
 
+/** Tests if condition is true, and reports unit test failure with a message if it fails. Expects a reference to the TestSuite. */
+#define B3D_TEST_ASSERT_EXTERNAL_MSG(TestSuite, Expr, Msg) TestSuite.Assertment((Expr), Msg, __FILE__, __LINE__);
+
 	/**
 	 * Primary class for unit testing. Override and register unit tests in constructor then run the tests using the
 	 * desired method of output.
