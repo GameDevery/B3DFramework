@@ -174,6 +174,8 @@ const String& GUIStyleSheetSelectorList::GetUniqueName() const
 			case GUIStyleSheetSelectorType::PseudoClass:
 				stringStream << ":";
 				break;
+			default:
+				break;
 			}
 
 			stringStream << entry.Name;
@@ -449,6 +451,8 @@ void GUIStyleSheet::Initialize()
 			case GUIStyleSheetSelectorType::Id:
 				if(idSelector.empty())
 					idSelector = selector.Name;
+				break;
+			default:
 				break;
 			}
 		}

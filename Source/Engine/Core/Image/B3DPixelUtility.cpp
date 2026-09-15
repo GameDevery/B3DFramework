@@ -3242,6 +3242,8 @@ bool PixelUtility::SaveImage(const TShared<PixelData>& pixelData, const Path& ou
 	case ImageFormat::TGA:
 		finalPath.SetExtension(".tga");
 		break;
+	case ImageFormat::EXR: // Handled above
+		break;
 	}
 
 	// Convert path to string for stb_image_write
@@ -3262,6 +3264,8 @@ bool PixelUtility::SaveImage(const TShared<PixelData>& pixelData, const Path& ou
 		break;
 	case ImageFormat::TGA:
 		result = stbi_write_tga(pathString.c_str(), (int)width, (int)height, (int)componentCount, exportData);
+		break;
+	case ImageFormat::EXR: // Handled above
 		break;
 	}
 

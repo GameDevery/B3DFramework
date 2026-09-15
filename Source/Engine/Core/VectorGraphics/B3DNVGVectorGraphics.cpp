@@ -318,6 +318,8 @@ namespace b3d::render
 					nvgArc(&context, origin.X, origin.Y, radius, drawArc.StartAngle.GetValueInRadians(), drawArc.EndAngle.GetValueInRadians(), winding);
 					break;
 				}
+			case VectorPathCommandType::Unknown:
+				break;
 			}
 		}
 	}

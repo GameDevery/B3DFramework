@@ -115,6 +115,9 @@ namespace b3d
 				processor(object.DrawArc.EndAngle);
 				processor(object.DrawArc.Direction);
 				break;
+			case VectorPathCommandType::Unknown:
+			case VectorPathCommandType::ClosePath:
+				break;
 			}
 		}
 	};
