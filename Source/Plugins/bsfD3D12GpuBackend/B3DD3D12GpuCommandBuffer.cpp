@@ -548,6 +548,10 @@ void D3D12GpuCommandBuffer::DispatchCompute(u32 groupCountX, u32 groupCountY, u3
 		mCommandList->SetPipelineState(pipeline->Get());
 		mCommandList->SetComputeRootSignature(rootSignature->Get());
 
+		// Graphics and compute share the command list's pipeline-state binding.
+		mLastBoundGraphicsPipeline = nullptr;
+		mGraphicsPipelineRequiresBind = true;
+
 		mComputePipelineRequiresBind = false;
 		mComputeParametersRequireBind = true;
 		mComputePushConstantsRequireBind = true;
@@ -982,6 +986,7 @@ bool D3D12GpuCommandBuffer::BindGraphicsPipeline()
 
 			mCommandList->SetPipelineState(pipeline->Get());
 			mLastBoundGraphicsPipeline = pipeline;
+			mComputePipelineRequiresBind = true;
 		}
 
 		mGraphicsPipelineRequiresBind = false;
