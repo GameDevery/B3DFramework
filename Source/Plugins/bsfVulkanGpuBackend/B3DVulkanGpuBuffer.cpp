@@ -12,7 +12,7 @@ using namespace b3d;
 using namespace b3d::render;
 
 VulkanBuffer::VulkanBuffer(VulkanResourceManager* owner, const VulkanBufferCreateInformation& createInformation, VkBuffer buffer, VulkanAllocationResult allocation, VulkanGpuBuffer* parent)
-	: TVulkanResource<IGpuBufferResource>(owner, false, createInformation.DebugName), mType(createInformation.Type), mFlags(createInformation.Flags), mBuffer(buffer), mAllocation(allocation), mParent(parent), mMappedMemory(allocation.MappedMemory)
+	: TVulkanResource<IGpuBufferResource>(owner, false, createInformation.DebugName), mFlags(createInformation.Flags), mBuffer(buffer), mAllocation(allocation), mParent(parent), mMappedMemory(allocation.MappedMemory)
 {
 }
 

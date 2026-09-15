@@ -99,7 +99,6 @@ namespace b3d
 				VkBufferView View = VK_NULL_HANDLE;
 			};
 
-			GpuBufferType mType;
 			GpuBufferFlags mFlags;
 			VkBuffer mBuffer;
 			TInlineArray<ViewInformation, 2> mViews;

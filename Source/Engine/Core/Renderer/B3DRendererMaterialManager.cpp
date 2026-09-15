@@ -10,7 +10,7 @@ using namespace b3d;
 
 RendererMaterialManager::RendererMaterialManager()
 {
-	GetRenderThread().PostCommand([this]() { InitOnRenderThread(); }, "RendererMaterialManager::Initialize");
+	GetRenderThread().PostCommand([]() { InitOnRenderThread(); }, "RendererMaterialManager::Initialize");
 }
 
 RendererMaterialManager::~RendererMaterialManager()

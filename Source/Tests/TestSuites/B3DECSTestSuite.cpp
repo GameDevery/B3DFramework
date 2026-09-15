@@ -233,7 +233,7 @@ static void RunComponentTests(ECSTestSuite& testSuite)
 	B3D_TEST_ASSERT_EXTERNAL(testSuite, !componentSparseSet.Contains(kEntities[5]))
 
 	u32 count = 0;
-	for(const auto& component : componentSparseSet)
+	for([[maybe_unused]] const auto& component : componentSparseSet)
 		count++;
 
 	if constexpr(kIsTypeMovable)
@@ -290,7 +290,7 @@ static void RunComponentTests(ECSTestSuite& testSuite)
 	componentSparseSet.Clear();
 
 	count = 0;
-	for(const auto& component : componentSparseSet)
+	for([[maybe_unused]] const auto& component : componentSparseSet)
 		count++;
 
 	B3D_TEST_ASSERT_EXTERNAL(testSuite, count == 0)
@@ -577,7 +577,7 @@ void ECSTestSuite::TestView()
 	B3D_TEST_ASSERT(index == Math::Min(kEntityWithVelocityCount, kEntityWithPositionCount))
 
 	index = 0;
-	positionVelocityView.DoForEach([&index, &entities, this](const test::Position& position, const test::Velocity& velocity)
+	positionVelocityView.DoForEach([&index, this](const test::Position& position, const test::Velocity& velocity)
 	{
 		B3D_TEST_ASSERT(position == test::Position((float)index + 1.0f, (float)index + 2.0f, (float)index + 3.0f))
 		B3D_TEST_ASSERT(velocity == test::Velocity(5.0f, 5.0f, 5.0f))
@@ -626,7 +626,7 @@ void ECSTestSuite::TestView()
 	B3D_TEST_ASSERT(index == kEntityWithEnemyTagCount)
 
 	index = 0;
-	positionVelocityEnemyView.DoForEach([&index, &entities, this](const test::Position& position, const test::Velocity& velocity)
+	positionVelocityEnemyView.DoForEach([&index, this](const test::Position& position, const test::Velocity& velocity)
 	{
 		B3D_TEST_ASSERT(position == test::Position((float)index + 1.0f, (float)index + 2.0f, (float)index + 3.0f))
 		B3D_TEST_ASSERT(velocity == test::Velocity(5.0f, 5.0f, 5.0f))
@@ -656,7 +656,7 @@ void ECSTestSuite::TestView()
 	B3D_TEST_ASSERT(index == kEntityWithPositionCount)
 
 	index = 0;
-	nonConstPositionView.DoForEach([&index, &entities, this](test::Position& position)
+	nonConstPositionView.DoForEach([&index, this](test::Position& position)
 	{
 		B3D_TEST_ASSERT(position == test::Position((float)index + 1.0f, (float)index + 2.0f, (float)index + 3.0f))
 		index++;

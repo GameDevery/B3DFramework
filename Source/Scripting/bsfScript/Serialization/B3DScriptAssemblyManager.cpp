@@ -843,7 +843,6 @@ TShared<IReflectable> ScriptAssemblyManager::GetReflectableFromManagedObject(Mon
 		}
 
 		const ScriptTypeMetaData* managedResourceMeta = ScriptManagedResource::GetMetaData();
-		const ScriptTypeMetaData* managedComponentMeta = ScriptManagedComponent::GetMetaData();
 
 		if(monoClass->IsSubClassOf(ScriptResource::GetMetaData()->ScriptClass)) // Resource
 		{

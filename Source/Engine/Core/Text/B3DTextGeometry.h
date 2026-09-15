@@ -41,7 +41,6 @@ namespace b3d
 		struct PageInfo
 		{
 			u32 QuadCount = 0;
-			HTexture Texture;
 		};
 
 	protected:

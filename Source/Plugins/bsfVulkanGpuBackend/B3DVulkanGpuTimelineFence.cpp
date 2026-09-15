@@ -8,7 +8,7 @@ using namespace b3d;
 using namespace b3d::render;
 
 VulkanGpuTimelineFence::VulkanGpuTimelineFence(VulkanGpuDevice& device)
-	: mDevice(&device) , mLogicalDevice(device.GetLogical())
+	: mLogicalDevice(device.GetLogical())
 {
 	VkSemaphoreTypeCreateInfo timelineCreateInfo = {};
 	timelineCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;

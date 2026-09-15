@@ -183,8 +183,6 @@ void IntermediateSerializer::DeserializeElement(RTTIIteratorField& field, void* 
 
 	for(u32 fieldTypeIndex = 0; fieldTypeIndex < (u32)field.Schema.FieldDataTypes.Size(); ++fieldTypeIndex)
 	{
-		RTTIFieldDataTypeSchema& tupleSchema = field.Schema.FieldDataTypes[fieldTypeIndex];
-
 		TShared<ISerialized> serializedTupleValue;
 		if(isTuple)
 		{

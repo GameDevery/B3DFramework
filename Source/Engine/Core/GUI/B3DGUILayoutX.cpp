@@ -184,7 +184,7 @@ void GUILayoutX::GetChildRelativeLayoutAreas(const GUILogicalSize& layoutSize, G
 			const GUILogicalUnit remainingExcessSizeForIteration = remainingExcessSize;
 
 			childIndex = 0;
-			for(auto& child : mChildren)
+			for([[maybe_unused]] auto& child : mChildren)
 			{
 				if(processedElements[childIndex])
 				{
@@ -232,7 +232,7 @@ void GUILayoutX::GetChildRelativeLayoutAreas(const GUILogicalSize& layoutSize, G
 			const GUILogicalUnit remainingExtraSizeForIteration = remainingExtraSize;
 
 			childIndex = 0;
-			for(auto& child : mChildren)
+			for([[maybe_unused]] auto& child : mChildren)
 			{
 				if(processedElements[childIndex])
 				{

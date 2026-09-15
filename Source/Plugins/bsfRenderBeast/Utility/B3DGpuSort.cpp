@@ -255,7 +255,6 @@ u32 GpuSort::Sort(GpuCommandBuffer& commandBuffer, const GpuSortBuffers& buffers
 
 	u32 bitOffset = 0;
 	u32 inputBufferIdx = 0;
-	u32 executedPassCount = 0;
 	for(u32 i = 0; i < kNumPasses; i++)
 	{
 		if(((kKeyMask << bitOffset) & keyMask) != 0)
@@ -268,7 +267,6 @@ u32 GpuSort::Sort(GpuCommandBuffer& commandBuffer, const GpuSortBuffers& buffers
 			RadixSortReorderMaterial::Get()->Execute(commandBuffer, gpuSortProps.NumGroups, uniformBuffer, mHelperBuffers[1], buffers, inputBufferIdx);
 
 			inputBufferIdx = (inputBufferIdx + 1) % 2;
-			executedPassCount++;
 		}
 
 		bitOffset += kRadixNumBits;

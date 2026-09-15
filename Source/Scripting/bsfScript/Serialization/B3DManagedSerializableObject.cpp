@@ -153,7 +153,6 @@ void ManagedSerializableObject::Deserialize(MonoObject* instance, const TShared<
 		fieldEntry.second->Deserialize();
 
 	// Scan all fields and ensure the fields still exist
-	u32 i = 0;
 	TShared<ManagedObjectInfo> curType = mObjInfo;
 	while(curType != nullptr)
 	{
@@ -169,8 +168,6 @@ void ManagedSerializableObject::Deserialize(MonoObject* instance, const TShared<
 				TShared<ManagedMemberInfo> matchingFieldInfo = objInfo->FindMatchingField(member, curType->TypeInfo);
 				if(matchingFieldInfo != nullptr)
 					matchingFieldInfo->SetUnboxedValue(instance, mCachedData[key]->GetValue(matchingFieldInfo->TypeInfo));
-
-				i++;
 			}
 		}
 

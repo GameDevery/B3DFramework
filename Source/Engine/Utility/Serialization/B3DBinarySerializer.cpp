@@ -1411,7 +1411,6 @@ TShared<IReflectable> BinarySerializer::Decode(const TShared<DataStream>& stream
 	const size_t endBits = end * 8;
 
 	bool hasMeta = !flags.IsSet(BinarySerializerFlag::NoMeta);
-	bool compress = flags.IsSet(BinarySerializerFlag::Compress);
 
 	// Don't need a schema if we have meta-data
 	if(hasMeta)

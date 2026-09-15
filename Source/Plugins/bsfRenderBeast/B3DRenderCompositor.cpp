@@ -425,7 +425,6 @@ void RCNodeBasePass::Render(const RenderCompositorNodeInputs& inputs)
 		const auto particleSystemCount = inputs.Scene.GetParticleSystemCount();
 		const GpuParticleResources& gpuSimResources = GpuParticleSimulation::Instance().GetResources();
 
-		bool isGpuSortingUsed = false;
 		for(u32 i = 0; i < particleSystemCount; i++)
 		{
 			if(!visibility.ParticleSystems[i])
@@ -450,9 +449,6 @@ void RCNodeBasePass::Render(const RenderCompositorNodeInputs& inputs)
 			else if(renderState.GpuParticleSystem)
 			{
 				renderState.BindGpuSimulatedInputs(proxy, gpuSimResources, inputs.View);
-
-				if(renderState.GpuParticleSystem->HasSortInfo())
-					isGpuSortingUsed = true;
 			}
 		}
 	}

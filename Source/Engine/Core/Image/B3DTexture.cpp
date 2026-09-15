@@ -624,8 +624,6 @@ void TextureUtility::Read(GpuWorkContext& gpuContext, const TShared<Texture>& te
 
 	const bool supportsGPUWrites = textureProperties.Usage.IsSetAny(TextureUsageFlag::AllowUnorderedAccessOnTheGPU);
 
-	GpuQueue& transferGpuQueue = gpuQueue != nullptr ? *gpuQueue : *texture->GetDevice().GetQueue(GQT_GRAPHICS, 0);
-
 	// Check is the GPU currently writing to the texture
 	const GpuQueueMask subresourceWriteUseMask = texture->GetUseMask(mipLevel, arrayLayer, GpuAccessFlag::Write);
 

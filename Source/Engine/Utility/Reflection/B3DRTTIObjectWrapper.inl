@@ -868,7 +868,7 @@ namespace b3d::RTTIObjectWrapper
 				return true;
 
 			ValueIterator<IsIReflectable> valueIterator = field.GetValueIterator();
-			for(u32 elementIndex = 0; valueIterator.MoveNext(); ++elementIndex)
+			while(valueIterator.MoveNext())
 			{
 				Value<IsIReflectable> value = valueIterator.GetValue();
 				fnPredicate(rttiFieldSchema, value);

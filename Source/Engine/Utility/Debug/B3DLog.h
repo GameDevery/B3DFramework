@@ -77,7 +77,6 @@ namespace b3d
 		void SetMaximumVerbosity(LogVerbosity maximumVerbosity) { mMaximumVerbosity = maximumVerbosity; }
 
 		const char* mName;
-		LogVerbosity mDefaultMaximumVerbosity;
 		LogVerbosity mMaximumVerbosity;
 	};
 

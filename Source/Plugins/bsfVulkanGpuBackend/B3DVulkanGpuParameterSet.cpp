@@ -118,7 +118,6 @@ void VulkanGpuParameterSet::Initialize()
 	mBuffers = mAllocator.Allocate<VkBuffer>(bufferCount, true);
 	mSamplers = mAllocator.Allocate<VkSampler>(samplerCount, true);
 
-	VulkanDescriptorManager& descManager = mGpuDevice.GetDescriptorManager();
 	VulkanSampler* vkDefaultSampler = defaultSampler->GetVulkanResource();
 
 	mSetInformation.WriteSetInfos = mAllocator.Allocate<VkWriteDescriptorSet>(bindingCount);

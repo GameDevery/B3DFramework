@@ -440,7 +440,7 @@ AcquirePackageLockResult PackageManager::AcquireReadLock(const Path& physicalPac
 			}
 
 			// Write lock held, wait until it is released, then re-do the checks above
-			runtimePackageInformation->LoadSignal.Wait(lock, [&runtimePackageInformation, this]() {
+			runtimePackageInformation->LoadSignal.Wait(lock, [&runtimePackageInformation]() {
 				return !runtimePackageInformation->AcquiredWriteLock;
 			});
 		}

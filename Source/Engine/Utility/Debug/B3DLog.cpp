@@ -7,7 +7,7 @@
 using namespace b3d;
 
 LogCategoryBase::LogCategoryBase(const char* name, LogVerbosity defaultMaximumVerbosity)
-: mName(name), mDefaultMaximumVerbosity(defaultMaximumVerbosity), mMaximumVerbosity(defaultMaximumVerbosity)
+: mName(name), mMaximumVerbosity(defaultMaximumVerbosity)
 {
 	Log::RegisterCategory(*this);
 }
