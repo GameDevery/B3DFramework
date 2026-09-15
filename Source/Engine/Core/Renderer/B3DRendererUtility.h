@@ -26,18 +26,25 @@ namespace b3d
 
 			/** Helper method used for initializing variations of this material. */
 			template <u32 MSAA, u32 MODE, u32 BLEND, u32 WRITE_ALPHA, u32 SRGB_ENCODE>
-			static const ShaderVariationParameters& GetVariation()
+			static const ShaderVariationParameters& GetVariation(bool output32Bit)
 			{
-				static ShaderVariationParameters variation = ShaderVariationParameters(
+				static const ShaderVariationParameters variations[2] = { BuildVariation<MSAA, MODE, BLEND, WRITE_ALPHA, SRGB_ENCODE>(false), BuildVariation<MSAA, MODE, BLEND, WRITE_ALPHA, SRGB_ENCODE>(true) };
+				return variations[output32Bit ? 1 : 0];
+			}
+
+			/** Assembles the variation parameters for GetVariation(). */
+			template <u32 MSAA, u32 MODE, u32 BLEND, u32 WRITE_ALPHA, u32 SRGB_ENCODE>
+			static ShaderVariationParameters BuildVariation(bool output32Bit)
+			{
+				return ShaderVariationParameters(
 					TInlineArray<ShaderVariationParameter, 4>({
 						ShaderVariationParameter("MSAA_COUNT", MSAA),
 						ShaderVariationParameter("MODE", MODE),
 						ShaderVariationParameter("BLEND", BLEND),
 						ShaderVariationParameter("WRITE_ALPHA", WRITE_ALPHA),
 						ShaderVariationParameter("SRGB_ENCODE", SRGB_ENCODE),
+						ShaderVariationParameter("OUTPUT_32BIT", output32Bit),
 					}));
-
-				return variation;
 			}
 
 		public:
@@ -76,8 +83,11 @@ namespace b3d
 			 * @param	srgbEncode		If true, the sampled color is encoded from linear into sRGB (gamma) space before being
 			 *							written. Used when compositing a hardware-sRGB source (which decodes to linear on sample)
 			 *							onto a non-sRGB target that expects sRGB-encoded values. Only relevant for color blits.
+			 * @param	output32Bit		True if the destination color surface uses a 32-bit float format. Backends that bake
+			 *							the render target format into the fragment program would otherwise truncate the
+			 *							output to 16 bits. Only relevant for color blits.
 			 */
-			static BlitMat* GetVariation(u32 msaaCount, bool isColor, bool isFiltered, bool blend = false, bool writeAlpha = false, bool srgbEncode = false);
+			static BlitMat* GetVariation(u32 msaaCount, bool isColor, bool isFiltered, bool blend = false, bool writeAlpha = false, bool srgbEncode = false, bool output32Bit = false);
 
 		private:
 			bool mIsFiltered = false;

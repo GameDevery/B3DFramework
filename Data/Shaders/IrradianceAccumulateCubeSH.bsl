@@ -6,6 +6,15 @@ shader IrradianceAccumulateCubeSH
 	mixin PPBase;
 	mixin ReflectionCubemapCommon;
 
+	output
+	{
+		target
+		{
+			index = 0;
+			format = RGBA32F;
+		};
+	};
+
 	code
 	{
 		#define PI 3.1415926

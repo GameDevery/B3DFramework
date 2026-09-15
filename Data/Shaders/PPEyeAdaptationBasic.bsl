@@ -6,6 +6,15 @@ shader PPEyeAdaptationBasic
 	mixin PPBase;
 	mixin PPEyeAdaptationParams;
 
+	output
+	{
+		target
+		{
+			index = 0;
+			format = R32F;
+		};
+	};
+
 	code
 	{
 		[internal]

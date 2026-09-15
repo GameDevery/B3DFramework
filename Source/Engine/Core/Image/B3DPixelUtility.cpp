@@ -2116,6 +2116,25 @@ String PixelUtility::GetFormatName(PixelFormat format)
 	return GetDescriptionFor(format).Name;
 }
 
+PixelFormat PixelUtility::GetFormatFromName(StringView name)
+{
+	constexpr StringView kPrefix = "PF_";
+	if(name.substr(0, kPrefix.size()) == kPrefix)
+		name.remove_prefix(kPrefix.size());
+
+	for(u32 i = 1; i < PF_COUNT; i++)
+	{
+		const char* formatName = _pixelFormats[i].Name;
+		if(formatName == nullptr) // Deleted format
+			continue;
+
+		if(name == StringView(formatName).substr(kPrefix.size()))
+			return (PixelFormat)i;
+	}
+
+	return PF_UNKNOWN;
+}
+
 bool PixelUtility::IsAccessible(PixelFormat format)
 {
 	if(format == PF_UNKNOWN)

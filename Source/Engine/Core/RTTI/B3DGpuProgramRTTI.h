@@ -163,6 +163,7 @@ namespace b3d
 			B3D_RTTI_MEMBER(Bytecode, 6)
 			B3D_RTTI_MEMBER(ThreadGroupSize, 7)
 			B3D_RTTI_MEMBER(PushConstantBufferSize, 8)
+			B3D_RTTI_MEMBER(RenderTargetFormats, 9)
 		B3D_RTTI_END_MEMBERS
 
 	public:

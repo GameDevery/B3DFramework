@@ -6,6 +6,15 @@ shader GpuParticleInject
 		read = false;
 	};
 
+	output
+	{
+		target
+		{
+			index = 0;
+			format = RGBA32F;
+		};
+	};
+
 	code
 	{	
 		struct VertexInput

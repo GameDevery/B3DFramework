@@ -221,6 +221,12 @@ namespace b3d
 		static String GetFormatName(PixelFormat format);
 
 		/**
+		 * Returns the pixel format with the provided name, or PF_UNKNOWN if no format matches. The "PF_" prefix used by
+		 * GetFormatName() is optional.
+		 */
+		static PixelFormat GetFormatFromName(StringView name);
+
+		/**
 		 * Returns true if the pixel data in the format can be directly accessed and read. This is generally not true
 		 * for compressed formats.
 		 */

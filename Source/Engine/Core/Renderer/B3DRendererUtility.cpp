@@ -3,6 +3,8 @@
 #include "Renderer/B3DRendererUtility.h"
 
 #include "Image/B3DTexture.h"
+#include "Image/B3DPixelUtility.h"
+#include "GpuBackend/B3DRenderTexture.h"
 #include "Mesh/B3DMesh.h"
 #include "GpuBackend/B3DVertexDescription.h"
 #include "Material/B3DMaterial.h"
@@ -307,8 +309,16 @@ void RendererUtility::Blit(GpuCommandBuffer& commandBuffer, const BlitInformatio
 		inputAreaFloat.Height = (float)textureProperties.Height;
 	}
 
+	bool output32Bit = false;
+	if(!blitInformation.IsDepth && !blitInformation.OutputRenderTarget->GetProperties().IsWindow)
+	{
+		const RenderSurfaceInformation& colorSurface = static_cast<RenderTexture&>(*blitInformation.OutputRenderTarget).GetColorSurfaceInformation(0);
+		if(colorSurface.Texture != nullptr)
+			output32Bit = PixelUtility::GetElementType(colorSurface.Texture->GetProperties().Format) == PCT_FLOAT32;
+	}
+
 	// Get appropriate material variation
-	BlitMat* const blitMaterial = BlitMat::GetVariation(textureProperties.SampleCount, !blitInformation.IsDepth, blitInformation.UseFiltering, blitInformation.UseBlend, blitInformation.WriteAlpha, blitInformation.SrgbEncode);
+	BlitMat* const blitMaterial = BlitMat::GetVariation(textureProperties.SampleCount, !blitInformation.IsDepth, blitInformation.UseFiltering, blitInformation.UseBlend, blitInformation.WriteAlpha, blitInformation.SrgbEncode, output32Bit);
 
 	// Get GPU parameters and configure source texture
 	const TShared<GpuParameterSet> gpuParameters = blitMaterial->Prepare(blitInformation.InputTexture);
@@ -434,23 +444,23 @@ void BlitMat::Execute(GpuCommandBuffer& commandBuffer, const TShared<GpuParamete
 		GetRendererUtility().DrawScreenQuad(commandBuffer, Area2(0, 0, 1, 1), Vector2I(1, 1), 1, flipUV);
 }
 
-BlitMat* BlitMat::GetVariation(u32 msaaCount, bool isColor, bool isFiltered, bool blend, bool writeAlpha, bool srgbEncode)
+BlitMat* BlitMat::GetVariation(u32 msaaCount, bool isColor, bool isFiltered, bool blend, bool writeAlpha, bool srgbEncode, bool output32Bit)
 {
 	if(blend)
 	{
 		if(writeAlpha)
 		{
 			if(isFiltered)
-				return srgbEncode ? Get(GetVariation<1, 1, true, true, true>()) : Get(GetVariation<1, 1, true, true, false>());
+				return srgbEncode ? Get(GetVariation<1, 1, true, true, true>(output32Bit)) : Get(GetVariation<1, 1, true, true, false>(output32Bit));
 			else
-				return srgbEncode ? Get(GetVariation<1, 0, true, true, true>()) : Get(GetVariation<1, 0, true, true, false>());
+				return srgbEncode ? Get(GetVariation<1, 0, true, true, true>(output32Bit)) : Get(GetVariation<1, 0, true, true, false>(output32Bit));
 		}
 		else
 		{
 			if(isFiltered)
-				return srgbEncode ? Get(GetVariation<1, 1, true, false, true>()) : Get(GetVariation<1, 1, true, false, false>());
+				return srgbEncode ? Get(GetVariation<1, 1, true, false, true>(output32Bit)) : Get(GetVariation<1, 1, true, false, false>(output32Bit));
 			else
-				return srgbEncode ? Get(GetVariation<1, 0, true, false, true>()) : Get(GetVariation<1, 0, true, false, false>());
+				return srgbEncode ? Get(GetVariation<1, 0, true, false, true>(output32Bit)) : Get(GetVariation<1, 0, true, false, false>(output32Bit));
 		}
 	}
 
@@ -461,12 +471,12 @@ BlitMat* BlitMat::GetVariation(u32 msaaCount, bool isColor, bool isFiltered, boo
 			switch(msaaCount)
 			{
 			case 2:
-				return Get(GetVariation<2, 0, false, false, false>());
+				return Get(GetVariation<2, 0, false, false, false>(output32Bit));
 			case 4:
-				return Get(GetVariation<4, 0, false, false, false>());
+				return Get(GetVariation<4, 0, false, false, false>(output32Bit));
 			default:
 			case 8:
-				return Get(GetVariation<8, 0, false, false, false>());
+				return Get(GetVariation<8, 0, false, false, false>(output32Bit));
 			}
 		}
 		else
@@ -474,21 +484,21 @@ BlitMat* BlitMat::GetVariation(u32 msaaCount, bool isColor, bool isFiltered, boo
 			switch(msaaCount)
 			{
 			case 2:
-				return Get(GetVariation<2, 2, false, false, false>());
+				return Get(GetVariation<2, 2, false, false, false>(output32Bit));
 			case 4:
-				return Get(GetVariation<4, 2, false, false, false>());
+				return Get(GetVariation<4, 2, false, false, false>(output32Bit));
 			default:
 			case 8:
-				return Get(GetVariation<8, 2, false, false, false>());
+				return Get(GetVariation<8, 2, false, false, false>(output32Bit));
 			}
 		}
 	}
 	else
 	{
 		if(isFiltered)
-			return Get(GetVariation<1, 1, false, false, false>());
+			return Get(GetVariation<1, 1, false, false, false>(output32Bit));
 		else
-			return Get(GetVariation<1, 0, false, false, false>());
+			return Get(GetVariation<1, 0, false, false, false>(output32Bit));
 	}
 }
 

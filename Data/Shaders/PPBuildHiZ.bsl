@@ -9,6 +9,15 @@ shader PPBuildHiZ
 		NO_TEXTURE_VIEWS = { true, false };
 	};
 	
+	output
+	{
+		target
+		{
+			index = 0;
+			format = R32F;
+		};
+	};
+
 	code
 	{	
 		SamplerState gDepthSamp;

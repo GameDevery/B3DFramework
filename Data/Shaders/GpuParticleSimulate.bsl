@@ -16,6 +16,15 @@ shader GpuParticleSimulate
 		mixin PerObjectData;
 	#endif
 	
+	output
+	{
+		target
+		{
+			index = 0;
+			format = RGBA32F;
+		};
+	};
+
 	code
 	{
 		Texture2D gPosAndTimeTex;

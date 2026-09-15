@@ -256,7 +256,7 @@ ShaderCompilerResult BSLCompiler::TCompileVariation(const String& name, const BS
 		shaderPassInformation.RasterizerStateInformation = parsedShaderPass.RasterizerStateInformation;
 		shaderPassInformation.DepthStencilStateInformation = parsedShaderPass.DepthStencilStateInformation;
 
-		auto fnBuildGpuProgramCreateInformation = [&name](const String& language, const String& entry, const String& code, GpuProgramType type, const Array<u32, 3>& threadGroupSize, u32 pushConstantBufferSize) -> GpuProgramCreateInformation
+		auto fnBuildGpuProgramCreateInformation = [&name, &parsedShaderPass](const String& language, const String& entry, const String& code, GpuProgramType type, const Array<u32, 3>& threadGroupSize, u32 pushConstantBufferSize) -> GpuProgramCreateInformation
 		{
 			const char* typeString;
 			switch(type)
@@ -292,6 +292,9 @@ ShaderCompilerResult BSLCompiler::TCompileVariation(const String& name, const BS
 			gpuProgramCreateInformation.Type = type;
 			gpuProgramCreateInformation.ThreadGroupSize = threadGroupSize;
 			gpuProgramCreateInformation.PushConstantBufferSize = pushConstantBufferSize;
+
+			if(type == GPT_FRAGMENT_PROGRAM)
+				gpuProgramCreateInformation.RenderTargetFormats = parsedShaderPass.RenderTargetFormats;
 
 			// Bake bytecode for the target language if a compiler is registered for it. Program types the compiler cannot
 			// handle (for example geometry programs for some platforms) are left bytecode-less; consumers that require bytecode (the

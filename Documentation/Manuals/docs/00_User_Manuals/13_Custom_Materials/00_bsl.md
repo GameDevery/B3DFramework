@@ -58,11 +58,12 @@ There are a few restrictions compared to normal HLSL that you must be aware of:
 Let's now move onto more advanced functionality specific to BSL.
 
 # Non-programmable states
-Aside from the **code** block, a **shader** can also specify four blocks that allow it to control non-programmable parts of the pipeline:
+Aside from the **code** block, a **shader** can also specify five blocks that allow it to control non-programmable parts of the pipeline:
  - **raster** - Allows you to set options related to rasterization, like rasterization mode (fill/wireframe), cull mode, etc.
  - **depth** - Allows you to set options related to depth buffer and depth comparison, like enabling/disabling depth reads or writes, or changing the depth comparison function
  - **stencil** - Allows you to set options related to the stencil buffer and stencil test, like enabling stencil test and setting the test operations
  - **blend** - Allows you to set blending options, like enabling/disabling blending, setting blend operations or setting color the write mask
+ - **output** - Allows you to declare the pixel formats of the render targets the shader writes to, required by backends that compile the output format into the fragment program
 
 An example shader using a variety of these blocks is shown:
 ~~~~~~~~~~~~~~
@@ -233,6 +234,51 @@ shader MyShader
 			color = { srcA, srcIA, add }; // Note the order is always: source, destination, operation
 			writemask = RGB;
 		};
+	};
+};
+~~~~~~~~~~~~~~
+
+## output
+Declares the pixel format that the shader exports. This is different from the render target format, but the two must at least partially match (see below). This is only relevant for backends that bake the export format into the shader - other backends (e.g. Vulkan/D3D12/Metal) ignore this value.
+
+Compatibility between export and render target formats:
+ - 8-bit signed/unsigned normalized formats, 16-bit float format: Default shader export value is RGBA16F, which hardware casts correctly to these formats, no need to specify format
+ - 16-bit signed/unsigned normalized formats. Default of RGBA16F works, but you will get more precision if you use RGBA16 or RGBA16S
+ - 8-bit or 16-bit integer formats: Specify RGBA16I or RGBA16U (hardware casts between 16 and 8-bit)
+ - 32-bit formats (signed/unsigned/integer/float): Specify R32F, RG32F or RGBA32F depending on channel count (only the bit count matters, actual float/unsigned/signed/etc. doesn't)
+
+As a rule of thumb, you always need to specify this value if writing 32-bit output. For most other common outputs it can be left at the default value.
+
+Name                 | Valid values				   | Reference
+---------------------|---------------------------- |----------
+target			 | Target block					   | Format of a specific render target. Multiple Target blocks can exist under a single output block.
+
+**Target** block accepts the following options:
+Name                 | Valid values				   | Reference
+---------------------|---------------------------- |----------
+index    	  	     | positive integer		       | Index of the render target the format applies to. If not specified the index is derived from the order in which Target blocks are defined.
+format				 | Pixel format name without the PF_ prefix (e.g. RGBA32F, R32F, RG32F, R16U)	| @b3d::PixelFormat
+
+An example of an **output** block:
+~~~~~~~~~~~~~~
+shader MyShader
+{
+	output
+	{
+		target
+		{
+			index = 0;
+			format = RGBA32F;
+		};
+	};
+
+	code
+	{
+		// ...
+		float4 fsmain(VStoFS input) : SV_Target0
+		{
+			// Full 32-bit precision output
+		}
 	};
 };
 ~~~~~~~~~~~~~~

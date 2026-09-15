@@ -48,6 +48,9 @@ namespace b3d
 		bool RasterizerStateIsDefault = true;
 		bool DepthStencilStateIsDefault = true;
 
+		/** Declared pixel format per render target output, PF_UNKNOWN where not declared. */
+		Array<PixelFormat, B3D_MAXIMUM_RENDER_TARGET_COUNT> RenderTargetFormats = {};
+
 		String Code; // Parsed code block
 	};
 
@@ -210,6 +213,15 @@ namespace b3d
 		 * descriptor wasn't modified.
 		 */
 		static bool ParseRasterizerState(BSLParsedShaderPassData& passData, ASTFXNode* rasterNode);
+
+		/**
+		 * Records the declared pixel format of a single render target output from the provided AST node. Which target
+		 * gets updated depends on the index set in the AST node.
+		 */
+		static void ParseOutputTarget(BSLParsedShaderPassData& passData, ASTFXNode* targetNode, u32& index);
+
+		/** Parses the output AST node and records the declared render target formats of the pass. */
+		static void ParseOutput(BSLParsedShaderPassData& passData, ASTFXNode* outputNode);
 
 		/**
 		 * Parses the depth state AST node and populates the pass' depth-stencil state descriptor. Returns false if the

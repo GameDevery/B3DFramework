@@ -20,6 +20,15 @@ shader TetrahedraRender
 		compare = lte;
 	};
 	
+	output
+	{
+		target
+		{
+			index = 0;
+			format = R16U;
+		};
+	};
+
 	code
 	{
 		struct VertexInput

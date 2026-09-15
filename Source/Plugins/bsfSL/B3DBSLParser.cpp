@@ -9,6 +9,7 @@
 #include "Resources/B3DBuiltinResources.h"
 #include "Material/B3DShaderVariation.h"
 #include "Renderer/B3DRenderer.h"
+#include "Image/B3DPixelUtility.h"
 
 extern "C" {
 #include "B3DMMAlloc.h"
@@ -655,6 +656,70 @@ bool BSLParser::ParseBlendState(BSLParsedShaderPassData& desc, ASTFXNode* blendN
 	return !isDefault;
 }
 
+void BSLParser::ParseOutputTarget(BSLParsedShaderPassData& passData, ASTFXNode* targetNode, u32& index)
+{
+	if(targetNode == nullptr || targetNode->Type != NT_OutputTarget)
+		return;
+
+	for(int i = 0; i < targetNode->Options->Count; i++)
+	{
+		NodeOption* option = &targetNode->Options->Entries[i];
+
+		switch(option->Type)
+		{
+		case OT_Index:
+			index = option->Value.IntValue;
+			break;
+		default:
+			break;
+		}
+	}
+
+	if(index >= B3D_MAXIMUM_RENDER_TARGET_COUNT)
+		return;
+
+	for(int i = 0; i < targetNode->Options->Count; i++)
+	{
+		NodeOption* option = &targetNode->Options->Entries[i];
+
+		switch(option->Type)
+		{
+		case OT_Format:
+			{
+				const PixelFormat format = PixelUtility::GetFormatFromName(option->Value.StrValue);
+				if(format == PF_UNKNOWN)
+					B3D_LOG(Warning, LogBSLCompiler, "Unknown render target format \"{0}\" in output block, ignoring.", option->Value.StrValue);
+
+				passData.RenderTargetFormats[index] = format;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	index++;
+}
+
+void BSLParser::ParseOutput(BSLParsedShaderPassData& passData, ASTFXNode* outputNode)
+{
+	if(outputNode == nullptr || outputNode->Type != NT_Output)
+		return;
+
+	TInlineArray<ASTFXNode*, 8> targets;
+	for(int i = 0; i < outputNode->Options->Count; i++)
+	{
+		NodeOption* option = &outputNode->Options->Entries[i];
+		if(option->Type == OT_Target)
+			targets.Add(option->Value.NodePtr);
+	}
+
+	// Parse targets in reverse as their order matters and we want to visit them in the top-down order as defined in the source code
+	u32 index = 0;
+	for(auto iter = targets.rbegin(); iter != targets.rend(); ++iter)
+		ParseOutputTarget(passData, *iter, index);
+}
+
 bool BSLParser::ParseRasterizerState(BSLParsedShaderPassData& desc, ASTFXNode* rasterNode)
 {
 	if(rasterNode == nullptr || rasterNode->Type != NT_Raster)
@@ -828,6 +893,9 @@ void BSLParser::ParsePass(ASTFXNode* passNode, const Vector<String>& codeBlocks,
 		case OT_Stencil:
 			passData.DepthStencilStateIsDefault &= !ParseStencilState(passData, option->Value.NodePtr);
 			break;
+		case OT_Output:
+			ParseOutput(passData, option->Value.NodePtr);
+			break;
 		case OT_Code:
 			ParseCodeBlock(option->Value.NodePtr, codeBlocks, passData);
 			break;
@@ -925,6 +993,10 @@ void BSLParser::ParseShader(ASTFXNode* shaderNode, const Vector<String>& codeBlo
 		case OT_Stencil:
 			for(auto& passData : shaderData.Passes)
 				passData.DepthStencilStateIsDefault &= !ParseStencilState(passData, option->Value.NodePtr);
+			break;
+		case OT_Output:
+			for(auto& passData : shaderData.Passes)
+				ParseOutput(passData, option->Value.NodePtr);
 			break;
 		default:
 			break;

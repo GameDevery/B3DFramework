@@ -4,6 +4,15 @@ shader GpuParticleClear
 {
 	mixin GpuParticleTileVertex;
 	
+	output
+	{
+		target
+		{
+			index = 0;
+			format = RGBA32F;
+		};
+	};
+
 	code
 	{	
 		void fsmain(VStoFS input, 

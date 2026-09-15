@@ -91,7 +91,7 @@ typedef struct YYLTYPE {
 %token TOKEN_FEATURESET TOKEN_PASS TOKEN_TAGS TOKEN_VARIATIONS
 
 	/* Pass keywords */
-%token TOKEN_CODE TOKEN_BLEND TOKEN_RASTER TOKEN_DEPTH TOKEN_STENCIL
+%token TOKEN_CODE TOKEN_BLEND TOKEN_RASTER TOKEN_DEPTH TOKEN_STENCIL TOKEN_OUTPUT
 
 	/* Variation keywords */
 %token TOKEN_VARIATION
@@ -110,6 +110,9 @@ typedef struct YYLTYPE {
 	/* Blend state keywords */
 %token TOKEN_ALPHATOCOVERAGE TOKEN_INDEPENDANTBLEND TOKEN_TARGET TOKEN_INDEX
 %token TOKEN_COLOR TOKEN_ALPHA TOKEN_SOURCE TOKEN_DEST TOKEN_OP
+
+	/* Output state keywords */
+%token TOKEN_FORMAT
 
 	/* Attribute keywords */
 %token TOKEN_NAME TOKEN_SHOW
@@ -160,6 +163,14 @@ typedef struct YYLTYPE {
 %type <NodePtr>		blend;
 %type <NodePtr>		blend_header;
 %type <NodeOptionValue>	blend_option;
+
+%type <NodePtr>		output;
+%type <NodePtr>		output_header;
+%type <NodeOptionValue>	output_option;
+
+%type <NodePtr>		output_target;
+%type <NodePtr>		output_target_header;
+%type <NodeOptionValue>	output_target_option;
 
 %type <NodePtr>		code;
 %type <NodePtr>		code_header;
@@ -348,6 +359,7 @@ pass_option
 	| depth							{ $$.Type = OT_Depth; $$.Value.NodePtr = $1; }
 	| stencil						{ $$.Type = OT_Stencil; $$.Value.NodePtr = $1; }
 	| blend							{ $$.Type = OT_Blend; $$.Value.NodePtr = $1; }
+	| output						{ $$.Type = OT_Output; $$.Value.NodePtr = $1; }
 	;
 	
 	/* Variations */
@@ -544,6 +556,52 @@ blend_option
 	: TOKEN_ALPHATOCOVERAGE '=' TOKEN_BOOLEAN ';'				{ $$.Type = OT_AlphaToCoverage; $$.Value.IntValue = $3; }
 	| TOKEN_INDEPENDANTBLEND '=' TOKEN_BOOLEAN ';'				{ $$.Type = OT_IndependantBlend; $$.Value.IntValue = $3; }
 	| target													{ $$.Type = OT_Target; $$.Value.NodePtr = $1; }
+	;
+
+	/* Output */
+
+output
+	: output_header '{' output_body '}' ';' { NodePop(parse_state); $$ = $1; }
+	;
+
+output_header
+	: TOKEN_OUTPUT
+		{ 
+			$$ = NodeCreate(parse_state->MemContext, NT_Output); 
+			NodePush(parse_state, $$);
+		}
+	;
+
+output_body
+	: /* empty */
+	| output_option output_body		{ NodeOptionsAdd(parse_state->MemContext, parse_state->TopNode->Options, &$1); }
+	;
+
+output_option
+	: output_target												{ $$.Type = OT_Target; $$.Value.NodePtr = $1; }
+	;
+
+	/* Output target */
+output_target
+	: output_target_header '{' output_target_body '}' ';' { NodePop(parse_state); $$ = $1; }
+	;
+
+output_target_header
+	: TOKEN_TARGET
+		{ 
+			$$ = NodeCreate(parse_state->MemContext, NT_OutputTarget); 
+			NodePush(parse_state, $$);
+		}
+	;
+
+output_target_body
+	: /* empty */
+	| output_target_option output_target_body		{ NodeOptionsAdd(parse_state->MemContext, parse_state->TopNode->Options, &$1); }
+	;
+
+output_target_option
+	: TOKEN_INDEX '=' TOKEN_INTEGER ';'					{ $$.Type = OT_Index; $$.Value.IntValue = $3; }
+	| TOKEN_FORMAT '=' TOKEN_IDENTIFIER ';'				{ $$.Type = OT_Format; $$.Value.StrValue = $3; }
 	;
 	
 	/* Code blocks */

@@ -63,6 +63,8 @@ OptionInfo OPTION_LOOKUP[] =
 	{ OT_AttrName, ODT_String },
 	{ OT_VariationOption, ODT_Complex },
 	{ OT_AttrShow, ODT_Int },
+	{ OT_Output, ODT_Complex },
+	{ OT_Format, ODT_String },
 };
 
 NodeOptions* NodeOptionsCreate(void* context)

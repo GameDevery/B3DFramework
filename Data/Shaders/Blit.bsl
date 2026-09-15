@@ -16,7 +16,19 @@ shader Blit
         BLEND = { true, false };
         WRITE_ALPHA = { false, true };
         SRGB_ENCODE = { false, true };
+        OUTPUT_32BIT = { false, true };
 	};
+
+	#if OUTPUT_32BIT
+	output
+	{
+		target
+		{
+			index = 0;
+			format = RGBA32F;
+		};
+	};
+	#endif
 
 	depth
 	{	

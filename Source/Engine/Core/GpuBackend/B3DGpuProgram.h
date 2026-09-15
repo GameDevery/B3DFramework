@@ -7,6 +7,7 @@
 #include "Utility/B3DDataBlob.h"
 #include "Utility/B3DTArrayView.h"
 #include "GpuBackend/B3DVertexDescription.h"
+#include "Image/B3DPixelData.h"
 
 namespace b3d
 {
@@ -109,6 +110,12 @@ namespace b3d
 		// Reflection data (usually things that cannot be reflected by the bytecode compiler on all or some backends)
 		Array<u32, 3> ThreadGroupSize = { 1, 1, 1 }; /**< Compute threads per threadgroup declared by the source program. */
 		u32 PushConstantBufferSize = 0; /**< Declared push-constant buffer size in bytes, or zero when unused. */
+
+		/**
+		 * Pixel formats of the render targets a fragment program writes to, indexed by target. PF_UNKNOWN (the default)
+		 * means the target is not declared. Only relevant for backends that bake the export format during compilation.
+		 */
+		Array<PixelFormat, B3D_MAXIMUM_RENDER_TARGET_COUNT> RenderTargetFormats = {};
 
 		/**
 		 * Optional intermediate version of the GPU program. Can significantly speed up GPU program compilation/creation

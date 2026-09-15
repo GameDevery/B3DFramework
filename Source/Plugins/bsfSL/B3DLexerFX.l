@@ -71,6 +71,7 @@ blend			{ return TOKEN_BLEND; }
 raster			{ return TOKEN_RASTER; }
 depth			{ return TOKEN_DEPTH; }
 stencil			{ return TOKEN_STENCIL; }
+output			{ return TOKEN_OUTPUT; }
 
 	/* Variation keywords */
 variation		{ return TOKEN_VARIATION; }
@@ -110,6 +111,9 @@ alpha				{ return TOKEN_ALPHA; }
 source				{ return TOKEN_SOURCE; }
 dest				{ return TOKEN_DEST; }
 op					{ return TOKEN_OP; }
+
+	/* Output state keywords */
+format				{ return TOKEN_FORMAT; }
 
 	/* State values */
 wire			{ yylval->IntValue = FMV_Wire; return TOKEN_FILLMODEVALUE; }
