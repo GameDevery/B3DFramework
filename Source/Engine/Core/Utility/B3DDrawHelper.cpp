@@ -386,7 +386,6 @@ Vector<DrawHelper::ShapeMeshData> DrawHelper::BuildMeshes(SortType sorting, cons
 	/* 			Sort everything according to specified sorting rule         */
 	/************************************************************************/
 
-	u32 idx = 0;
 	Vector<RawData> allShapes;
 	Vector3 reference = Vector3::kZero;
 
@@ -772,7 +771,6 @@ Vector<DrawHelper::ShapeMeshData> DrawHelper::BuildMeshes(SortType sorting, cons
 			renderData.TextGeometry = textData;
 
 			textIdx++;
-			idx++;
 		}
 
 		localIdx++;

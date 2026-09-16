@@ -49,12 +49,12 @@ namespace b3d
 			AddDataBlockField("data", 4, &MeshDataRTTI::GetData, &MeshDataRTTI::SetData);
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeSharedFromExisting<MeshData>(new(B3DAllocate<MeshData>()) MeshData());
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "MeshData";
 			return name;

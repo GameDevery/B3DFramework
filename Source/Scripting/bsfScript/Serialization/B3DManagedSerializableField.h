@@ -181,7 +181,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataBoolRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -209,7 +209,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataCharRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -236,7 +236,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataI8RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -263,7 +263,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataU8RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -290,7 +290,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataI16RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -317,7 +317,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataU16RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -344,7 +344,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataI32RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -371,7 +371,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataU32RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**
@@ -398,7 +398,7 @@ namespace b3d
 	public:
 		friend class ManagedSerializableFieldDataI64RTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 	};
 
 	/**

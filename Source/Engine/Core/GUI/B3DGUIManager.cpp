@@ -1717,8 +1717,6 @@ void GUIRenderer::Render(const Camera& camera, const RendererViewContext& viewCo
 
 		GpuBufferSuballocation suballocation = widgetRenderData.ClipRegionBufferPool.Allocate();
 		const TShared<GpuBuffer>& clipRegionBuffer = suballocation.GetBuffer();
-		const u32 writeSize = sizeof(ClipRegionArea) * clipRegionCount;
-
 		GpuBufferMappedScope mapping = clipRegionBuffer->Map(GpuMapOption::Write);
 		ClipRegionArea* destination = reinterpret_cast<ClipRegionArea*>(mapping.GetMappedMemory());
 

@@ -16,7 +16,7 @@ namespace b3d
 	class B3D_EXPORT GUILayoutRTTI : public TRTTIType<GUILayout, GUIElement, GUILayoutRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "GUILayout";
 			return name;
@@ -24,7 +24,7 @@ namespace b3d
 
 		u32 GetRttiId() const override { return TID_GUILayout; }
 
-		TShared<IReflectable> NewRttiObject() { return nullptr; }
+		TShared<IReflectable> NewRttiObject() override { return nullptr; }
 	};
 } // namespace b3d
 

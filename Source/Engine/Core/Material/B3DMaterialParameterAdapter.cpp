@@ -938,7 +938,7 @@ void TMaterialParameterAdapter<IsRenderProxy>::Update(const MaterialType& materi
 	u32 curentBlockIndex = ~0u;
 
 	// Helper to finalize previous buffer (release the mapping, or deliver the scratch block if one was used)
-	auto fnFinalizePreviousBuffer = [&mappedScope, &scratchMemory, &currentUniformBufferInfo]()
+	auto fnFinalizePreviousBuffer = [&]()
 	{
 		mappedScope.Unmap();
 

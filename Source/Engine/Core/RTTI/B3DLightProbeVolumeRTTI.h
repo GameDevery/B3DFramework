@@ -46,8 +46,7 @@ namespace b3d
 											   {
 				BitLength size = 0;
 
-				uint32_t version;
-				size += B3DRTTIWrite(version, stream);
+				size += B3DRTTIWrite(kVersion, stream);
 				size += B3DRTTIWrite(data.Positions, stream);
 				size += B3DRTTIWrite(data.Coefficients, stream);
 

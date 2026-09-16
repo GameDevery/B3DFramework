@@ -104,7 +104,7 @@ GpuPipelineParameterSetLayout::GpuPipelineParameterSetLayout(const GpuProgramPar
 			if(otherUniformInformation)
 			{
 				// Duplicate set/slot can be allowed only in the combined texture/sampler case
-				const bool isPotentialCombinedSampler = (uniformInformation.Type == GpuParameterType::SampledTexture && otherUniformInformation->Type == GpuParameterType::Sampler || uniformInformation.Type == GpuParameterType::Sampler && otherUniformInformation->Type == GpuParameterType::SampledTexture);
+				const bool isPotentialCombinedSampler = (uniformInformation.Type == GpuParameterType::SampledTexture && otherUniformInformation->Type == GpuParameterType::Sampler) || (uniformInformation.Type == GpuParameterType::Sampler && otherUniformInformation->Type == GpuParameterType::SampledTexture);
 				if(!isPotentialCombinedSampler)
 				{
 					B3D_LOG(Warning, LogRenderBackend, "Provided set/slot combination for uniform {0} is already in use by {1}. Set: {2}, slot: {3}", it->first, mUniforms[uniformInformation.Slot]->Name, uniformInformation.Set, uniformInformation.Slot);

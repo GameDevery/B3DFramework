@@ -54,7 +54,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ScriptSerializableArray";
 			return name;
@@ -65,7 +65,7 @@ namespace b3d
 			return TID_ScriptSerializableArray;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return ManagedSerializableArray::CreateNew();
 		}

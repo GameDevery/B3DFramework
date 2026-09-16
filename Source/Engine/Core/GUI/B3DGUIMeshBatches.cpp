@@ -2,7 +2,7 @@
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 #include "B3DGUIInteractable.h"
 #include "B3DGUIManager.h"
-#include "GUI/B3DGUIMeshbatches.h"
+#include "GUI/B3DGUIMeshBatches.h"
 #include "Mesh/B3DMesh.h"
 #include "GpuBackend/B3DVertexDescription.h"
 #include "Image/B3DSpriteTexture.h"

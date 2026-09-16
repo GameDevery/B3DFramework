@@ -271,9 +271,8 @@ MonoPrimitiveType MonoUtil::GetPrimitiveType(::MonoClass* monoClass)
 	case MonoPrimitiveType::R32: return GetFloatClass();
 	case MonoPrimitiveType::R64: return GetDoubleClass();
 	case MonoPrimitiveType::String: return GetStringClass();
+	default: return nullptr;
 	}
-
-	return nullptr;
 }
 
 ::MonoClass* MonoUtil::GetPrimitiveTypeClass(const String& typeName)

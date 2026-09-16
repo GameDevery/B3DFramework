@@ -851,7 +851,6 @@ TShared<RendererMeshData> FBXImporter::GenerateMeshData(const FBXImportScene& sc
 {
 	Vector<TShared<MeshData>> allMeshData;
 	Vector<Vector<SubMesh>> allSubMeshes;
-	u32 boneIndexOffset = 0;
 
 	// Generate unique indices for all the bones. This is mirrored in createSkeleton().
 	UnorderedMap<FBXImportNode*, u32> boneMap;
@@ -1091,9 +1090,6 @@ TShared<RendererMeshData> FBXImporter::GenerateMeshData(const FBXImportScene& sc
 		}
 
 		B3DFree(orderedIndices);
-
-		u32 numBones = (u32)mesh->Bones.size();
-		boneIndexOffset += numBones;
 	}
 
 	if(allMeshData.size() > 1)

@@ -19,7 +19,7 @@ namespace b3d
 	class B3D_EXPORT GUIInteractableRTTI : public TRTTIType<GUIInteractable, GUIRenderable, GUIInteractableRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "GUIInteractable";
 			return name;
@@ -27,7 +27,7 @@ namespace b3d
 
 		u32 GetRttiId() const override { return TID_GUIInteractable; }
 
-		TShared<IReflectable> NewRttiObject() { return nullptr; }
+		TShared<IReflectable> NewRttiObject() override { return nullptr; }
 	};
 } // namespace b3d
 

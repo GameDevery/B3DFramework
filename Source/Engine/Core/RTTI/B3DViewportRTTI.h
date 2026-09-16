@@ -42,7 +42,7 @@ namespace b3d
 			return TID_Viewport;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return Viewport::CreateEmpty();
 		}

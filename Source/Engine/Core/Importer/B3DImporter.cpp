@@ -241,7 +241,7 @@ void Importer::QueueForImport(SpecificImporter* importer, const Path& inputFileP
 	ImporterAsyncMode asyncMode = importer->GetAsyncMode();
 	if (asyncMode == ImporterAsyncMode::Multi)
 	{
-		auto fnDoImport = [this, importer, inputFilePath, importOptions, uuid, op]
+		auto fnDoImport = [importer, inputFilePath, importOptions, uuid, op]
 		{
 			DoImport(op, importer, inputFilePath, uuid, importOptions);
 		};
@@ -266,7 +266,7 @@ void Importer::QueueForImport(SpecificImporter* importer, const Path& inputFileP
 		}
 
 		SchedulerTicket ticket = perImporterQueue->TakeTicket();
-		auto fnWaitForPreviousAndDoImport = [this, importer, inputFilePath, importOptions, uuid, op, ticket]
+		auto fnWaitForPreviousAndDoImport = [importer, inputFilePath, importOptions, uuid, op, ticket]
 		{
 			ticket.WaitUntilCalled();
 

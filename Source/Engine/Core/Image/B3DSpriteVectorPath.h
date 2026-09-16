@@ -142,9 +142,6 @@ namespace b3d
 		/** @copydoc b3d::SpriteVectorPathAllocation. */
 		class SpriteVectorPathAllocation : public SpriteImageAllocation
 		{
-		public:
-			SpriteVectorPathAllocation() = default;
-
 		private:
 			friend class b3d::SpriteVectorPathAllocation;
 

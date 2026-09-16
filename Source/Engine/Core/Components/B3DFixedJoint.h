@@ -49,7 +49,7 @@ namespace b3d
 	public:
 		friend class FixedJointRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		FixedJoint(); // Serialization only

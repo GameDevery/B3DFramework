@@ -62,7 +62,7 @@ namespace b3d
 				object.Initialize();
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "AudioClip";
 			return name;
@@ -73,7 +73,7 @@ namespace b3d
 			return TID_AudioClip;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return AudioClip::CreateEmpty();
 		}

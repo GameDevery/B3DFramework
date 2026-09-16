@@ -28,7 +28,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "TextureImportOptions";
 			return name;
@@ -39,7 +39,7 @@ namespace b3d
 			return TID_TextureImportOptions;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<TextureImportOptions>();
 		}

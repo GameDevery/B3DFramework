@@ -47,7 +47,7 @@ namespace b3d
 		/** Returns the character following the current one, without advancing the stream. */
 		char PeekNextCharacter();
 
-		/** Returns true if the current and the following character open a line ('//') or a block ('/*') comment. */
+		/** Returns true if the current and the following character open a line (double slash) or a block (slash-star) comment. */
 		bool IsCurrentCharacterCommentStart();
 
 		/** Returns the current character and advances to the next character. */

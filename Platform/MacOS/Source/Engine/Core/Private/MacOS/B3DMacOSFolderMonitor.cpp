@@ -3,13 +3,15 @@
 #include "Platform/B3DFolderMonitor.h"
 #include "FileSystem/B3DFileSystem.h"
 #include "Utility/B3DTimer.h"
+#include "Threading/B3DThreading.h"
 
 #include <CoreServices/CoreServices.h>
+#include <dispatch/dispatch.h>
 
 using namespace b3d;
 
 static constexpr u32 WRITE_STEADY_WAIT = 2000;
-CFStringRef FolderMonitorMode = CFSTR("BSFolderMonitor");
+static constexpr u32 WORKER_POLL_INTERVAL = 100;
 
 enum class FileActionType
 {
@@ -145,6 +147,7 @@ struct MacOSFolderMonitor
 	bool MonitorSubdirectories;
 	FolderChangeFlags Filter;
 	FSEventStreamRef StreamRef;
+	dispatch_queue_t EventQueue; /**< Serial queue the FSEvents callback is delivered on. */
 	bool HasStarted;
 	Vector<CreatedFileInfo> CreatedFiles;
 };
@@ -159,6 +162,7 @@ MacOSFolderMonitor::MacOSFolderMonitor(
 	, MonitorSubdirectories(monitorSubdirectories)
 	, Filter(filter)
 	, StreamRef(nullptr)
+	, EventQueue(nullptr)
 	, HasStarted(false)
 {}
 
@@ -190,7 +194,9 @@ void MacOSFolderMonitor::StartMonitor()
 
 	if(StreamRef)
 	{
-		FSEventStreamScheduleWithRunLoop(StreamRef, CFRunLoopGetCurrent(), FolderMonitorMode);
+		EventQueue = dispatch_queue_create("B3DFolderMonitor", DISPATCH_QUEUE_SERIAL);
+		FSEventStreamSetDispatchQueue(StreamRef, EventQueue);
+
 		if(FSEventStreamStart(StreamRef))
 			HasStarted = true;
 	}
@@ -211,6 +217,13 @@ void MacOSFolderMonitor::StopMonitor()
 
 	FSEventStreamInvalidate(StreamRef);
 	FSEventStreamRelease(StreamRef);
+	StreamRef = nullptr;
+
+	// Wait for any callback already queued to finish before the monitor goes away. Must not be called while holding
+	// the owner's mutex, since the callback acquires it.
+	dispatch_sync_f(EventQueue, nullptr, [](void*) {});
+	dispatch_release(EventQueue);
+	EventQueue = nullptr;
 }
 
 static void WatcherCallback(ConstFSEventStreamRef streamRef, void* userInfo, size_t numEvents, void* eventPaths, const FSEventStreamEventFlags* eventFlags, const FSEventStreamEventId* eventIds)
@@ -393,25 +406,28 @@ void FolderMonitor::WorkerThreadMain()
 			}
 		}
 
-		// Run the loop in order to receive events
-		i32 result = CFRunLoopRunInMode(FolderMonitorMode, 0.1f, false);
+		// Events are delivered on the monitor's dispatch queue, so we only need to wake up periodically to post-process them
+		B3D_THREAD_SLEEP(WORKER_POLL_INTERVAL);
 
-		// Delete low level monitor if needed
+		// Delete low level monitor if needed. Deletion waits for in-flight callbacks, so it must happen outside the lock.
+		MacOSFolderMonitor* monitorToDelete = nullptr;
 		{
 			Lock lock(m->MainMutex);
 
 			if(m->RequestLowLevelMonitorStop)
 			{
-				B3DDelete(m->LowLevelMonitor);
+				monitorToDelete = m->LowLevelMonitor;
 				m->LowLevelMonitor = nullptr;
 
 				m->RequestLowLevelMonitorStop = false;
 			}
 		}
 
-		// All input sources removed, or explicitly stopped, bail
-		if((result == kCFRunLoopRunStopped) || (result == kCFRunLoopRunFinished))
+		if(monitorToDelete != nullptr)
+		{
+			B3DDelete(monitorToDelete);
 			break;
+		}
 
 		// Check if any created files have completed writing, and handle rename events
 		{
@@ -441,17 +457,6 @@ void FolderMonitor::WorkerThreadMain()
 						++iter;
 				}
 			}
-		}
-
-		// It's possible some system registered an input source with our loop, in which case the above check will not
-		// work. Instead check if there are any monitors left.
-		// Note: In this case we may also pay a 0.1 second timeout cost, since we don't explicitly wake the run loop.
-		//       Ideally we would also wake the run loop from the main thread so it is able to exit immediately.
-		{
-			Lock lock(m->MainMutex);
-
-			if(m->LowLevelMonitor == nullptr)
-				break;
 		}
 	}
 }

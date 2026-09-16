@@ -9,6 +9,14 @@
 #include "Image/B3DTexture.h"
 #include "FileSystem/B3DPath.h"
 
+// Third-party single-header libraries below trigger warnings we can't fix upstream
+#if B3D_COMPILER_GCC || B3D_COMPILER_CLANG
+#	pragma GCC diagnostic push
+#	pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#	pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#	pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "ThirdParty/stb_image_write.h"
 
@@ -21,6 +29,10 @@
 // reference mmap()/munmap(), which aren't exported on some platforms
 #define TINYEXR_DONT_USE_POSIX_MMAP
 #include "ThirdParty/tinyexr.h"
+
+#if B3D_COMPILER_GCC || B3D_COMPILER_CLANG
+#	pragma GCC diagnostic pop
+#endif
 
 // tinyexr's ZIP decode path (LoadEXR) references stb_image.h's zlib decoder. We don't include stb_image.h since we
 // never load EXRs, so provide a stub to satisfy the linker for that dead code path.
@@ -3261,6 +3273,8 @@ bool PixelUtility::SaveImage(const TShared<PixelData>& pixelData, const Path& ou
 	case ImageFormat::TGA:
 		finalPath.SetExtension(".tga");
 		break;
+	case ImageFormat::EXR: // Handled above
+		break;
 	}
 
 	// Convert path to string for stb_image_write
@@ -3281,6 +3295,8 @@ bool PixelUtility::SaveImage(const TShared<PixelData>& pixelData, const Path& ou
 		break;
 	case ImageFormat::TGA:
 		result = stbi_write_tga(pathString.c_str(), (int)width, (int)height, (int)componentCount, exportData);
+		break;
+	case ImageFormat::EXR: // Handled above
 		break;
 	}
 

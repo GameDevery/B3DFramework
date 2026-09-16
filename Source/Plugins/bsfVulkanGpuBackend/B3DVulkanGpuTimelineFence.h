@@ -36,7 +36,6 @@ namespace b3d
 		void WaitInternal(u64 value) final;
 
 	private:
-		render::VulkanGpuDevice* mDevice = nullptr;
 		VkDevice mLogicalDevice = VK_NULL_HANDLE;
 		VkSemaphore mTimeline = VK_NULL_HANDLE;
 	};

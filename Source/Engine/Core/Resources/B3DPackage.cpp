@@ -902,7 +902,7 @@ TShared<Resource> Package::LoadAndDeserializeResource(const UUID& id, u64 offset
 		constexpr float kCompressionProgressWeight = 0.9f; // Assuming compression will take 90% of the deserialization time.
 		const TShared<MemoryDataStream> uncompressedStream = B3DMakeShared<MemoryDataStream>();
 
-		const bool decompressionSuccessful = Compression::Decompress(*dataStream, *uncompressedStream, sizeInStream, compressionType, [&outProgress, kCompressionProgressWeight](float progress) {
+		const bool decompressionSuccessful = Compression::Decompress(*dataStream, *uncompressedStream, sizeInStream, compressionType, [&outProgress](float progress) {
 			outProgress.exchange(progress * kCompressionProgressWeight, std::memory_order_relaxed);
 		});
 
@@ -912,7 +912,7 @@ TShared<Resource> Package::LoadAndDeserializeResource(const UUID& id, u64 offset
 		{
 			BinarySerializer bs;
 			loadedData = bs.Decode(uncompressedStream, (u32)uncompressedStream->Size(), rttiOperationContext, BinarySerializerFlag::None,
-								   [&outProgress, kCompressionProgressWeight](float progress) {
+								   [&outProgress](float progress) {
 									   outProgress.exchange(kCompressionProgressWeight + progress * (1.0f - kCompressionProgressWeight), std::memory_order_relaxed);
 								   });
 		}

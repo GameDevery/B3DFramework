@@ -367,7 +367,6 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 	mFont = font;
 
 	u32 curLineIdx = PerThreadTemporaryBuffer->AllocLine(this);
-	float curHeight = mFontBitmapInformation->LineHeight;
 	u32 charIdx = 0;
 
 	while(true)
@@ -386,8 +385,6 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 
 			curLineIdx = PerThreadTemporaryBuffer->AllocLine(this);
 			curLine = &PerThreadTemporaryBuffer->LineBuffer[curLineIdx];
-
-			curHeight += mFontBitmapInformation->LineHeight;
 
 			charIdx++;
 
@@ -428,8 +425,6 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 						curLineIdx = PerThreadTemporaryBuffer->AllocLine(this);
 						curLine = &PerThreadTemporaryBuffer->LineBuffer[curLineIdx];
 
-						curHeight += mFontBitmapInformation->LineHeight;
-
 						curLine->AddWord(lastWordIdx, lastWord);
 					}
 					else
@@ -441,8 +436,6 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 
 							curLineIdx = PerThreadTemporaryBuffer->AllocLine(this);
 							curLine = &PerThreadTemporaryBuffer->LineBuffer[curLineIdx];
-
-							curHeight += mFontBitmapInformation->LineHeight;
 						}
 						else
 						{
@@ -452,8 +445,6 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 
 								curLineIdx = PerThreadTemporaryBuffer->AllocLine(this);
 								curLine = &PerThreadTemporaryBuffer->LineBuffer[curLineIdx];
-
-								curHeight += mFontBitmapInformation->LineHeight;
 							}
 
 							curLine->AddWord(lastWordIdx, lastWord);
@@ -466,8 +457,6 @@ TextGeometry::TextGeometry(const U32String& text, const HFont& font, float fontS
 
 					curLineIdx = PerThreadTemporaryBuffer->AllocLine(this);
 					curLine = &PerThreadTemporaryBuffer->LineBuffer[curLineIdx];
-
-					curHeight += mFontBitmapInformation->LineHeight;
 				}
 			}
 		}

@@ -21,7 +21,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ManagedSerializableDictionaryKeyValue";
 			return name;
@@ -32,7 +32,7 @@ namespace b3d
 			return TID_ScriptSerializableDictionaryKeyValue;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<ManagedSerializableDictionaryKeyValue>();
 		}
@@ -67,7 +67,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ScriptSerializableDictionary";
 			return name;
@@ -78,7 +78,7 @@ namespace b3d
 			return TID_ScriptSerializableDictionary;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return ManagedSerializableDictionary::CreateEmpty();
 		}

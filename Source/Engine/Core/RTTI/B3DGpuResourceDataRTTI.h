@@ -16,7 +16,7 @@ namespace b3d
 	class B3D_EXPORT GpuResourceDataRTTI : public TRTTIType<GpuResourceData, IReflectable, GpuResourceDataRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "GpuResourceData";
 			return name;
@@ -27,7 +27,7 @@ namespace b3d
 			return TID_GpuResourceData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			B3D_ASSERT(false && "Cannot instantiate an abstract class.");
 			return nullptr;

@@ -115,6 +115,9 @@ namespace b3d
 				processor(object.DrawArc.EndAngle);
 				processor(object.DrawArc.Direction);
 				break;
+			case VectorPathCommandType::Unknown:
+			case VectorPathCommandType::ClosePath:
+				break;
 			}
 		}
 	};
@@ -175,7 +178,7 @@ namespace b3d
 			return TID_VectorPath;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<VectorPath>();
 		}
@@ -200,7 +203,7 @@ namespace b3d
 			return TID_VectorPathRenderable;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			B3D_ENSURE_LOG(false, "Attempting to construct an abstract type from RTTI.");
 			return nullptr;

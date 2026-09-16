@@ -33,7 +33,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "Joint";
 			return name;
@@ -44,7 +44,7 @@ namespace b3d
 			return TID_Joint;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			B3D_ASSERT(false && "Cannot instantiate an abstract class.");
 			return nullptr;

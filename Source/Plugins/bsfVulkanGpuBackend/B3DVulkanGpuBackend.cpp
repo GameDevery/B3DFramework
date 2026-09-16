@@ -25,7 +25,6 @@
 #	include "Private/Linux/B3DLinuxVideoModeInfo.h"
 #elif B3D_PLATFORM_MACOS
 #	include "MacOS/B3DMacOSVideoModeInfo.h"
-#	include <MoltenVK/vk_mvk_moltenvk.h>
 #else
 static_assert(false, "Other platform includes go here.");
 #endif
@@ -292,6 +291,19 @@ void VulkanGpuBackend::OnStartUp()
 	VkInstanceCreateInfo instanceInfo;
 	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instanceInfo.pNext = nullptr;
+
+#if B3D_PLATFORM_MACOS && B3D_DEBUG
+	const VkBool32 mvkDebugMode = VK_TRUE;
+	const VkLayerSettingEXT mvkLayerSetting = { "MoltenVK", "MVK_CONFIG_DEBUG", VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &mvkDebugMode };
+
+	VkLayerSettingsCreateInfoEXT mvkLayerSettingsInfo;
+	mvkLayerSettingsInfo.sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT;
+	mvkLayerSettingsInfo.pNext = nullptr;
+	mvkLayerSettingsInfo.settingCount = 1;
+	mvkLayerSettingsInfo.pSettings = &mvkLayerSetting;
+
+	instanceInfo.pNext = &mvkLayerSettingsInfo;
+#endif
 	instanceInfo.flags = 0;
 	instanceInfo.pApplicationInfo = &appInfo;
 	instanceInfo.enabledLayerCount = layerCount;
@@ -348,18 +360,6 @@ void VulkanGpuBackend::OnStartUp()
 		vkCmdInsertDebugUtilsLabelEXT = GET_INSTANCE_PROC_ADDR(mInstance, CmdInsertDebugUtilsLabelEXT)
 		vkSetDebugUtilsObjectNameEXT = GET_INSTANCE_PROC_ADDR(mInstance, SetDebugUtilsObjectNameEXT)
 	}
-
-#if B3D_PLATFORM_MACOS
-	MVKConfiguration mvkConfig;
-	size_t mvkConfigSize = sizeof(MVKConfiguration);
-	vkGetMoltenVKConfigurationMVK(mInstance, &mvkConfig, &mvkConfigSize);
-
-#	if B3D_DEBUG
-	mvkConfig.debugMode = VK_TRUE;
-#	endif
-
-	vkSetMoltenVKConfigurationMVK(mInstance, &mvkConfig, &mvkConfigSize);
-#endif
 
 	// Enumerate all devices
 	u32 physicalDeviceCount = 0;

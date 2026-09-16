@@ -475,6 +475,8 @@ namespace
 		case spv::DimBuffer:
 			objectInformation->Type = GPOT_BYTE_BUFFER;
 			break;
+		default:
+			break;
 		}
 
 		if (objectInformation->Type == GPOT_UNKNOWN)
@@ -538,6 +540,8 @@ namespace
 			break;
 		case spv::DimBuffer:
 			objectInformation->Type = GPOT_RWBYTE_BUFFER;
+			break;
+		default:
 			break;
 		}
 

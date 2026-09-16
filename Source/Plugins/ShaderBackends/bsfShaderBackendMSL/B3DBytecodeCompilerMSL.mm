@@ -463,22 +463,9 @@ namespace
 		return true;
 	}
 
-	bool ReflectLibrary(id<MTLLibrary> library, NSString* entryPointName, GpuProgramType type, u32 pushConstantBufferSize, GpuProgramBytecode& outBytecode, id<MTLFunction> __strong& outFunction)
+	/** Builds the parameter description and resource table layout of a compiled function from Metal's reflection data. */
+	bool ReflectFunction(id<MTLFunction> function, MTLFunctionReflection* reflection, GpuProgramType type, u32 pushConstantBufferSize, GpuProgramBytecode& outBytecode) API_AVAILABLE(macos(26.0))
 	{
-		outFunction = [library newFunctionWithName:entryPointName];
-		if(outFunction == nil)
-		{
-			outBytecode.Messages += "The compiled Metal library does not contain the requested entry point.\n";
-			return false;
-		}
-
-		MTLFunctionReflection* reflection = [library reflectionForFunctionWithName:entryPointName];
-		if(reflection == nil)
-		{
-			outBytecode.Messages += "Metal did not return function reflection. The shader library must target macOS 13 or later.\n";
-			return false;
-		}
-
 		outBytecode.ParameterDescription = B3DMakeShared<GpuProgramParameterDescription>();
 		outBytecode.ResourceTableLayout = B3DMakeShared<GpuResourceTableLayout>();
 
@@ -609,7 +596,7 @@ namespace
 
 		if(type == GPT_VERTEX_PROGRAM)
 		{
-			for(MTLVertexAttribute* attribute in outFunction.vertexAttributes)
+			for(MTLVertexAttribute* attribute in function.vertexAttributes)
 			{
 				if(!attribute.active)
 					continue;
@@ -638,6 +625,33 @@ namespace
 		}
 
 		return reflectionValid;
+	}
+
+	bool ReflectLibrary(id<MTLLibrary> library, NSString* entryPointName, GpuProgramType type, u32 pushConstantBufferSize, GpuProgramBytecode& outBytecode, id<MTLFunction> __strong& outFunction)
+	{
+		outFunction = [library newFunctionWithName:entryPointName];
+		if(outFunction == nil)
+		{
+			outBytecode.Messages += "The compiled Metal library does not contain the requested entry point.\n";
+			return false;
+		}
+
+		if(@available(macOS 26.0, *))
+		{
+			MTLFunctionReflection* reflection = [library reflectionForFunctionWithName:entryPointName];
+			if(reflection == nil)
+			{
+				outBytecode.Messages += "Metal did not return function reflection.\n";
+				return false;
+			}
+
+			return ReflectFunction(outFunction, reflection, type, pushConstantBufferSize, outBytecode);
+		}
+		else
+		{
+			outBytecode.Messages += "Metal function reflection requires macOS 26 or later.\n";
+			return false;
+		}
 	}
 }
 

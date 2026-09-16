@@ -164,6 +164,9 @@ namespace b3d
 
 		Component(HSceneObject parent);
 
+		using GameObject::DestroyImmediate;
+		using GameObject::QueueForDestroy;
+
 		/** Called once when the component has been created. Called regardless of the state the component is in. */
 		virtual void OnCreated() {}
 

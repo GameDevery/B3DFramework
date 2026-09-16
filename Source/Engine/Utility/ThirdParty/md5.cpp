@@ -336,6 +336,11 @@ MD5& MD5::finalize()
 #   pragma warning(disable: 4996)
 #endif
 
+#ifdef __GNUC__
+#   pragma GCC diagnostic push
+#   pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 // return hex representation of digest as string
 std::string MD5::hexdigest() const
 {
@@ -352,6 +357,10 @@ std::string MD5::hexdigest() const
 
 #ifdef _MSC_VER
 #   pragma warning(pop)
+#endif
+
+#ifdef __GNUC__
+#   pragma GCC diagnostic pop
 #endif
 
 // return a copy of the digest in the provided buffer

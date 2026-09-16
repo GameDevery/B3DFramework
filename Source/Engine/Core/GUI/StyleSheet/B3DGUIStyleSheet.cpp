@@ -174,6 +174,8 @@ const String& GUIStyleSheetSelectorList::GetUniqueName() const
 			case GUIStyleSheetSelectorType::PseudoClass:
 				stringStream << ":";
 				break;
+			default:
+				break;
 			}
 
 			stringStream << entry.Name;
@@ -413,7 +415,7 @@ GUIStyleSheet::GUIStyleSheet(TArray<GUIStyleSheetRuleset> rulesets)
 void GUIStyleSheet::Initialize()
 {
 	// Sort from least specific to more specific (so more specific properties override the less specific ones)
-	std::stable_sort(mRulesets.begin(), mRulesets.end(), [this](const GUIStyleSheetRuleset& lhs, const GUIStyleSheetRuleset& rhs) {
+	std::stable_sort(mRulesets.begin(), mRulesets.end(), [](const GUIStyleSheetRuleset& lhs, const GUIStyleSheetRuleset& rhs) {
 		const u32 specifityLHS = lhs.SelectorList.CalculateSpecificity();
 		const u32 specifityRHS = rhs.SelectorList.CalculateSpecificity();
 
@@ -449,6 +451,8 @@ void GUIStyleSheet::Initialize()
 			case GUIStyleSheetSelectorType::Id:
 				if(idSelector.empty())
 					idSelector = selector.Name;
+				break;
+			default:
 				break;
 			}
 		}

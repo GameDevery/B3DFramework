@@ -589,7 +589,7 @@ TShared<SerializedObject> GenerateObjectDelta(TOptional<Object<IsLHSIReflectable
 			if(isMap && maybeLhsField.has_value())
 			{
 				ValueIterator<IsLHSIReflectable> lhsValueIterator = maybeLhsField->GetValueIterator();
-				for(u32 elementIndex = 0; lhsValueIterator.MoveNext(); ++elementIndex)
+				while(lhsValueIterator.MoveNext())
 				{
 					Value<IsLHSIReflectable> lhsValue = lhsValueIterator.GetValue();
 

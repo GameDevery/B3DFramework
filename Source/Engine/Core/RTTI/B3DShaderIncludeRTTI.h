@@ -21,7 +21,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ShaderInclude";
 			return name;
@@ -32,7 +32,7 @@ namespace b3d
 			return TID_ShaderInclude;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return ShaderInclude::CreateShared(""); // Initial string doesn't matter, it'll get overwritten
 		}

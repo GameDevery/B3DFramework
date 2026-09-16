@@ -126,7 +126,7 @@ namespace b3d
 			}
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "GameObjectHandle";
 			return name;
@@ -137,7 +137,7 @@ namespace b3d
 			return TID_GameObjectHandleBase;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeSharedFromExisting<GameObjectHandle>(new(B3DAllocate<GameObjectHandle>()) GameObjectHandle());
 		}

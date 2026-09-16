@@ -60,13 +60,13 @@ namespace b3d
 			}
 		}
 
-		IDeltaHandler& GetDeltaHandler() const
+		IDeltaHandler& GetDeltaHandler() const override
 		{
 			static ManagedDeltaHandler managedDiffHandler;
 			return managedDiffHandler;
 		}
 
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ScriptSerializableObject";
 			return name;
@@ -77,7 +77,7 @@ namespace b3d
 			return TID_ScriptSerializableObject;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return ManagedSerializableObject::CreateEmpty();
 		}

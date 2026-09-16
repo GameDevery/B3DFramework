@@ -90,7 +90,7 @@ namespace b3d
 	public:
 		friend class SliderJointRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		SliderJoint(); // Serialization only

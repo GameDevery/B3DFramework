@@ -638,7 +638,7 @@ void SceneObject::SetParentInternal(const HSceneObject& parent, bool keepWorldTr
 				localTfrm.MakeLocal(mParent->GetTransform());
 		}
 
-		if(const bool isInitialized = HasGameObjectFlag(GameObjectTransientFlag::Initialized))
+		if(HasGameObjectFlag(GameObjectTransientFlag::Initialized))
 			NotifyTransformChanged((TransformChangedFlags)(TCF_Parent | TCF_Transform));
 	}
 }

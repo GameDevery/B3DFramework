@@ -339,12 +339,8 @@ MonoObject* ManagedSerializableDictionary::Deserialize()
 		fieldEntry.second->Deserialize();
 	}
 
-	u32 idx = 0;
 	for(auto& entry : mCachedEntries)
-	{
 		SetFieldData(managedInstance, entry.first, entry.second);
-		idx++;
-	}
 
 	return managedInstance;
 }

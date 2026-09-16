@@ -460,6 +460,8 @@ void Debug::SaveTextLog(const Path& path) const
 		case LogVerbosity::VeryVerbose:
 			builtMsg.append("[VERY_VERBOSE]");
 			break;
+		case LogVerbosity::Any:
+			break;
 		}
 
 		if(!entry.CategoryName.empty())

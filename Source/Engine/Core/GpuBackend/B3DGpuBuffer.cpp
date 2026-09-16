@@ -487,8 +487,6 @@ namespace b3d::render
 		const GpuBufferInformation& gpuBufferInformation = buffer->GetInformation();
 		const bool supportsGPUWrites = gpuBufferInformation.Flags.IsSet(GpuBufferFlag::AllowUnorderedAccessOnTheGPU);
 
-		GpuQueue& transferGpuQueue = gpuQueue != nullptr ? *gpuQueue : *buffer->GetDevice().GetQueue(GQT_GRAPHICS, 0);
-
 		// Check is the GPU currently writing to the buffer
 		const GpuQueueMask writeUseMask = buffer->GetUseMask(GpuAccessFlag::Write);
 
@@ -562,7 +560,7 @@ namespace b3d::render
 		commandBuffer.CopyBufferToBuffer(buffer, stagingBuffer, offset, 0, length);
 
 		TAsyncOp<TShared<MemoryDataStream>> op;
-		auto fnOnCommandBufferCompleted = [stagingBuffer, offset, length, op]() mutable
+		auto fnOnCommandBufferCompleted = [stagingBuffer, length, op]() mutable
 		{
 			GpuBufferMappedScope mapping = stagingBuffer->Map(GpuMapOption::Read);
 			const TShared<MemoryDataStream> dataStream = B3DMakeShared<MemoryDataStream>(stagingBuffer->GetTotalSize());

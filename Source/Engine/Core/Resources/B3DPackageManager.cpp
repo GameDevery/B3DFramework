@@ -84,7 +84,7 @@ TUnique<PackageReadLock> PackageManager::LoadOrGetPackage(const Path& packagePhy
 	const AcquirePackageLockResult lockResult = AcquireReadLock(packagePhysicalPath, readLockOptions, readLock);
 
 	if(lockResult == AcquirePackageLockResult::Acquired && readLock != nullptr)
-		return std::move(readLock);
+		return readLock;
 
 	return nullptr;
 }
@@ -440,7 +440,7 @@ AcquirePackageLockResult PackageManager::AcquireReadLock(const Path& physicalPac
 			}
 
 			// Write lock held, wait until it is released, then re-do the checks above
-			runtimePackageInformation->LoadSignal.Wait(lock, [&runtimePackageInformation, this]() {
+			runtimePackageInformation->LoadSignal.Wait(lock, [&runtimePackageInformation]() {
 				return !runtimePackageInformation->AcquiredWriteLock;
 			});
 		}

@@ -972,6 +972,7 @@ static yyconst flex_int32_t yy_rule_can_match_eol[207] =
 #define YY_USER_ACTION yylloc->first_column = yycolumn + 1; yylloc->first_line = yylineno + 1; yycolumn += (int)yyleng; yylloc->filename = GetCurrentFilename(yyextra);
 #define YY_USER_INIT yylineno = 0; yycolumn = 0;
 #define YY_NO_UNISTD_H 1
+#define YY_NO_INPUT 1
 /* Start conditions */
 
 #define INITIAL 0

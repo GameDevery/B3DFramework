@@ -6,7 +6,7 @@
 #include "Reflection/B3DRTTIType.h"
 #include "Reflection/B3DRTTIPlain.h"
 #include "Mesh/B3DMeshBase.h"
-#include "RTTI/B3DSubMeshRTTI.h"
+#include "RTTI/B3DSubmeshRTTI.h"
 
 namespace b3d
 {
@@ -25,7 +25,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "MeshBase";
 			return name;

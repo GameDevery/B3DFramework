@@ -723,7 +723,7 @@ bool PersistentCache::SetPackageForEntry(const CacheOperation& operation, const 
 	package->Save(temporaryFileStream, savePackageOptions);
 
 	bool isTemporaryFileMoved = false;
-	ScopeGuard removeTemporaryFileOnFailure([this, &isTemporaryFileMoved, temporaryPackagePath]()
+	ScopeGuard removeTemporaryFileOnFailure([&isTemporaryFileMoved, temporaryPackagePath]()
 	{
 		if(!isTemporaryFileMoved)
 			FileSystem::Remove(temporaryPackagePath);
@@ -743,7 +743,7 @@ bool PersistentCache::SetPackageForEntry(const CacheOperation& operation, const 
 	}
 
 	isTemporaryFileMoved = false;
-	ScopeGuard removePackageFileOnFailure([this, &hasCompletedSuccesfully, pathToPackage]()
+	ScopeGuard removePackageFileOnFailure([&hasCompletedSuccesfully, pathToPackage]()
 	{
 		if(!hasCompletedSuccesfully)
 			FileSystem::Remove(pathToPackage);

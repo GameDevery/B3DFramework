@@ -105,7 +105,6 @@ i32 GUIInputTool::GetCharIdxAtPos(const GUIPhysicalPoint& position) const
 	u32 lineStartChar = 0;
 	u32 lineEndChar = 0;
 	u32 newlineCharacterCount = 0;
-	u32 lineIndex = 0;
 	for(auto& line : mLineDescs)
 	{
 		i32 lineStart = line.GetLineYStart();
@@ -119,8 +118,6 @@ i32 GUIInputTool::GetCharIdxAtPos(const GUIPhysicalPoint& position) const
 		// Newline chars count in the startChar/endChar variables, but don't actually exist in the buffers
 		// so we need to filter them out
 		newlineCharacterCount += (line.HasNewlineChar() ? 1 : 0);
-
-		lineIndex++;
 	}
 
 	u32 lineStartQuad = lineStartChar - newlineCharacterCount;

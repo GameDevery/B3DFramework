@@ -334,8 +334,6 @@ namespace b3d
 			static void BindOmnidirectionalProjectionParameters(const TShared<GpuParameterSet>& gpuParameters, GpuDevice& gpuDevice, const LightProxy& light, const TShared<Texture>& shadowMap, const TShared<GpuBuffer>& shadowParameterBuffer, const GpuBufferSuballocation& perCameraBuffer, const TShared<GpuBuffer>& vertexParameterBuffer, const GBufferTextures& gbuffer)
 			{
 				// Bind common parameters (VertParams, PerCamera, Params)
-				// Set light position and radius for omnidirectional light
-				const Transform& transform = light.GetWorldTransform();
 				BindCommonParameters(gpuParameters, vertexParameterBuffer, perCameraBuffer, shadowParameterBuffer);
 
 				// Set GBuffer textures
@@ -1317,7 +1315,7 @@ namespace b3d
 					if(!isCSM)
 					{
 						ConvexVolume shadowFrustum;
-						const std::array<Vector3, 8> frustumVertices = GetFrustum(shadowInfo->ShadowVpTransform.Inverse(), shadowFrustum);
+						GetFrustum(shadowInfo->ShadowVpTransform.Inverse(), shadowFrustum);
 
 						// Check if viewer is inside the frustum. Frustum is slightly expanded so that if the near plane is
 						// intersecting the shadow frustum, it is counted as inside. This needs to be conservative as the code

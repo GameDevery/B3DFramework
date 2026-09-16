@@ -556,14 +556,14 @@ NSPoint frameToContentRect(NSWindow* window, NSPoint framePoint)
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
 {
 	NSPasteboard* pasteboard = [sender draggingPasteboard];
-	if([[pasteboard types] containsObject:NSFilenamesPboardType])
+	if([[pasteboard types] containsObject:NSPasteboardTypeFileURL])
 	{
-		NSArray* entries = [pasteboard propertyListForType:NSFilenamesPboardType];
+		NSArray* entries = [pasteboard readObjectsForClasses:@[[NSURL class]] options:@{ NSPasteboardURLReadingFileURLsOnlyKey: @YES }];
 
 		b3d::Vector<b3d::Path> paths;
-		for(NSString* path in entries)
+		for(NSURL* url in entries)
 		{
-			const char* pathChars = [path UTF8String];
+			const char* pathChars = [[url path] UTF8String];
 			paths.push_back(b3d::Path(pathChars));
 		}
 
@@ -924,7 +924,7 @@ namespace b3d
 	void CocoaWindow::RegisterForDragAndDropInternal()
 	{
 		if(m->NumDropTargets == 0)
-			[m->Window registerForDraggedTypes:@[NSFilenamesPboardType]];
+			[m->Window registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
 
 		m->NumDropTargets++;
 	}

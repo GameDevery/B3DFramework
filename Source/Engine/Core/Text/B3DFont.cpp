@@ -38,18 +38,6 @@ static FT_Pos ConvertFloatToFixed26Dot6(float value)
 	return FT_Pos(value * 64.0f);
 }
 
-/** Converts a 26.6 fixed point format to integer. */
-static i32 ConvertFixed26Dot6ToI32(i32 value)
-{
-	return value >> 6;
-}
-
-/** Converts a integer to 26.6 fixed point format. */
-static FT_Pos ConvertI32ToFixed26Dot6(i32 value)
-{
-	return FT_Pos(value << 6);
-}
-
 /** Converts font render mode into FreeType load flags. */
 static FT_Int32 ConvertFontRenderModeToLoadFlags(FontRenderMode renderMode)
 {
@@ -300,7 +288,7 @@ bool Font::RenderGlyphs(float sizeInPoints, const TArrayView<u32>& characterIds,
 			const u32 otherCharacterId = keyValuePair.first;
 			CharacterInformation& otherCharacterInformation = keyValuePair.second;
 
-			auto fnAddKerning = [this, &face](CharacterInformation& leftCharacterInformation, u32 rightCharacterId) {
+			auto fnAddKerning = [&face](CharacterInformation& leftCharacterInformation, u32 rightCharacterId) {
 				FT_Vector kerning;
 
 				const FT_Error error = FT_Get_Kerning(face, leftCharacterInformation.CharId, rightCharacterId, FT_KERNING_UNFITTED, &kerning);

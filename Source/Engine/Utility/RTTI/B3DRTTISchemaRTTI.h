@@ -61,7 +61,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "RTTIFieldDataTypeSchema";
 			return name;
@@ -72,7 +72,7 @@ namespace b3d
 			return TID_RTTIFieldDataTypeSchema;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<RTTIFieldDataTypeSchema>();
 		}
@@ -91,7 +91,7 @@ namespace b3d
 		B3D_RTTI_END_MEMBERS
 
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "RTTIFieldSchema";
 			return name;
@@ -102,7 +102,7 @@ namespace b3d
 			return TID_RTTIFieldSchema;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<RTTIFieldSchema>();
 		}
@@ -129,7 +129,7 @@ namespace b3d
 			return TID_RTTISchema;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<RTTISchema>();
 		}

@@ -123,7 +123,7 @@ namespace b3d
 	public:
 		friend class DistanceJointRTTI;
 		static RTTIType* GetRttiStatic();
-		RTTIType* GetRtti() const;
+		RTTIType* GetRtti() const override;
 
 	protected:
 		DistanceJoint(); // Serialization only

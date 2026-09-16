@@ -17,7 +17,7 @@ namespace b3d
 	class B3D_EXPORT ResourceMetaDataRTTI : public TRTTIType<ResourceMetaData, IReflectable, ResourceMetaDataRTTI>
 	{
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "ResourceMetaData";
 			return name;
@@ -28,7 +28,7 @@ namespace b3d
 			return TID_ResourceMetaData;
 		}
 
-		TShared<IReflectable> NewRttiObject()
+		TShared<IReflectable> NewRttiObject() override
 		{
 			return B3DMakeShared<ResourceMetaData>();
 		}

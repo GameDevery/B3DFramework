@@ -33,7 +33,7 @@ namespace b3d
 			B3D_RTTI_MEMBER(Flags, 5)
 		B3D_RTTI_END_MEMBERS
 	public:
-		const String& GetRttiName()
+		const String& GetRttiName() override
 		{
 			static String name = "SceneObjectHierarchyDeltaObject";
 			return name;

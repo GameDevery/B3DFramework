@@ -18,7 +18,7 @@ namespace b3d
 		virtual ~GUIElementContainer() = default;
 
 		/** @copydoc GUIElement::SetFocus */
-		void SetFocus(bool enabled, bool clear = false);
+		void SetFocus(bool enabled, bool clear = false) override;
 
 		const char* GetStyleSheetElement() const override { return "container"; }
 
