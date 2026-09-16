@@ -5,7 +5,7 @@
 #define YY_USER_INIT yylineno = 0; yycolumn = 0;
 %}
 
-%option yylineno reentrant noyywrap nounistd never-interactive warn nodefault bison-bridge bison-locations
+%option yylineno reentrant noyywrap nounistd noinput never-interactive warn nodefault bison-bridge bison-locations
 %option outfile="B3DLexerFX.c" header-file="B3DLexerFX.h"
 %option extra-type="struct tagParseState *"
 
