@@ -286,7 +286,7 @@ namespace b3d
 		static void FlipComponentOrder(PixelData& data);
 
 		/** Converts provided pixels from one format to another.  */
-		B3D_SCRIPT_EXPORT();
+		B3D_SCRIPT_EXPORT()
 		static TShared<PixelData> ConvertFormat(const TShared<PixelData>& source, PixelFormat format);
 
 		/** Compresses the provided data using the specified compression options.  */
@@ -296,7 +296,7 @@ namespace b3d
 		 * Compresses the provided data using the specified compression options. Caller must ensure that specified format
 		 * is a compressed format.
 		 */
-		B3D_SCRIPT_EXPORT();
+		B3D_SCRIPT_EXPORT()
 		static TShared<PixelData> Compress(const TShared<PixelData>& source, const CompressionOptions& options);
 
 		/**
