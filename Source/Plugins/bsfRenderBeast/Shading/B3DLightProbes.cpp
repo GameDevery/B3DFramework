@@ -11,7 +11,7 @@
 #include "GpuBackend/B3DRenderTexture.h"
 #include "Renderer/B3DRendererUtility.h"
 #include "Renderer/B3DRenderer.h"
-#include "COmponents/B3DSkybox.h"
+#include "Components/B3DSkybox.h"
 #include "Utility/B3DRendererTextures.h"
 
 namespace b3d { namespace render {

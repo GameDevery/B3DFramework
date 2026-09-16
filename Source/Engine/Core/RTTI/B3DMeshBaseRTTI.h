@@ -6,7 +6,7 @@
 #include "Reflection/B3DRTTIType.h"
 #include "Reflection/B3DRTTIPlain.h"
 #include "Mesh/B3DMeshBase.h"
-#include "RTTI/B3DSubMeshRTTI.h"
+#include "RTTI/B3DSubmeshRTTI.h"
 
 namespace b3d
 {
