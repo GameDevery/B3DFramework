@@ -611,7 +611,7 @@ u32 TreeTextureAtlasLayout::FindBestFreeNode(Page& page, const Size2UI& size)
 			}
 
 			const u32 score = Math::Min(deltaX, deltaY);
-			if(useWorstFit && score > bestScore || !useWorstFit && score < bestScore)
+			if((useWorstFit && score > bestScore) || (!useWorstFit && score < bestScore))
 			{
 				bestScore = score;
 				bestNodeIndex = nodeIndex;

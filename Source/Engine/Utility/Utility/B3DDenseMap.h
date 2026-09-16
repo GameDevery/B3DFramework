@@ -441,7 +441,7 @@ namespace b3d
 				DensePair* temp = bucket + (bucketN & (getCount() - 1));
 
 				// If found the key bucket return it.
-				if((temp->first == key))
+				if(temp->first == key)
 				{
 					f = temp;
 					return true;
@@ -449,7 +449,7 @@ namespace b3d
 
 				// If we found an empty bucket, the key doesn't exist in the set.
 				// Insert it and return the default value.
-				if((temp->first == EmptyKey))
+				if(temp->first == EmptyKey)
 				{
 					// If we've already seen a tombstone while probing, fill it in instead
 					// of the empty bucket we eventually probed to.
@@ -509,10 +509,7 @@ namespace b3d
 				{
 					// Insert the pair into the new table
 					DensePair* destBucket;
-					bool f = lookup(pair->first, destBucket);
-
-					// silence warning
-					f = f;
+					[[maybe_unused]] const bool f = lookup(pair->first, destBucket);
 					B3D_ASSERT(!f && "Key already in new map");
 
 					destBucket->first = pair->first;
