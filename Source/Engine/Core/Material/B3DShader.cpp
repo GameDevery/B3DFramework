@@ -97,13 +97,13 @@ void ShaderInformationBase::AddParameterInternal(ShaderObjectParameterInformatio
 	}
 	else
 	{
-		ShaderObjectParameterInformation& parameterInformation = found->second;
+		ShaderObjectParameterInformation& existingParameterInformation = found->second;
 
 		// If same name but different properties, we ignore this param
-		if(parameterInformation.Type != parameterInformation.Type || parameterInformation.RendererSemantic != parameterInformation.RendererSemantic)
+		if(existingParameterInformation.Type != parameterInformation.Type || existingParameterInformation.RendererSemantic != parameterInformation.RendererSemantic)
 			return;
 
-		Vector<String>& gpuVariableNames = parameterInformation.GpuVariableNames;
+		Vector<String>& gpuVariableNames = existingParameterInformation.GpuVariableNames;
 		bool found = false;
 		for(u32 i = 0; i < (u32)gpuVariableNames.size(); i++)
 		{
