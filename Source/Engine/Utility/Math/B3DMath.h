@@ -1138,15 +1138,15 @@ namespace b3d
 		 * @param  integrand		Function to integrate.
 		 * @return					Gaussian Quadrature integration.
 		 */
-		template <typename T>
-		static T GaussianQuadrature(T a, T b, T* roots, T* coefficients, const std::function<T(T)>& integrand)
+		template <typename T, u32 N>
+		static T GaussianQuadrature(T a, T b, const T (&roots)[N], const T (&coefficients)[N], const std::function<T(T)>& integrand)
 		{
 			const T half = (T)0.5;
 			const T radius = half * (b - a);
 			const T center = half * (b + a);
 			T res = (T)0;
 
-			for(u32 i = 0; i < sizeof(roots) / sizeof(*roots); ++i)
+			for(u32 i = 0; i < N; ++i)
 				res += coefficients[i] * integrand(radius * roots[i] + center);
 
 			res *= radius;
