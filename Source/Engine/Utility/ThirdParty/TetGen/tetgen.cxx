@@ -40,6 +40,12 @@
 #   pragma warning(disable: 4996)
 #endif
 
+#ifdef __GNUC__
+#   pragma GCC diagnostic push
+#   pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#   pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+
 bool tetgenio::load_node_call(FILE* infile, int markers, int uvflag, 
                               char* infilename)
 {
@@ -31251,4 +31257,8 @@ void tetrahedralize(char *switches, tetgenio *in, tetgenio *out,
 
 #ifdef _MSC_VER
 #   pragma warning(pop)
+#endif
+
+#ifdef __GNUC__
+#   pragma GCC diagnostic pop
 #endif

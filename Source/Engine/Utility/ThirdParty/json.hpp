@@ -141,6 +141,8 @@ using json = basic_json<>;
 #if defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdocumentation"
+#pragma GCC diagnostic ignored "-Wdeprecated-literal-operator"
+#pragma GCC diagnostic ignored "-Wtautological-overlap-compare"
 #endif
 
 // allow for portable deprecation warnings
