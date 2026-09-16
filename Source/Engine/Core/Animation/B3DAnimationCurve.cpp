@@ -198,31 +198,31 @@ static T GetZero()
 }
 
 template <>
-static float GetZero<float>()
+float GetZero<float>()
 {
 	return 0.0f;
 }
 
 template <>
-static Vector3 GetZero<Vector3>()
+Vector3 GetZero<Vector3>()
 {
 	return Vector3(kZeroTag);
 }
 
 template <>
-static Vector2 GetZero<Vector2>()
+Vector2 GetZero<Vector2>()
 {
 	return Vector2(kZeroTag);
 }
 
 template <>
-static Quaternion GetZero<Quaternion>()
+Quaternion GetZero<Quaternion>()
 {
 	return Quaternion(kZeroTag);
 }
 
 template <>
-static i32 GetZero<i32>()
+i32 GetZero<i32>()
 {
 	return 0;
 }
@@ -234,19 +234,19 @@ static constexpr u32 GetNumComponents()
 }
 
 template <>
-static constexpr u32 GetNumComponents<Vector3>()
+constexpr u32 GetNumComponents<Vector3>()
 {
 	return 3;
 }
 
 template <>
-static constexpr u32 GetNumComponents<Vector2>()
+constexpr u32 GetNumComponents<Vector2>()
 {
 	return 2;
 }
 
 template <>
-static constexpr u32 GetNumComponents<Quaternion>()
+constexpr u32 GetNumComponents<Quaternion>()
 {
 	return 4;
 }
@@ -258,19 +258,19 @@ static float& GetComponent(T& val, u32 idx)
 }
 
 template <>
-static float& GetComponent(Vector3& val, u32 idx)
+float& GetComponent(Vector3& val, u32 idx)
 {
 	return val[idx];
 }
 
 template <>
-static float& GetComponent(Vector2& val, u32 idx)
+float& GetComponent(Vector2& val, u32 idx)
 {
 	return val[idx];
 }
 
 template <>
-static float& GetComponent(Quaternion& val, u32 idx)
+float& GetComponent(Quaternion& val, u32 idx)
 {
 	return val[idx];
 }
@@ -282,19 +282,19 @@ static float GetComponent(const T& val, u32 idx)
 }
 
 template <>
-static float GetComponent(const Vector3& val, u32 idx)
+float GetComponent(const Vector3& val, u32 idx)
 {
 	return val[idx];
 }
 
 template <>
-static float GetComponent(const Vector2& val, u32 idx)
+float GetComponent(const Vector2& val, u32 idx)
 {
 	return val[idx];
 }
 
 template <>
-static float GetComponent(const Quaternion& val, u32 idx)
+float GetComponent(const Quaternion& val, u32 idx)
 {
 	return val[idx];
 }
@@ -307,21 +307,21 @@ static void GetMinMax(std::pair<T, T>& minmax, const T& value)
 }
 
 template <>
-static void GetMinMax(std::pair<Vector3, Vector3>& minmax, const Vector3& value)
+void GetMinMax(std::pair<Vector3, Vector3>& minmax, const Vector3& value)
 {
 	minmax.first = Vector3::Min(minmax.first, value);
 	minmax.second = Vector3::Max(minmax.second, value);
 }
 
 template <>
-static void GetMinMax(std::pair<Vector2, Vector2>& minmax, const Vector2& value)
+void GetMinMax(std::pair<Vector2, Vector2>& minmax, const Vector2& value)
 {
 	minmax.first = Vector2::Min(minmax.first, value);
 	minmax.second = Vector2::Max(minmax.second, value);
 }
 
 template <>
-static void GetMinMax(std::pair<Quaternion, Quaternion>& minmax, const Quaternion& value)
+void GetMinMax(std::pair<Quaternion, Quaternion>& minmax, const Quaternion& value)
 {
 	minmax.first = Quaternion::Min(minmax.first, value);
 	minmax.second = Quaternion::Max(minmax.second, value);
@@ -355,7 +355,7 @@ static TKeyframe<T> EvaluateKey(const TKeyframe<T>& lhs, const TKeyframe<T>& rhs
 }
 
 template <>
-static TKeyframe<i32> EvaluateKey(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time)
+TKeyframe<i32> EvaluateKey(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time)
 {
 	TKeyframe<i32> output;
 	output.Time = time;
@@ -372,7 +372,7 @@ static T EvaluateCubic(float time, float start, float end, T (&coeffs)[4])
 }
 
 template <>
-static i32 EvaluateCubic(float time, float start, float end, i32 (&coeffs)[4])
+i32 EvaluateCubic(float time, float start, float end, i32 (&coeffs)[4])
 {
 	return time >= end ? coeffs[1] : coeffs[0];
 }
@@ -397,7 +397,7 @@ static void CalculateCoeffs(const TKeyframe<T>& lhs, const TKeyframe<T>& rhs, fl
 }
 
 template <>
-static void CalculateCoeffs(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time, i32 (&coeffs)[4])
+void CalculateCoeffs(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time, i32 (&coeffs)[4])
 {
 	coeffs[0] = lhs.Value;
 	coeffs[1] = rhs.Value;
@@ -412,7 +412,7 @@ static T EvaluateAndUpdateCache(const TKeyframe<T>& lhs, const TKeyframe<T>& rhs
 }
 
 template <>
-static i32 EvaluateAndUpdateCache(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time, i32 (&coeffs)[4])
+i32 EvaluateAndUpdateCache(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time, i32 (&coeffs)[4])
 {
 	coeffs[0] = lhs.Value;
 	coeffs[1] = rhs.Value;
@@ -451,7 +451,7 @@ static T Evaluate(const TKeyframe<T>& lhs, const TKeyframe<T>& rhs, float time)
 }
 
 template <>
-static i32 Evaluate(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time)
+i32 Evaluate(const TKeyframe<i32>& lhs, const TKeyframe<i32>& rhs, float time)
 {
 	return time >= rhs.Time ? rhs.Value : lhs.Value;
 }
@@ -504,7 +504,7 @@ static void CalcMinMax(std::pair<T, T>& minmax, float start, float end, T (&coef
 }
 
 template <>
-static void CalcMinMax(std::pair<i32, i32>& minmax, float start, float end, i32 (&coeffs)[4])
+void CalcMinMax(std::pair<i32, i32>& minmax, float start, float end, i32 (&coeffs)[4])
 {
 	GetMinMax(minmax, coeffs[0]);
 	GetMinMax(minmax, coeffs[1]);
@@ -552,7 +552,7 @@ static void CalcMinMaxIntegrated(std::pair<T, T>& minmax, float start, float end
 }
 
 template <>
-static void CalcMinMaxIntegrated(std::pair<i32, i32>& minmax, float start, float end, const i32& sum, i32 (&coeffs)[4])
+void CalcMinMaxIntegrated(std::pair<i32, i32>& minmax, float start, float end, const i32& sum, i32 (&coeffs)[4])
 {
 	B3D_ASSERT(false && "Not implemented");
 }
@@ -602,7 +602,7 @@ static void CalcMinMaxIntegratedDouble(std::pair<T, T>& minmax, float start, flo
 }
 
 template <>
-static void CalcMinMaxIntegratedDouble(std::pair<i32, i32>& minmax, float start, float end, const i32& doubleSum, const i32& sum, i32 (&coeffs)[4])
+void CalcMinMaxIntegratedDouble(std::pair<i32, i32>& minmax, float start, float end, const i32& doubleSum, const i32& sum, i32 (&coeffs)[4])
 {
 	B3D_ASSERT(false && "Not implemented");
 }
