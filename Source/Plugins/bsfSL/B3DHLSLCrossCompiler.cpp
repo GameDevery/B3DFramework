@@ -11,7 +11,16 @@
 
 #define XSC_ENABLE_LANGUAGE_EXT 1
 #include "GpuBackend/B3DGpuParameterSet.h"
+
+// Xsc::Report derives from std::exception across the DLL boundary, which is fine for our use
+#if B3D_COMPILER_MSVC
+#	pragma warning(push)
+#	pragma warning(disable : 4275)
+#endif
 #include "Xsc/Xsc.h"
+#if B3D_COMPILER_MSVC
+#	pragma warning(pop)
+#endif
 
 using namespace std;
 using namespace b3d;

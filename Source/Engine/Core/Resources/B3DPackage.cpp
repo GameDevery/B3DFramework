@@ -899,7 +899,7 @@ TShared<Resource> Package::LoadAndDeserializeResource(const UUID& id, u64 offset
 	}
 	else
 	{
-		constexpr float kCompressionProgressWeight = 0.9f; // Assuming compression will take 90% of the deserialization time.
+		static constexpr float kCompressionProgressWeight = 0.9f; // Assuming compression will take 90% of the deserialization time.
 		const TShared<MemoryDataStream> uncompressedStream = B3DMakeShared<MemoryDataStream>();
 
 		const bool decompressionSuccessful = Compression::Decompress(*dataStream, *uncompressedStream, sizeInStream, compressionType, [&outProgress](float progress) {
