@@ -5,6 +5,10 @@
 set(B3D_PREBUILT_DEPENDENCIES_URL "https://dependencies.banshee3d.io" CACHE STRING "The location that binary packages (prebuilt dependencies, built-in assets) will be pulled from.")
 mark_as_advanced(B3D_PREBUILT_DEPENDENCIES_URL)
 
+# Name of the stamp file a dependency folder carries while its contents were built from source rather than
+# downloaded. The value is the version that was built. CI scans for it to find the packages no package server holds.
+set(B3D_BUILT_FROM_SOURCE_STAMP ".builtfromsource")
+
 # Reads the version stamps of a package folder and reports whether the package needs updating.
 # Compares .reqversion (the version the source tree requires) and .version (the version present on disk).
 #
@@ -123,6 +127,9 @@ function(B3DDownloadPackage targetFolder archivePrefix extractedFolderName versi
 		endif()
 	endforeach()
 
+	# The folder now holds published contents, so it no longer carries a source-built stamp.
+	file(REMOVE ${targetFolder}/${B3D_BUILT_FROM_SOURCE_STAMP})
+
 	# Clean up
 	execute_process(COMMAND ${CMAKE_COMMAND} -E remove_directory ${tempFolder})
 
@@ -230,6 +237,10 @@ function(B3DBuildDependencyFromSource dependencyName buildScript dependencyFolde
 	# The script stamps .version relative to whatever was on disk before. The build satisfies the required version,
 	# so record that instead, otherwise the next configure would try to update the dependency again.
 	file(WRITE ${dependencyFolder}/.version "${requiredVersion}")
+
+	# Mark the folder as holding contents no package server has, so a deployment knows to publish it. The stamp
+	# survives incremental configures and is only cleared when a published package replaces the folder.
+	file(WRITE ${dependencyFolder}/${B3D_BUILT_FROM_SOURCE_STAMP} "${requiredVersion}")
 	message(STATUS "Built '${dependencyName}' v${requiredVersion} from source.")
 endfunction()
 

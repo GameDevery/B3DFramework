@@ -11,22 +11,33 @@
 #   ./B3DUploadBinaries.sh <package-name> [options]
 #
 # Options:
-#   --backend <name>  Upload backend: 'rclone' (default, Cloudflare R2) or 'ftp'
+#   --backend <name>  Upload backend: 'rclone' (Cloudflare R2) or 'ftp'; defaults to
+#                     B3D_UPLOAD_BACKEND from the credentials file or environment, else 'rclone'
 #   --no-upload       Create archive but skip upload
 #   --no-bump         Re-upload current version without incrementing it
 #   --dry-run         Print actions without executing
 #   --credentials     Path to credentials file
+#   --platform <name> Target platform suffix (Win32/MacOS/Linux/...) instead of the host's
+#   --folder <path>   Package folder to archive, for dependencies outside Framework/Dependencies
+#   --output <dir>    Copy the created archive into this folder (implies --no-upload)
+#   --archive <path>  Upload an already prepared archive instead of packaging a folder
+#                     (with --exists only the file name matters; the file need not exist locally)
+#   --version <n>     Package version to use instead of the folder's .reqversion (implies --no-bump)
+#   --exists          Report whether the package version is on the server: exit 0 present, 3 absent, 1 error
+#   --if-missing      Upload only when the archive is absent from the server (never overwrites)
 #   --list            List available packages
 #   --check-outdated  Check which packages need to be re-uploaded (slow)
 #   --help            Show help message
 #
 # Credentials file format (auto-detected):
 #   - key=value lines (preferred): both backends in one file, e.g.
+#       B3D_UPLOAD_BACKEND=rclone
 #       B3D_FTP_URL=ftp://example.com
 #       B3D_R2_ACCOUNT_ID=...
 #   - Legacy 3-line FTP format (URL / user / pass) is still accepted.
 #
 # Environment variables (checked if not in credentials file):
+#   B3D_UPLOAD_BACKEND         Backend used when --backend is not given
 #   FTP backend:
 #     B3D_FTP_URL              FTP server URL
 #     B3D_FTP_USER             FTP username
@@ -48,7 +59,7 @@ RootDir="$(cd "$FrameworkDir/.." &> /dev/null && pwd)"
 Platform="$OSTYPE"
 
 # Default options
-Backend="rclone"
+Backend=""
 NoUpload=false
 NoBump=false
 DryRun=false
@@ -56,6 +67,13 @@ CredentialsFile=""
 ListPackages=false
 CheckOutdated=false
 PackageName=""
+PlatformOverride=""
+FolderOverride=""
+OutputFolder=""
+PreparedArchive=""
+VersionOverride=""
+CheckExists=false
+IfMissing=false
 
 # Credentials (populated by load_credentials)
 B3D_FTP_URL="${B3D_FTP_URL:-}"
@@ -67,6 +85,7 @@ B3D_R2_SECRET_ACCESS_KEY="${B3D_R2_SECRET_ACCESS_KEY:-}"
 B3D_R2_BUCKET="${B3D_R2_BUCKET:-}"
 B3D_R2_PATH="${B3D_R2_PATH:-}"
 B3D_R2_PUBLIC_URL="${B3D_R2_PUBLIC_URL:-}"
+B3D_UPLOAD_BACKEND="${B3D_UPLOAD_BACKEND:-}"
 
 # -----------------------------------------------
 # Usage/Help
@@ -77,11 +96,19 @@ show_usage() {
 	echo "Usage: $0 <package-name> [options]"
 	echo ""
 	echo "Options:"
-	echo "  --backend <name>  Upload backend: 'rclone' (default, R2) or 'ftp'"
+	echo "  --backend <name>  Upload backend: 'rclone' (R2) or 'ftp'; default from B3D_UPLOAD_BACKEND, else rclone"
 	echo "  --no-upload       Create archive but skip upload"
 	echo "  --no-bump         Re-upload current version without incrementing it"
 	echo "  --dry-run         Print actions without executing"
 	echo "  --credentials     Path to credentials file"
+	echo "  --platform <name> Target platform suffix (Win32/MacOS/Linux/...) instead of the host's"
+	echo "  --folder <path>   Package folder to archive, for dependencies outside Framework/Dependencies"
+	echo "  --output <dir>    Copy the created archive into this folder (implies --no-upload)"
+	echo "  --archive <path>  Upload an already prepared archive instead of packaging a folder"
+	echo "                    (with --exists only the file name matters; the file need not exist locally)"
+	echo "  --version <n>     Package version to use instead of the folder's .reqversion (implies --no-bump)"
+	echo "  --exists          Report whether the package version is on the server: exit 0 present, 3 absent, 1 error"
+	echo "  --if-missing      Upload only when the archive is absent from the server (never overwrites)"
 	echo "  --list            List available packages"
 	echo "  --check-outdated  Check which packages need to be re-uploaded (slow)"
 	echo "  --help            Show this help message"
@@ -102,6 +129,7 @@ show_usage() {
 	echo "    B3D_R2_BUCKET            Target bucket name"
 	echo "    B3D_R2_PATH              Optional prefix inside the bucket"
 	echo "    B3D_R2_PUBLIC_URL        Optional public URL printed after upload"
+	echo "    B3D_UPLOAD_BACKEND       Backend used when --backend is not given"
 	echo ""
 	echo "Examples:"
 	echo "  $0 --list                              # List all available packages"
@@ -109,6 +137,8 @@ show_usage() {
 	echo "  $0 FrameworkData --backend ftp         # Upload via FTP instead"
 	echo "  $0 XShaderCompiler --no-upload         # Create archive only"
 	echo "  $0 XShaderCompiler --no-bump           # Re-upload current version"
+	echo "  $0 XShaderCompiler --exists            # Is the required version on the server?"
+	echo "  $0 --archive XShaderCompiler_Win32_12.tar.gz --if-missing   # Publish a prepared archive"
 }
 
 # -----------------------------------------------
@@ -312,6 +342,7 @@ load_credentials_file() {
 			B3D_R2_BUCKET)            [ -z "$B3D_R2_BUCKET" ]            && B3D_R2_BUCKET="$value" ;;
 			B3D_R2_PATH)              [ -z "$B3D_R2_PATH" ]              && B3D_R2_PATH="$value" ;;
 			B3D_R2_PUBLIC_URL)        [ -z "$B3D_R2_PUBLIC_URL" ]        && B3D_R2_PUBLIC_URL="$value" ;;
+			B3D_UPLOAD_BACKEND)       [ -z "$B3D_UPLOAD_BACKEND" ]       && B3D_UPLOAD_BACKEND="$value" ;;
 		esac
 	done < "$credFile"
 }
@@ -328,16 +359,29 @@ load_credentials() {
 			exit 1
 		fi
 		load_credentials_file "$CredentialsFile"
-		return
+	else
+		# Default locations (canonical first, legacy fallback second)
+		local defaultDir="$ScriptDir/../../.."
+		if [ -f "$defaultDir/b3d_credentials" ]; then
+			load_credentials_file "$defaultDir/b3d_credentials"
+		elif [ -f "$defaultDir/ftp_credentials" ]; then
+			load_credentials_file "$defaultDir/ftp_credentials"
+		fi
 	fi
 
-	# Default locations (canonical first, legacy fallback second)
-	local defaultDir="$ScriptDir/../../.."
-	if [ -f "$defaultDir/b3d_credentials" ]; then
-		load_credentials_file "$defaultDir/b3d_credentials"
-	elif [ -f "$defaultDir/ftp_credentials" ]; then
-		load_credentials_file "$defaultDir/ftp_credentials"
+	# --backend wins; otherwise the credentials file (or environment) chooses; otherwise rclone.
+	if [ -z "$Backend" ]; then
+		Backend="${B3D_UPLOAD_BACKEND:-rclone}"
 	fi
+	case "$Backend" in
+		rclone|ftp) ;;
+		*)
+			echo "[Error] Unknown upload backend '$Backend' (use rclone or ftp)"
+			revert_version
+			rm -rf "$TempDir"
+			exit 1
+			;;
+	esac
 }
 
 # -----------------------------------------------
@@ -384,6 +428,93 @@ upload_ftp() {
 # rclone / Cloudflare R2 Upload Backend
 # -----------------------------------------------
 upload_rclone() {
+	require_rclone || return 1
+
+	local target="b3d_r2:$(rclone_remote_base)/$ArchiveName"
+
+	echo ""
+	echo "Uploading to: $target (R2 endpoint https://${B3D_R2_ACCOUNT_ID}.r2.cloudflarestorage.com)"
+
+	if [ "$DryRun" = true ]; then
+		return 0
+	fi
+
+	# Write a temp rclone config (inside TempDir, cleaned up with the rest).
+	write_rclone_config
+
+	rclone --config "$TempDir/rclone.conf" copyto "$ArchivePath" "$target" \
+		--progress --s3-no-check-bucket
+	local status=$?
+
+	if [ $status -eq 0 ] && [ -n "$B3D_R2_PUBLIC_URL" ]; then
+		local publicBase="${B3D_R2_PUBLIC_URL%/}"
+		local publicPath=""
+		if [ -n "$B3D_R2_PATH" ]; then
+			local trimmedPath="${B3D_R2_PATH#/}"
+			trimmedPath="${trimmedPath%/}"
+			[ -n "$trimmedPath" ] && publicPath="$trimmedPath/"
+		fi
+		echo ""
+		echo "Public URL: $publicBase/$publicPath$ArchiveName"
+	fi
+
+	return $status
+}
+
+# -----------------------------------------------
+# Remote Existence Checks
+#
+# Return 0 when the archive is on the server, 3 when it is confirmed absent and 1 when the
+# question could not be answered (missing credentials, network or authorization failure).
+# Only a confirmed absence may lead to an upload.
+# -----------------------------------------------
+exists_ftp() {
+	if [ -z "$B3D_FTP_URL" ] || [ -z "$B3D_FTP_USER" ] || [ -z "$B3D_FTP_PASS" ]; then
+		echo "[Error] Missing FTP credentials"
+		return 1
+	fi
+
+	# A HEAD request maps to the FTP SIZE command; curl exits 19 when the file is missing.
+	curl --silent --show-error --head --user "$B3D_FTP_USER:$B3D_FTP_PASS" "$B3D_FTP_URL/$ArchiveName" >/dev/null 2>&1
+	local status=$?
+	case $status in
+		0)  return 0 ;;
+		19) return 3 ;;
+		*)  echo "[Error] FTP existence check failed (curl exit $status)"; return 1 ;;
+	esac
+}
+
+# Writes the temporary rclone configuration for the R2 remote into $TempDir. Subshell scope
+# prevents the restrictive umask from leaking.
+write_rclone_config() {
+	local rcloneConfig="$TempDir/rclone.conf"
+	(
+		umask 077
+		cat > "$rcloneConfig" <<EOF
+[b3d_r2]
+type = s3
+provider = Cloudflare
+access_key_id = $B3D_R2_ACCESS_KEY_ID
+secret_access_key = $B3D_R2_SECRET_ACCESS_KEY
+endpoint = https://${B3D_R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+acl = private
+EOF
+	)
+}
+
+# Prints the bucket path (bucket plus optional prefix) archives live under.
+rclone_remote_base() {
+	local remoteBase="$B3D_R2_BUCKET"
+	if [ -n "$B3D_R2_PATH" ]; then
+		local trimmedPath="${B3D_R2_PATH#/}"
+		trimmedPath="${trimmedPath%/}"
+		[ -n "$trimmedPath" ] && remoteBase="$B3D_R2_BUCKET/$trimmedPath"
+	fi
+	echo "$remoteBase"
+}
+
+# Verifies rclone is installed and the R2 credentials are complete.
+require_rclone() {
 	if ! command -v rclone >/dev/null 2>&1; then
 		echo "[Error] 'rclone' not found on PATH. Install it with:"
 		case "$PlatformSuffix" in
@@ -407,57 +538,59 @@ upload_rclone() {
 		echo "        Provide via --credentials <file> or environment variables."
 		return 1
 	fi
+	return 0
+}
 
-	# Compose remote target path
-	local remoteBase="$B3D_R2_BUCKET"
-	if [ -n "$B3D_R2_PATH" ]; then
-		# Trim leading/trailing slashes from the path prefix
-		local trimmedPath="${B3D_R2_PATH#/}"
-		trimmedPath="${trimmedPath%/}"
-		[ -n "$trimmedPath" ] && remoteBase="$B3D_R2_BUCKET/$trimmedPath"
-	fi
-	local target="b3d_r2:$remoteBase/$ArchiveName"
+exists_rclone() {
+	require_rclone || return 1
+	write_rclone_config
 
-	echo ""
-	echo "Uploading to: $target (R2 endpoint https://${B3D_R2_ACCOUNT_ID}.r2.cloudflarestorage.com)"
-
-	if [ "$DryRun" = true ]; then
-		return 0
-	fi
-
-	# Write a temp rclone config (inside TempDir, cleaned up with the rest).
-	# Subshell scope prevents the restrictive umask from leaking.
-	local rcloneConfig="$TempDir/rclone.conf"
-	(
-		umask 077
-		cat > "$rcloneConfig" <<EOF
-[b3d_r2]
-type = s3
-provider = Cloudflare
-access_key_id = $B3D_R2_ACCESS_KEY_ID
-secret_access_key = $B3D_R2_SECRET_ACCESS_KEY
-endpoint = https://${B3D_R2_ACCOUNT_ID}.r2.cloudflarestorage.com
-acl = private
-EOF
-	)
-
-	rclone --config "$rcloneConfig" copyto "$ArchivePath" "$target" \
-		--progress --s3-no-check-bucket
+	# lsf on the exact object prints its name when present and nothing when absent; any other
+	# failure (auth, network) is a non-zero exit.
+	local listing
+	listing=$(rclone --config "$TempDir/rclone.conf" lsf "b3d_r2:$(rclone_remote_base)/$ArchiveName" --s3-no-check-bucket 2>&1)
 	local status=$?
+	if [ $status -ne 0 ]; then
+		echo "[Error] R2 existence check failed: $listing"
+		return 1
+	fi
+	[ -n "$listing" ] && return 0
+	return 3
+}
 
-	if [ $status -eq 0 ] && [ -n "$B3D_R2_PUBLIC_URL" ]; then
-		local publicBase="${B3D_R2_PUBLIC_URL%/}"
-		local publicPath=""
-		if [ -n "$B3D_R2_PATH" ]; then
-			local trimmedPath="${B3D_R2_PATH#/}"
-			trimmedPath="${trimmedPath%/}"
-			[ -n "$trimmedPath" ] && publicPath="$trimmedPath/"
+# Runs the backend's existence check for $ArchiveName and prints the verdict.
+check_exists() {
+	local status
+	case "$Backend" in
+		ftp)    exists_ftp ;;
+		rclone) exists_rclone ;;
+	esac
+	status=$?
+	case $status in
+		0) echo "present: $ArchiveName" ;;
+		3) echo "absent: $ArchiveName" ;;
+	esac
+	return $status
+}
+
+# Uploads $ArchivePath unless --if-missing found it on the server already. Returns 0 when the
+# archive is on the server afterwards (uploaded or pre-existing), non-zero otherwise.
+upload_archive() {
+	if [ "$IfMissing" = true ]; then
+		check_exists
+		local status=$?
+		if [ $status -eq 0 ]; then
+			echo "Archive already on server, not uploading."
+			return 0
+		elif [ $status -ne 3 ]; then
+			return 1
 		fi
-		echo ""
-		echo "Public URL: $publicBase/$publicPath$ArchiveName"
 	fi
 
-	return $status
+	case "$Backend" in
+		ftp)    upload_ftp ;;
+		rclone) upload_rclone ;;
+	esac
 }
 
 # -----------------------------------------------
@@ -484,6 +617,36 @@ while [[ $# -gt 0 ]]; do
 		--credentials)
 			CredentialsFile="$2"
 			shift 2
+			;;
+		--platform)
+			PlatformOverride="$2"
+			shift 2
+			;;
+		--folder)
+			FolderOverride="$2"
+			shift 2
+			;;
+		--output)
+			OutputFolder="$2"
+			NoUpload=true
+			shift 2
+			;;
+		--archive)
+			PreparedArchive="$2"
+			shift 2
+			;;
+		--version)
+			VersionOverride="$2"
+			NoBump=true
+			shift 2
+			;;
+		--exists)
+			CheckExists=true
+			shift
+			;;
+		--if-missing)
+			IfMissing=true
+			shift
 			;;
 		--list)
 			ListPackages=true
@@ -515,9 +678,9 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
-# Validate backend selection
+# Validate an explicit backend selection; the default is resolved once credentials are loaded.
 case "$Backend" in
-	ftp|rclone) ;;
+	""|ftp|rclone) ;;
 	*)
 		echo "[Error] Unknown backend: $Backend (expected 'ftp' or 'rclone')"
 		exit 1
@@ -536,16 +699,15 @@ if [ "$CheckOutdated" = true ]; then
 	exit 0
 fi
 
-# If no package name, show help
-if [ -z "$PackageName" ]; then
-	show_usage
-	exit 0
-fi
-
 # -----------------------------------------------
 # Platform Detection
+#
+# The archive suffix names the platform the package was built for, which is the host unless a
+# target was given (console builds cross-compile from a Windows host).
 # -----------------------------------------------
-if [[ "$Platform" == "win32" || "$Platform" == "msys" ]]; then
+if [ -n "$PlatformOverride" ]; then
+	PlatformSuffix="$PlatformOverride"
+elif [[ "$Platform" == "win32" || "$Platform" == "msys" ]]; then
 	PlatformSuffix="Win32"
 elif [[ "$Platform" == "darwin"* ]]; then
 	PlatformSuffix="MacOS"
@@ -554,6 +716,54 @@ elif [[ "$Platform" == "linux-gnu"* ]]; then
 else
 	echo "[Error] Unknown platform: $Platform"
 	exit 1
+fi
+
+# -----------------------------------------------
+# Prepared Archive
+#
+# An archive produced earlier (e.g. by a CI build) carries its own name, so it is checked or
+# uploaded as-is without touching any package folder or version stamp.
+# -----------------------------------------------
+if [ -n "$PreparedArchive" ]; then
+	if [ -n "$PackageName" ]; then
+		echo "[Error] --archive cannot be combined with a package name"
+		exit 1
+	fi
+	# An existence check only needs the archive's name, so the file itself may be absent locally.
+	if [ "$CheckExists" != true ] && [ ! -f "$PreparedArchive" ]; then
+		echo "[Error] Archive not found: $PreparedArchive"
+		exit 1
+	fi
+
+	ArchivePath="$PreparedArchive"
+	ArchiveName=$(basename "$PreparedArchive")
+	TempDir=$(mktemp -d)
+	echo "Prepared archive: $ArchiveName"
+
+	load_credentials
+	if [ "$CheckExists" = true ]; then
+		check_exists
+		status=$?
+		rm -rf "$TempDir"
+		exit $status
+	fi
+
+	echo "Backend: $Backend"
+	upload_archive
+	UploadStatus=$?
+	rm -rf "$TempDir"
+	if [ $UploadStatus -ne 0 ]; then
+		echo "[Error] Failed to upload archive"
+		exit 1
+	fi
+	echo "Upload complete: $ArchiveName"
+	exit 0
+fi
+
+# If no package name, show help
+if [ -z "$PackageName" ]; then
+	show_usage
+	exit 0
 fi
 
 echo "Platform: $PlatformSuffix"
@@ -596,7 +806,7 @@ case "$PackageName" in
 		;;
 	*)
 		# Check if it's a dependency
-		PackageFolder="$FrameworkDir/Dependencies/$PackageName"
+		PackageFolder="${FolderOverride:-$FrameworkDir/Dependencies/$PackageName}"
 		ArchivePrefix="$PackageName"
 		if [ ! -d "$PackageFolder" ]; then
 			echo "[Error] Package not found: $PackageName"
@@ -616,8 +826,10 @@ ManifestFile="$PackageFolder/DataPackageManifest.txt"
 # -----------------------------------------------
 # Version Management
 # -----------------------------------------------
-if [ -f "$ReqVersionFile" ]; then
-	CurrentVersion=$(cat "$ReqVersionFile")
+if [ -n "$VersionOverride" ]; then
+	CurrentVersion="$VersionOverride"
+elif [ -f "$ReqVersionFile" ]; then
+	CurrentVersion=$(tr -d '\r\n' < "$ReqVersionFile")
 else
 	CurrentVersion=0
 fi
@@ -683,6 +895,15 @@ fi
 
 ArchivePath="$TempDir/$ArchiveName"
 
+# An existence query needs only the archive name, so answer it before packaging anything.
+if [ "$CheckExists" = true ]; then
+	load_credentials
+	check_exists
+	status=$?
+	rm -rf "$TempDir"
+	exit $status
+fi
+
 echo "Creating archive: $ArchiveName"
 
 if [ "$DryRun" = false ]; then
@@ -715,6 +936,12 @@ fi
 if [ "$NoUpload" = true ]; then
 	echo ""
 	echo "Skipping upload (--no-upload specified)"
+	if [ -n "$OutputFolder" ] && [ "$DryRun" = false ]; then
+		mkdir -p "$OutputFolder"
+		cp "$ArchivePath" "$OutputFolder/$ArchiveName"
+		FullArchivePath=$(realpath "$OutputFolder/$ArchiveName")
+		rm -rf "$TempDir"
+	fi
 	echo "Archive location: $FullArchivePath"
 
 	# Still update reqversion since archive was created successfully
@@ -727,16 +954,13 @@ if [ "$NoUpload" = true ]; then
 	exit 0
 fi
 
-echo ""
-echo "Backend: $Backend"
-
 # Load credentials (file + env). On failure, revert version and exit.
 load_credentials
 
-case "$Backend" in
-	ftp)    upload_ftp ;;
-	rclone) upload_rclone ;;
-esac
+echo ""
+echo "Backend: $Backend"
+
+upload_archive
 UploadStatus=$?
 
 if [ $UploadStatus -ne 0 ]; then

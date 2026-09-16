@@ -11,6 +11,22 @@ cd "$WORKSPACE"
 # Build type from config (default to RelWithDebInfo)
 BUILD_TYPE="${BUILD_TYPE:-RelWithDebInfo}"
 
+# The workspace is either the editor repository (framework at Framework/) or a standalone framework
+# repository. A framework checkout builds and installs the framework SDK instead of the editor.
+if [ -f "$WORKSPACE/Framework/CMakeLists.txt" ]; then
+	ROOT_KIND="editor"
+	FRAMEWORK_DIR="$WORKSPACE/Framework"
+else
+	ROOT_KIND="framework"
+	FRAMEWORK_DIR="$WORKSPACE"
+fi
+echo "Checkout: $ROOT_KIND"
+
+# Where everything a later deployment needs is left: the deploy script itself and the tools it
+# runs, packaged dependencies, and (on request) the framework archive. BansheeForge transfers
+# this directory to the orchestrator and runs deploy.sh there.
+DEPLOY_DIR="${DEPLOY_DIR:-$WORKSPACE/Build/Deploy}"
+
 # Target platform, as injected by the BansheeForge agent ($PLATFORM: win32, darwin, linux, ps5).
 # When run by hand outside CI, fall back to the host OS.
 if [ -z "${PLATFORM:-}" ]; then
@@ -42,7 +58,7 @@ case "$Platform" in
 		# repository (Framework/Platform/<Name>/Scripts/CI/B3DCIBuildOverlay.sh), which takes over
 		# the whole build when present.
 		OVERLAY_BUILD=""
-		for OVERLAY_SCRIPT in "$WORKSPACE"/Framework/Platform/*/Scripts/CI/B3DCIBuildOverlay.sh; do
+		for OVERLAY_SCRIPT in "$FRAMEWORK_DIR"/Platform/*/Scripts/CI/B3DCIBuildOverlay.sh; do
 			[ -f "$OVERLAY_SCRIPT" ] && OVERLAY_BUILD="$OVERLAY_SCRIPT"
 		done
 		if [ -z "$OVERLAY_BUILD" ]; then
@@ -108,8 +124,12 @@ else
     echo "Running full build..."
 fi
 
-# Build main editor
-cmake --build . --target Banshee3D --config "$BUILD_TYPE" --parallel
+# Build main editor (framework checkouts build the framework library instead)
+if [ "$ROOT_KIND" = "editor" ]; then
+	cmake --build . --target Banshee3D --config "$BUILD_TYPE" --parallel
+else
+	cmake --build . --target bsf --config "$BUILD_TYPE" --parallel
+fi
 
 # Build unit test runner
 cmake --build . --target UnitTestRunner --config "$BUILD_TYPE" --parallel
@@ -141,5 +161,78 @@ echo "::phase::artifacts"
 echo "Copying build artifacts..."
 
 cmake --build . --target "$InstallTarget" --config "$BUILD_TYPE" --parallel
+
+# Leave everything a deployment needs next to the install tree. Packaging happens now, from the
+# exact folders this build consumed, so a later deployment never has to read a workspace that
+# another build may have changed since. The orchestrator only knows how to transfer these files
+# and run deploy.sh; what they mean is decided here.
+echo "::phase::deploy-inputs"
+mkdir -p "$DEPLOY_DIR"
+rm -rf "$DEPLOY_DIR/dependencies" "$DEPLOY_DIR/framework" "$DEPLOY_DIR/tools" "$DEPLOY_DIR/deploy.sh" "$DEPLOY_DIR/build-info.txt"
+mkdir -p "$DEPLOY_DIR/dependencies" "$DEPLOY_DIR/tools"
+
+CMAKE_PLATFORM=$(grep -E '^B3D_PLATFORM:' CMakeCache.txt | cut -d= -f2 | tr -d '\r')
+{
+	echo "rootKind=$ROOT_KIND"
+	echo "platform=$Platform"
+	echo "cmakePlatform=$CMAKE_PLATFORM"
+	echo "arch=${ARCH:-x64}"
+	echo "buildType=$BUILD_TYPE"
+	echo "rootCommit=$(git -C "$WORKSPACE" rev-parse HEAD)"
+} > "$DEPLOY_DIR/build-info.txt"
+
+# The deploy script and the uploader it runs travel with the build, taken from the tested commit.
+cp "$FRAMEWORK_DIR/Scripts/CI/B3DCIDeploy.sh" "$DEPLOY_DIR/deploy.sh"
+cp "$FRAMEWORK_DIR/Scripts/B3DUploadBinaries.sh" "$DEPLOY_DIR/tools/B3DUploadBinaries.sh"
+
+# Every dependency the configure step had to build from source (no package server holds those
+# yet) is archived. Such a folder carries a .builtfromsource stamp, which downloading a published
+# package removes. Dependencies live in the framework's Dependencies folder or in the active
+# platform's overlay.
+for depStamp in "$FRAMEWORK_DIR"/Dependencies/*/.builtfromsource "$FRAMEWORK_DIR/Platform/$CMAKE_PLATFORM"/Dependencies/*/.builtfromsource; do
+	[ -f "$depStamp" ] || continue
+	depFolder=$(dirname "$depStamp")
+	depName=$(basename "$depFolder")
+	echo "Packaging source-built dependency $depName v$(tr -d '\r\n' < "$depStamp")..."
+	"$FRAMEWORK_DIR/Scripts/B3DUploadBinaries.sh" "$depName" --no-upload --no-bump \
+		--folder "$depFolder" --platform "$CMAKE_PLATFORM" --output "$DEPLOY_DIR/dependencies"
+done
+
+# The framework archive is a build option (PACKAGE_FRAMEWORK) of framework configurations: the
+# install tree zipped with a manifest of the commits it was built from and per-file checksums.
+# It carries no version; deploy.sh names it when a FRAMEWORK_VERSION is given at deploy time.
+if [ "${PACKAGE_FRAMEWORK:-}" = "1" ] || [ "${PACKAGE_FRAMEWORK:-}" = "true" ]; then
+	if [ "$ROOT_KIND" != "framework" ]; then
+		echo "::error::PACKAGE_FRAMEWORK needs a standalone framework checkout; this is an editor build"
+		exit 1
+	fi
+	if [ ! -d "$ARTIFACTS_DIR" ] || [ -z "$(ls -A "$ARTIFACTS_DIR")" ]; then
+		echo "::error::Install tree is empty: $ARTIFACTS_DIR"
+		exit 1
+	fi
+	ARCHIVE_NAME="B3DFramework-${Platform}-${ARCH:-x64}-${BUILD_TYPE}.zip"
+	ARCHIVE_PATH="$DEPLOY_DIR/framework/$ARCHIVE_NAME"
+	mkdir -p "$DEPLOY_DIR/framework"
+
+	{
+		echo "platform=$Platform"
+		echo "arch=${ARCH:-x64}"
+		echo "buildType=$BUILD_TYPE"
+		echo "buildId=${BUILD_ID:-}"
+		echo "createdAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+		echo "source.root=$(git -C "$WORKSPACE" rev-parse HEAD) $(git -C "$WORKSPACE" remote get-url origin 2>/dev/null || echo "$GIT_URL")"
+		git -C "$WORKSPACE" submodule foreach --recursive --quiet 'echo "source.$displaypath=$(git rev-parse HEAD) $(git remote get-url origin)"'
+	} > "$ARTIFACTS_DIR/B3DFrameworkManifest.txt"
+
+	echo "Computing checksums..."
+	if command -v sha256sum >/dev/null 2>&1; then SHA256="sha256sum"; else SHA256="shasum -a 256"; fi
+	(cd "$ARTIFACTS_DIR" && find . -type f ! -name B3DFrameworkChecksums.sha256 -print0 | sort -z | while IFS= read -r -d '' file; do
+		echo "$($SHA256 "$file" | cut -d' ' -f1)  ${file#./}"
+	done) > "$ARTIFACTS_DIR/B3DFrameworkChecksums.sha256"
+
+	echo "Creating $ARCHIVE_NAME..."
+	(cd "$ARTIFACTS_DIR" && cmake -E tar cf "$ARCHIVE_PATH" --format=zip -- *)
+	echo "Framework archive ready: $ARCHIVE_PATH ($(du -h "$ARCHIVE_PATH" | cut -f1))"
+fi
 
 echo "=== Build complete ==="

@@ -11,6 +11,14 @@ fi
 BUILD_TYPE="${BUILD_TYPE:-RelWithDebInfo}"
 BUILD_DIR="$WORKSPACE/Build"
 
+# The workspace is either the editor repository (framework at Framework/) or a standalone framework
+# repository; platform overlays live under the framework in both cases.
+if [ -f "$WORKSPACE/Framework/CMakeLists.txt" ]; then
+	FRAMEWORK_DIR="$WORKSPACE/Framework"
+else
+	FRAMEWORK_DIR="$WORKSPACE"
+fi
+
 # Target platform, as injected by the BansheeForge agent ($PLATFORM: win32, darwin, linux, ps5).
 # When run by hand outside CI, fall back to the host OS.
 if [ -z "${PLATFORM:-}" ]; then
@@ -168,7 +176,7 @@ fi
 declare -A CATEGORY_RUNNERS=()
 OVERLAY_UNIT_TEST_HOOKS=()
 
-for OVERLAY_SCRIPT in "$WORKSPACE"/Framework/Platform/*/Scripts/CI/B3DCITestOverlay.sh; do
+for OVERLAY_SCRIPT in "$FRAMEWORK_DIR"/Platform/*/Scripts/CI/B3DCITestOverlay.sh; do
 	if [ -f "$OVERLAY_SCRIPT" ]; then
 		echo "Loading test overlay: $OVERLAY_SCRIPT"
 		source "$OVERLAY_SCRIPT"
