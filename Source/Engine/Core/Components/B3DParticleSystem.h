@@ -586,6 +586,8 @@ namespace b3d
 		ParticleSystem(const HSceneObject& parent);
 		virtual ~ParticleSystem() = default;
 
+		using Component::CalculateBounds;
+
 		/** @copydoc TParticleSystemGetters::GetSettings */
 		B3D_SCRIPT_EXPORT(Property(Setter), ExportName(Settings), PassByCopy(true), UI(Inline))
 		void SetSettings(const ParticleSystemSettings& settings);

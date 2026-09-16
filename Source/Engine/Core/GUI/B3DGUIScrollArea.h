@@ -50,6 +50,8 @@ namespace b3d
 
 		~GUIScrollArea() = default;
 
+		using GUIElementContainer::GetContentBounds;
+
 		/**	Returns the scroll area layout that you may use to add elements inside the scroll area. */
 		B3D_SCRIPT_EXPORT(Property(Getter), ExportName(Layout))
 		GUILayout* GetLayout() const { return mContentLayout; }

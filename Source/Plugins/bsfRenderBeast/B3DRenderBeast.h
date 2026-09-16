@@ -105,6 +105,8 @@ namespace b3d
 		private:
 			friend class RenderBeastScene;
 
+			using Renderer::ActivateOnRenderThread;
+
 			/**
 			 * Updates the render options on the render thread.
 			 *
