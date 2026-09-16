@@ -1,7 +1,7 @@
 //************************************* B3D Framework - Copyright 2026 Marko Pintera *************************************//
 //*********** Licensed under the MIT license. See LICENSE.md for full terms. This notice is not to be removed. ***********//
 #include "MacOS/B3DMacOSVideoModeInfo.h"
-#include <IOKit/graphics/IOGraphicsLib.h>
+#import <AppKit/AppKit.h>
 
 namespace b3d::render
 {
@@ -43,44 +43,16 @@ MacOSVideoOutputInfo::MacOSVideoOutputInfo(CGDirectDisplayID displayID, u32 outp
 	CVDisplayLinkRef linkRef = nullptr;
 	CVDisplayLinkCreateWithCGDisplay(displayID, &linkRef);
 
-	// CGDisplayIOServicePort is non-functional on Apple Silicon, in which case no product name entry is available
-	io_service_t service = CGDisplayIOServicePort(displayID);
-	CFDictionaryRef deviceInfo = IODisplayCreateInfoDictionary(service, kIODisplayOnlyPreferredName);
-	CFDictionaryRef locNames = deviceInfo ? (CFDictionaryRef)CFDictionaryGetValue(deviceInfo, CFSTR(kDisplayProductName)) : nullptr;
-
 	mName = "Unknown";
-
-	CFIndex numNames = locNames ? CFDictionaryGetCount(locNames) : 0;
-	if(numNames > 0)
+	for(NSScreen* screen in [NSScreen screens])
 	{
-		auto keys = (CFStringRef*)B3DStackAllocate(numNames * sizeof(CFTypeRef));
-		CFDictionaryGetKeysAndValues(locNames, (const void**)keys, nullptr);
-
-		auto value = (CFStringRef)CFDictionaryGetValue(locNames, keys[0]);
-		if(value)
+		NSNumber* screenNumber = screen.deviceDescription[@"NSScreenNumber"];
+		if(screenNumber != nil && (CGDirectDisplayID)screenNumber.unsignedIntValue == displayID)
 		{
-			const char* chars = CFStringGetCStringPtr(value, kCFStringEncodingUTF8);
-			if(chars)
-				mName = chars;
-			else
-			{
-				CFIndex stringLength = CFStringGetLength(value) + 1;
-				auto buffer = B3DStackAllocate<char>((u32)stringLength);
-
-				CFStringGetCString(value, buffer, stringLength, kCFStringEncodingUTF8);
-
-				mName = buffer;
-				B3DStackFree(buffer);
-			}
+			mName = screen.localizedName.UTF8String;
+			break;
 		}
-		else
-			mName = "Unknown";
-
-		B3DStackFree(keys);
 	}
-
-	if(deviceInfo)
-		CFRelease(deviceInfo);
 
 	mDesktopVideoMode = new(B3DAllocate<MacOSVideoMode>()) MacOSVideoMode(desktopModeRef, linkRef, outputIdx);
 
