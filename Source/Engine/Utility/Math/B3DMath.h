@@ -221,7 +221,7 @@ namespace b3d
 		 */
 		static int32_t CeilToInt(float val)
 		{
-			B3D_ASSERT(val >= std::numeric_limits<int32_t>::min() && val <= std::numeric_limits<int32_t>::max());
+			B3D_ASSERT(val >= (float)std::numeric_limits<int32_t>::min() && val <= (float)std::numeric_limits<int32_t>::max());
 
 			// Positive values need offset in order to truncate towards positive infinity (cast truncates towards zero)
 			return val >= 0.0f ? (int32_t)(val + kBiggestFloatSmallerThanOne) : (int32_t)val;
@@ -233,7 +233,7 @@ namespace b3d
 		 */
 		static uint32_t CeilToPosInt(float val)
 		{
-			B3D_ASSERT(val >= 0 && val <= std::numeric_limits<uint32_t>::max());
+			B3D_ASSERT(val >= 0 && val <= (float)std::numeric_limits<uint32_t>::max());
 
 			return (uint32_t)(val + kBiggestFloatSmallerThanOne);
 		}
@@ -289,7 +289,7 @@ namespace b3d
 		template<class T>
 		static i32 FloorToInt(T val)
 		{
-			B3D_ASSERT(val >= std::numeric_limits<i32>::min() && val <= std::numeric_limits<i32>::max());
+			B3D_ASSERT(val >= (T)std::numeric_limits<i32>::min() && val <= (T)std::numeric_limits<i32>::max());
 
 			// Negative values need offset in order to truncate towards negative infinity (cast truncates towards zero)
 			return val >= (T)0.0 ? (i32)val : (i32)(val - kBiggestFloatSmallerThanOne);
