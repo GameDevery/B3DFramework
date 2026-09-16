@@ -597,6 +597,9 @@ void ECSTestSuite::TestView()
 		const test::Position& position = std::get<0>(tuple);
 		const test::Velocity& velocity = std::get<1>(tuple);
 
+		B3D_TEST_ASSERT(position == test::Position((float)index + 1.0f, (float)index + 2.0f, (float)index + 3.0f))
+		B3D_TEST_ASSERT(velocity == test::Velocity(5.0f, 5.0f, 5.0f))
+
 		index++;
 	}
 
