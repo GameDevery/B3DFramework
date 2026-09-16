@@ -84,7 +84,7 @@ TUnique<PackageReadLock> PackageManager::LoadOrGetPackage(const Path& packagePhy
 	const AcquirePackageLockResult lockResult = AcquireReadLock(packagePhysicalPath, readLockOptions, readLock);
 
 	if(lockResult == AcquirePackageLockResult::Acquired && readLock != nullptr)
-		return std::move(readLock);
+		return readLock;
 
 	return nullptr;
 }
