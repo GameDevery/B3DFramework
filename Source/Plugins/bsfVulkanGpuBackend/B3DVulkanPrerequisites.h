@@ -16,7 +16,7 @@
 #elif B3D_PLATFORM_ANDROID
 #	define VK_USE_PLATFORM_ANDROID_KHR
 #elif B3D_PLATFORM_MACOS
-#	define VK_USE_PLATFORM_MACOS_MVK
+#	define VK_USE_PLATFORM_MACOS_MVK 1
 #endif
 
 #include "vulkan/vulkan.h"
