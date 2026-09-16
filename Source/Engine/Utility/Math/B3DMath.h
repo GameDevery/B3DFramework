@@ -1091,24 +1091,26 @@ namespace b3d
 		/**
 		 * Calculates the Romberg Integration.
 		 *
+		 * @tparam Order			Order of the function.
 		 * @param  a				Lower bound.
 		 * @param  b				Upper bound.
-		 * @param  order			Order of the function.
 		 * @param  integrand		Function to integrate.
 		 * @return					Integrated function.
 		 */
-		template <typename T>
-		static T RombergIntegration(T a, T b, int order, const std::function<T(T)> integrand)
+		template <int Order, typename T>
+		static T RombergIntegration(T a, T b, const std::function<T(T)>& integrand)
 		{
-			T h[order + 1];
-			T r[order + 1][order + 1];
+			static_assert(Order >= 1, "Order must be positive.");
 
-			for(int i = 1; i < order + 1; ++i)
+			T h[Order + 1];
+			T r[Order + 1][Order + 1];
+
+			for(int i = 1; i < Order + 1; ++i)
 				h[i] = (b - a) / Math::RaiseToPower(2, i - 1);
 
 			r[1][1] = h[1] / 2 * (integrand(a) + integrand(b));
 
-			for(int i = 2; i < order + 1; ++i)
+			for(int i = 2; i < Order + 1; ++i)
 			{
 				T coeff = 0;
 				for(int k = 1; k <= Math::RaiseToPower(2, i - 2); ++k)
@@ -1117,13 +1119,13 @@ namespace b3d
 				r[i][1] = 0.5 * (r[i - 1][1] + h[i - 1] * coeff);
 			}
 
-			for(int i = 2; i < order + 1; ++i)
+			for(int i = 2; i < Order + 1; ++i)
 			{
 				for(int j = 2; j <= i; ++j)
 					r[i][j] = r[i][j - 1] + (r[i][j - 1] - r[i - 1][j - 1]) / (Math::RaiseToPower(4, j - 1) - 1);
 			}
 
-			return r[order][order];
+			return r[Order][Order];
 		}
 
 		/**
